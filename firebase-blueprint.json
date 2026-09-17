@@ -1,0 +1,229 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Pengguna sistem L-MAP (Administrator Mitra Office dan Sekolah Mitra)",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID User unik (misal MO002, MO004)" },
+        "nama": { "type": "string", "description": "Nama person atau nama sekolah" },
+        "email": { "type": "string", "description": "Email terdaftar" },
+        "role": { "type": "string", "description": "Peran pengguna", "enum": ["Kepala Bagian Mitra Office", "Officer", "Sekolah Mitra", "Sekolah Afiliasi"] },
+        "akses": { "type": "string", "description": "Tingkat hak akses", "enum": ["Full Akses", "Akses Terbatas"] },
+        "status": { "type": "string", "description": "Status keaktifan", "enum": ["Aktif", "Nonaktif"] }
+      },
+      "required": ["userId", "nama", "role", "akses", "status"]
+    },
+    "Mitra": {
+      "title": "Mitra",
+      "description": "Data profil sekolah mitra Lazuardi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID Sekolah Mitra" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah mitra" },
+        "kodeMitra": { "type": "string", "description": "Kode mitra (misal MO004)" },
+        "alamat": { "type": "string", "description": "Alamat lengkap sekolah" },
+        "kota": { "type": "string", "description": "Kota lokasi sekolah" },
+        "pimpinan": { "type": "string", "description": "Nama Kepala Sekolah / Pimpinan" },
+        "kontak": { "type": "string", "description": "Nomor telepon / kontak resmi" },
+        "email": { "type": "string", "description": "Email resmi sekolah" },
+        "jenjang": { "type": "string", "description": "Jenjang pendidikan (Pra-TK/TK, SD, SMP, SMA)" },
+        "jumlahSiswa": { "type": "number", "description": "Total murid terdaftar" },
+        "statusKerjasama": { "type": "string", "description": "Status kerjasama saat ini", "enum": ["Aktif", "Masa Percobaan", "Perpanjangan"] },
+        "tahunBergabung": { "type": "number", "description": "Tahun mulai bergabung" }
+      },
+      "required": ["id", "namaSekolah", "alamat", "pimpinan", "jumlahSiswa", "statusKerjasama"]
+    },
+    "LaporanBulanan": {
+      "title": "LaporanBulanan",
+      "description": "Laporan rutin bulanan dari sekolah mitra",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik laporan" },
+        "mitraId": { "type": "string", "description": "ID Mitra pengirim" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah mitra" },
+        "bulan": { "type": "string", "description": "Bulan laporan (Januari - Desember)" },
+        "tahun": { "type": "number", "description": "Tahun laporan" },
+        "kategori": { "type": "string", "description": "Kategori laporan utama", "enum": ["Akademik", "Kesiswaan", "Keuangan", "SDM & Operasional", "Komprehensif"] },
+        "ringkasan": { "type": "string", "description": "Ringkasan kegiatan bulanan" },
+        "kendala": { "type": "string", "description": "Kendala operasional / akademik" },
+        "solusi": { "type": "string", "description": "Solusi / tindakan yang diambil" },
+        "linkDokumen": { "type": "string", "description": "Tautan lampiran Google Drive / file dokumen" },
+        "status": { "type": "string", "description": "Status verifikasi laporan", "enum": ["Diajukan", "Direview", "Diterima", "Perlu Revisi"] },
+        "catatanAdmin": { "type": "string", "description": "Catatan evaluasi dari Mitra Office" },
+        "updatedAt": { "type": "string", "description": "Timestamp pembaharuan terakhir" }
+      },
+      "required": ["id", "mitraId", "namaSekolah", "bulan", "tahun", "ringkasan", "status"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Tagihan administratif mitra (Piutang mitra, Renewal fee, Jenjang baru)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Nomor Invoice" },
+        "mitraId": { "type": "string", "description": "ID Mitra" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah" },
+        "kategori": { "type": "string", "description": "Jenis tagihan", "enum": ["Piutang Mitra", "Renewal Fee", "Jenjang Baru"] },
+        "nominal": { "type": "number", "description": "Jumlah tagihan (IDR)" },
+        "tanggalTerbit": { "type": "string", "description": "Tanggal pembuatan invoice" },
+        "jatuhTempo": { "type": "string", "description": "Tanggal batas akhir pembayaran" },
+        "status": { "type": "string", "description": "Status tagihan", "enum": ["Belum Bayar", "Menunggu Konfirmasi", "Lunas", "Jatuh Tempo"] },
+        "keterangan": { "type": "string", "description": "Keterangan invoice" }
+      },
+      "required": ["id", "mitraId", "namaSekolah", "kategori", "nominal", "jatuhTempo", "status"]
+    },
+    "Pembayaran": {
+      "title": "Pembayaran",
+      "description": "Catatan setoran pembayaran mitra (Franchise fee, Renewal fee, Piutang, Jenjang baru)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID transaksi pembayaran" },
+        "invoiceId": { "type": "string", "description": "Nomor invoice terkait" },
+        "mitraId": { "type": "string", "description": "ID Mitra" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah pembayar" },
+        "kategori": { "type": "string", "description": "Jenis pembayaran", "enum": ["Franchise Fee", "Renewal Fee", "Piutang", "Jenjang Baru"] },
+        "jumlah": { "type": "number", "description": "Nominal pembayaran (IDR)" },
+        "tanggalBayar": { "type": "string", "description": "Tanggal pembayaran" },
+        "metodeBayar": { "type": "string", "description": "Metode transfer / bank" },
+        "noReferensi": { "type": "string", "description": "Nomor referensi / bukti transaksi" },
+        "buktiUrl": { "type": "string", "description": "Tautan bukti transfer / gambar dokumen" },
+        "status": { "type": "string", "description": "Status verifikasi", "enum": ["Menunggu Verifikasi", "Terverifikasi", "Ditolak"] },
+        "catatan": { "type": "string", "description": "Catatan verifikator" }
+      },
+      "required": ["id", "mitraId", "namaSekolah", "kategori", "jumlah", "tanggalBayar", "status"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Event tracker untuk kegiatan bersama dan jadwal mitra",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID Event" },
+        "judul": { "type": "string", "description": "Nama kegiatan / event" },
+        "kategori": { "type": "string", "description": "Kategori event", "enum": ["Workshop Kurikulum", "Pelatihan Guru", "Koordinasi Pimpinan", "Supervisi Mutu", "Parenting", "Lomba Siswa"] },
+        "tanggal": { "type": "string", "description": "Tanggal kegiatan" },
+        "waktu": { "type": "string", "description": "Waktu mulai - selesai" },
+        "lokasi": { "type": "string", "description": "Lokasi offline atau Link Zoom" },
+        "pic": { "type": "string", "description": "Penanggung jawab (PIC)" },
+        "mitraPeserta": { "type": "string", "description": "Mitra yang terlibat (Semua Mitra atau sekolah spesifik)" },
+        "status": { "type": "string", "description": "Status pelaksanaan", "enum": ["Direncanakan", "Berjalan", "Selesai", "Ditunda"] },
+        "deskripsi": { "type": "string", "description": "Detail deskripsi event" }
+      },
+      "required": ["id", "judul", "tanggal", "pic", "status"]
+    },
+    "PermintaanMitra": {
+      "title": "PermintaanMitra",
+      "description": "Permintaan logistik mitra seperti seragam dan dokumen cetak",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Nomor Permintaan" },
+        "mitraId": { "type": "string", "description": "ID Mitra pemohon" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah mitra" },
+        "kategori": { "type": "string", "description": "Jenis permintaan", "enum": ["Seragam", "Dokumen Cetak", "Merchandise & Lainnya"] },
+        "itemDetail": { "type": "string", "description": "Deskripsi rincian barang, kuantiti, dan ukuran" },
+        "jumlah": { "type": "number", "description": "Total unit / paket yang diminta" },
+        "tanggalPengajuan": { "type": "string", "description": "Tanggal diajukan" },
+        "status": { "type": "string", "description": "Status pemenuhan", "enum": ["Diajukan", "Diproses", "Dikirim", "Selesai", "Ditolak"] },
+        "noResi": { "type": "string", "description": "Nomor resi atau armada pengiriman" },
+        "estimasiSelesai": { "type": "string", "description": "Estimasi pengiriman / selesai" },
+        "catatanAdmin": { "type": "string", "description": "Catatan Mitra Office" }
+      },
+      "required": ["id", "mitraId", "namaSekolah", "kategori", "itemDetail", "jumlah", "status"]
+    },
+    "StaffActivity": {
+      "title": "StaffActivity",
+      "description": "Aktivitas tim staff mitra office yang terintegrasi dengan Google Calendar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID Aktivitas" },
+        "namaStaff": { "type": "string", "description": "Nama staff / officer" },
+        "judulAktivitas": { "type": "string", "description": "Nama kegiatan atau agenda kunjungan" },
+        "mitraTerkait": { "type": "string", "description": "Sekolah mitra sasaran" },
+        "tanggal": { "type": "string", "description": "Tanggal kegiatan" },
+        "jamMulai": { "type": "string", "description": "Waktu mulai (HH:MM)" },
+        "jamSelesai": { "type": "string", "description": "Waktu selesai (HH:MM)" },
+        "kategori": { "type": "string", "description": "Tipe aktivitas", "enum": ["Kunjungan Lapangan", "Supervisi Akademik", "Audit Keuangan", "Pendampingan Online", "Koordinasi Internal"] },
+        "hasilCatatan": { "type": "string", "description": "Catatan dan temuan hasil kegiatan" },
+        "status": { "type": "string", "description": "Status kegiatan", "enum": ["Terjadwal", "Selesai", "Dibatalkan"] }
+      },
+      "required": ["id", "namaStaff", "judulAktivitas", "tanggal", "status"]
+    },
+    "TemplateDokumen": {
+      "title": "TemplateDokumen",
+      "description": "Template berkas resmi, SOP, panduan, dan parent handbook",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID Dokumen" },
+        "judul": { "type": "string", "description": "Judul template / dokumen" },
+        "kategori": { "type": "string", "description": "Kategori dokumen", "enum": ["SOP", "Laporan Bulanan", "Video Panduan", "Parent Handbook", "Kurikulum & Modul", "Legal & Kontrak"] },
+        "deskripsi": { "type": "string", "description": "Ringkasan isi berkas" },
+        "linkUrl": { "type": "string", "description": "Tautan eksternal (Google Drive / YouTube / Dokumen)" },
+        "format": { "type": "string", "description": "Format file (PDF, DOCX, XLSX, VIDEO, LINK)" },
+        "versi": { "type": "string", "description": "Nomor versi dokumen (misal v2.1)" }
+      },
+      "required": ["id", "judul", "kategori", "linkUrl", "format"]
+    },
+    "PerformanceMenDAKI": {
+      "title": "PerformanceMenDAKI",
+      "description": "Evaluasi & monitoring performa sekolah mitra dengan framework MenDAKI Lazuardi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID Evaluasi MenDAKI" },
+        "mitraId": { "type": "string", "description": "ID Sekolah Mitra" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah" },
+        "periode": { "type": "string", "description": "Periode evaluasi (misal Semester Ganjil 2025/2026)" },
+        "skorManajemen": { "type": "number", "description": "Pilar Manajemen & Tata Kelola (0-100)" },
+        "skorKurikulum": { "type": "number", "description": "Pilar Kurikulum & Pembelajaran (0-100)" },
+        "skorSDM": { "type": "number", "description": "Pilar Sumber Daya Manusia (0-100)" },
+        "skorKemitraan": { "type": "number", "description": "Pilar Kepuasan & Kemitraan (0-100)" },
+        "skorBranding": { "type": "number", "description": "Pilar Branding & Kemuridan (0-100)" },
+        "totalSkor": { "type": "number", "description": "Rata-rata skor MenDAKI" },
+        "predikat": { "type": "string", "description": "Predikat capaian", "enum": ["Sangat Memuaskan (A)", "Memuaskan (B)", "Cukup (C)", "Perlu Pembinaan (D)"] },
+        "catatanRekomendasi": { "type": "string", "description": "Rekomendasi tindak lanjut Mitra Office" },
+        "tanggalPenilaian": { "type": "string", "description": "Tanggal input evaluasi" }
+      },
+      "required": ["id", "mitraId", "namaSekolah", "periode", "totalSkor", "predikat"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Daftar pengguna terdaftar L-MAP"
+    },
+    "/mitra/{mitraId}": {
+      "schema": "Mitra",
+      "description": "Master data profil sekolah mitra"
+    },
+    "/laporan_bulanan/{laporanId}": {
+      "schema": "LaporanBulanan",
+      "description": "Data pengajuan laporan bulanan sekolah mitra"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Data tagihan invoice mitra"
+    },
+    "/pembayaran/{pembayaranId}": {
+      "schema": "Pembayaran",
+      "description": "Data riwayat dan verifikasi pembayaran mitra"
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Jadwal dan pelacakan event bersama"
+    },
+    "/permintaan_mitra/{permintaanId}": {
+      "schema": "PermintaanMitra",
+      "description": "Permintaan seragam dan dokumen cetak mitra"
+    },
+    "/staff_activities/{activityId}": {
+      "schema": "StaffActivity",
+      "description": "Aktivitas staff mitra office & kalender"
+    },
+    "/templates/{templateId}": {
+      "schema": "TemplateDokumen",
+      "description": "Dokumen template, SOP, dan parent handbook"
+    },
+    "/performance_mendaki/{evalId}": {
+      "schema": "PerformanceMenDAKI",
+      "description": "Data penilaian framework MenDAKI Lazuardi"
+    }
+  }
+}

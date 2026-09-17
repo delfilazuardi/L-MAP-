@@ -1,0 +1,6 @@
+{
+  "name": "L-MAP Lazuardi Mitra Administration Platform",
+  "description": "Platform administrasi mitra office dan sekolah mitra Lazuardi untuk mengelola laporan bulanan, invoice, pembayaran, event tracker, permintaan seragam dan dokumen cetak, data mitra, kegiatan staff dengan Google Calendar, template dokumen, dan evaluasi MenDAKI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
