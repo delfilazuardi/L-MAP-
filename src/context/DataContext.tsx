@@ -14,7 +14,8 @@ import {
   PembayaranStatus,
   PermintaanStatus,
   UserAccount,
-  SheetPerhitunganData
+  SheetPerhitunganData,
+  InvoiceKategori
 } from '../types';
 import { 
   INITIAL_SEKOLAH, 
@@ -30,7 +31,7 @@ import {
   INITIAL_USERS
 } from '../lib/initialData';
 import { generateNomorInvoiceBaru } from '../lib/invoiceUtils';
-import { db, handleFirestoreError, OperationType, testConnection } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, testConnection, sanitizeForFirestore } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 
 interface DataContextType {
@@ -60,12 +61,19 @@ interface DataContextType {
   deleteInvoice: (id: string) => Promise<void>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => Promise<void>;
   addPembayaran: (pembayaran: Omit<Pembayaran, 'id'>) => Promise<void>;
+  updatePembayaran: (pembayaran: Pembayaran) => Promise<void>;
+  deletePembayaran: (id: string) => Promise<void>;
   verifyPembayaran: (id: string, status: PembayaranStatus, catatan?: string) => Promise<void>;
   addEvent: (event: Omit<EventItem, 'id'>) => Promise<void>;
+  updateEvent: (event: EventItem) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   addPermintaan: (permintaan: Omit<PermintaanMitra, 'id' | 'tanggalPengajuan'>) => Promise<void>;
+  updatePermintaan: (permintaan: PermintaanMitra) => Promise<void>;
+  deletePermintaan: (id: string) => Promise<void>;
   updatePermintaanStatus: (id: string, status: PermintaanStatus, noResi?: string, catatanAdmin?: string) => Promise<void>;
   addSekolah: (sekolah: SekolahMitra) => Promise<void>;
-  updateSekolah: (sekolah: SekolahMitra) => Promise<void>;
+  updateSekolah: (sekolahOrId: SekolahMitra | string, updates?: Partial<SekolahMitra>) => Promise<void>;
+  deleteSekolah: (id: string) => Promise<void>;
   addStaffActivity: (activity: Omit<StaffActivity, 'id'>) => Promise<void>;
   updateStaffActivity: (activity: StaffActivity) => Promise<void>;
   deleteStaffActivity: (id: string) => Promise<void>;
@@ -73,7 +81,11 @@ interface DataContextType {
   updateAdminStaff: (staff: AdminMitraStaff) => Promise<void>;
   deleteAdminStaff: (id: string) => Promise<void>;
   addTemplate: (template: Omit<TemplateDokumen, 'id'>) => Promise<void>;
+  updateTemplate: (template: TemplateDokumen) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
   savePerformance: (perf: PerformanceMenDAKI) => Promise<void>;
+  updatePerformance: (perf: PerformanceMenDAKI) => Promise<void>;
+  deletePerformance: (id: string) => Promise<void>;
   syncWithSheetData: (parsedUsers?: UserAccount[]) => Promise<void>;
   bulkImportInvoiceAndPayment: (
     newInvoices: Invoice[],
@@ -129,8 +141,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const full = typeof inv.tagihanFull === 'number' ? inv.tagihanFull : (inv.nominal || 0);
         const real = typeof inv.tagihanRealisasi === 'number' ? inv.tagihanRealisasi : (inv.nominal || 0);
         const paid = typeof inv.nominalPembayaran === 'number' ? inv.nominalPembayaran : (inv.status === 'Lunas' ? real : 0);
+        const rawKat = (inv.kategori || '') as string;
+        const normKat: InvoiceKategori = (rawKat === 'Piutang Mitra' || rawKat.toLowerCase().includes('piutang') || rawKat.toLowerCase().includes('lampau'))
+          ? 'Piutang Lampau'
+          : (rawKat === 'Franchise Fee' || rawKat.toLowerCase().includes('franchise'))
+          ? 'Franchise Fee'
+          : (rawKat === 'Jenjang Baru' || rawKat.toLowerCase().includes('jenjang'))
+          ? 'Jenjang Baru'
+          : 'Renewal Fee';
+
         return {
           ...inv,
+          kategori: normKat,
           bulan: inv.bulan || 'September',
           tahunAjaran: inv.tahunAjaran || '2026/2027',
           tanggalKirim: inv.tanggalKirim || inv.tanggalTerbit || '2026-09-01',
@@ -278,15 +300,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribers: (() => void)[] = [];
 
-    const subscribe = <T,>(
+    const subscribe = <T extends { id: string }>(
       collectionName: string,
-      setter: React.Dispatch<React.SetStateAction<T[]>>
+      setter: React.Dispatch<React.SetStateAction<T[]>>,
+      fallbackData?: T[]
     ) => {
       const unsubscribe = onSnapshot(
         collection(db, collectionName),
         (snapshot) => {
-          const docs = snapshot.docs.map((d) => d.data() as T);
-          setter(docs);
+          if (snapshot.empty && fallbackData && fallbackData.length > 0) {
+            setter(fallbackData);
+            // Seed initial data to Firestore in background so collection exists
+            fallbackData.forEach((item) => {
+              const safeId = item.id.replace(/\//g, '_');
+              setDoc(doc(db, collectionName, safeId), sanitizeForFirestore(item)).catch(() => {});
+            });
+          } else {
+            const docs = snapshot.docs.map((d) => d.data() as T);
+            // Merge fallback items if any initial item is missing in Firestore
+            if (fallbackData && fallbackData.length > 0) {
+              const docIds = new Set(docs.map((d) => d.id));
+              const missing = fallbackData.filter((item) => !docIds.has(item.id));
+              if (missing.length > 0) {
+                setter([...docs, ...missing]);
+                missing.forEach((item) => {
+                  const safeId = item.id.replace(/\//g, '_');
+                  setDoc(doc(db, collectionName, safeId), sanitizeForFirestore(item)).catch(() => {});
+                });
+              } else {
+                setter(docs);
+              }
+            } else {
+              setter(docs);
+            }
+          }
 
           if (isMounted) {
             setIsFirebaseConnected(true);
@@ -308,18 +355,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     try {
-      subscribe<SekolahMitra>('mitra', setSekolahList);
-      subscribe<LaporanBulanan>('laporan_bulanan', setLaporanList);
-      subscribe<Invoice>('invoices', setInvoiceList);
-      subscribe<Pembayaran>('pembayaran', setPembayaranList);
-      subscribe<EventItem>('events', setEventList);
-      subscribe<PermintaanMitra>('permintaan_mitra', setPermintaanList);
-      subscribe<StaffActivity>('staff_activities', setStaffActivityList);
-      subscribe<AdminMitraStaff>('admin_staff', setAdminStaffList);
-      subscribe<TemplateDokumen>('templates', setTemplateList);
+      subscribe<SekolahMitra>('mitra', setSekolahList, INITIAL_SEKOLAH);
+      subscribe<LaporanBulanan>('laporan_bulanan', setLaporanList, INITIAL_LAPORAN);
+      subscribe<Invoice>('invoices', setInvoiceList, INITIAL_INVOICES);
+      subscribe<Pembayaran>('pembayaran', setPembayaranList, INITIAL_PEMBAYARAN);
+      subscribe<EventItem>('events', setEventList, INITIAL_EVENTS);
+      subscribe<PermintaanMitra>('permintaan_mitra', setPermintaanList, INITIAL_PERMINTAAN);
+      subscribe<StaffActivity>('staff_activities', setStaffActivityList, INITIAL_STAFF_ACTIVITY);
+      subscribe<AdminMitraStaff>('admin_staff', setAdminStaffList, INITIAL_ADMIN_STAFF);
+      subscribe<TemplateDokumen>('templates', setTemplateList, INITIAL_TEMPLATES);
       subscribe<PerformanceMenDAKI>(
         'performance_mendaki',
-        setPerformanceList
+        setPerformanceList,
+        INITIAL_PERFORMANCE_MENDAKI
       );
     } catch (error) {
       console.warn('Firebase realtime listener initialization warning:', error);
@@ -346,7 +394,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLaporanList(prev => [newLaporan, ...prev]);
 
     try {
-      await setDoc(doc(db, 'laporan_bulanan', newLaporan.id), newLaporan);
+      await setDoc(doc(db, 'laporan_bulanan', newLaporan.id), sanitizeForFirestore(newLaporan));
     } catch (e) {
       console.warn('Firestore write warning for laporan:', e);
     }
@@ -363,7 +411,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLaporanList(prev => prev.map(item => item.id === updated.id ? withUpdate : item));
     try {
-      await setDoc(doc(db, 'laporan_bulanan', updated.id), withUpdate);
+      await setDoc(doc(db, 'laporan_bulanan', updated.id), sanitizeForFirestore(withUpdate));
     } catch (e) {
       console.warn('Firestore update error for laporan:', e);
     }
@@ -397,12 +445,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const target = laporanList.find(l => l.id === id);
       if (target) {
-        await setDoc(doc(db, 'laporan_bulanan', id), {
+        await setDoc(doc(db, 'laporan_bulanan', id), sanitizeForFirestore({
           ...target,
           status,
           catatanAdmin: catatanAdmin || target.catatanAdmin,
           updatedAt: today,
-        });
+        }));
       }
     } catch (e) {
       console.warn('Firestore update warning:', e);
@@ -426,11 +474,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const target = laporanList.find(l => l.id === id);
       if (target) {
-        await setDoc(doc(db, 'laporan_bulanan', id), {
+        await setDoc(doc(db, 'laporan_bulanan', id), sanitizeForFirestore({
           ...target,
           sheetPerhitungan: sheetData,
           updatedAt: today,
-        });
+        }));
       }
     } catch (e) {
       console.warn('Firestore update sheet error:', e);
@@ -468,7 +516,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInvoiceList(prev => [newInvoice, ...prev]);
 
     try {
-      await setDoc(doc(db, 'invoices', id), newInvoice);
+      const safeId = id.replace(/\//g, '_');
+      await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(newInvoice));
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
@@ -478,7 +527,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateInvoice = useCallback(async (updated: Invoice) => {
     setInvoiceList(prev => prev.map(inv => inv.id === updated.id ? updated : inv));
     try {
-      await setDoc(doc(db, 'invoices', updated.id), updated);
+      const safeId = updated.id.replace(/\//g, '_');
+      await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(updated));
     } catch (e) {
       console.warn('Firestore update warning:', e);
     }
@@ -488,7 +538,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteInvoice = useCallback(async (id: string) => {
     setInvoiceList(prev => prev.filter(inv => inv.id !== id));
     try {
-      await deleteDoc(doc(db, 'invoices', id));
+      const safeId = id.replace(/\//g, '_');
+      await deleteDoc(doc(db, 'invoices', safeId));
     } catch (e) {
       console.warn('Firestore delete warning:', e);
     }
@@ -511,11 +562,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const target = invoiceList.find(i => i.id === id);
       if (target) {
         const isLunas = status === 'Lunas';
-        await setDoc(doc(db, 'invoices', id), { 
+        const safeId = id.replace(/\//g, '_');
+        await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore({ 
           ...target, 
           status,
           nominalPembayaran: isLunas ? (target.tagihanRealisasi || target.nominal) : target.nominalPembayaran
-        });
+        }));
       }
     } catch (e) {
       console.warn('Firestore update warning:', e);
@@ -544,19 +596,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ));
 
       if (updatedInvoice) {
+        const safeInvId = updatedInvoice.id.replace(/\//g, '_');
         await setDoc(
-          doc(db, 'invoices', updatedInvoice.id),
-          { ...updatedInvoice, status: 'Menunggu Konfirmasi' }
+          doc(db, 'invoices', safeInvId),
+          sanitizeForFirestore({ ...updatedInvoice, status: 'Menunggu Konfirmasi' })
         );
       }
     }
 
     try {
-      await setDoc(doc(db, 'pembayaran', id), newPay);
+      const safeId = id.replace(/\//g, '_');
+      await setDoc(doc(db, 'pembayaran', safeId), sanitizeForFirestore(newPay));
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
   }, [invoiceList]);
+
+  // Action: Update Pembayaran
+  const updatePembayaran = useCallback(async (pembayaran: Pembayaran) => {
+    setPembayaranList(prev => prev.map(p => p.id === pembayaran.id ? pembayaran : p));
+    try {
+      const safeId = pembayaran.id.replace(/\//g, '_');
+      await setDoc(doc(db, 'pembayaran', safeId), sanitizeForFirestore(pembayaran));
+    } catch (e) {
+      console.warn('Firestore pembayaran update warning:', e);
+    }
+  }, []);
+
+  // Action: Delete Pembayaran
+  const deletePembayaran = useCallback(async (id: string) => {
+    setPembayaranList(prev => prev.filter(p => p.id !== id));
+    try {
+      const safeId = id.replace(/\//g, '_');
+      await deleteDoc(doc(db, 'pembayaran', safeId));
+    } catch (e) {
+      console.warn('Firestore pembayaran delete warning:', e);
+    }
+  }, []);
 
   // Action: Verify Pembayaran
   const verifyPembayaran = useCallback(async (id: string, status: PembayaranStatus, catatan?: string) => {
@@ -593,19 +669,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (targetInvoice) {
         await setDoc(
           doc(db, 'invoices', targetInvoice.id),
-          { 
+          sanitizeForFirestore({ 
             ...targetInvoice, 
             status: newInvoiceStatus,
             nominalPembayaran: newPaidAmount,
             tanggalDibayar: target.tanggalBayar || new Date().toISOString().split('T')[0]
-          }
+          })
         );
       }
     }
 
     try {
       if (target) {
-        await setDoc(doc(db, 'pembayaran', id), { ...target, status, catatan: catatan || target.catatan });
+        await setDoc(doc(db, 'pembayaran', id), sanitizeForFirestore({ ...target, status, catatan: catatan || target.catatan }));
       }
     } catch (e) {
       console.warn('Firestore update warning:', e);
@@ -646,10 +722,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Batch write to firestore
       for (const inv of newInvoices) {
-        await setDoc(doc(db, 'invoices', inv.id), inv).catch(console.warn);
+        await setDoc(doc(db, 'invoices', inv.id), sanitizeForFirestore(inv)).catch(console.warn);
       }
       for (const pay of newPayments) {
-        await setDoc(doc(db, 'pembayaran', pay.id), pay).catch(console.warn);
+        await setDoc(doc(db, 'pembayaran', pay.id), sanitizeForFirestore(pay)).catch(console.warn);
       }
     } catch (e) {
       console.warn('Bulk import sync warning:', e);
@@ -673,9 +749,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEventList(prev => [newEvent, ...prev]);
 
     try {
-      await setDoc(doc(db, 'events', id), newEvent);
+      await setDoc(doc(db, 'events', id), sanitizeForFirestore(newEvent));
     } catch (e) {
       console.warn('Firestore event write warning:', e);
+    }
+  }, []);
+
+  const updateEvent = useCallback(async (event: EventItem) => {
+    setEventList(prev => prev.map(e => e.id === event.id ? event : e));
+    try {
+      await setDoc(doc(db, 'events', event.id), sanitizeForFirestore(event));
+    } catch (e) {
+      console.warn('Firestore event update warning:', e);
+    }
+  }, []);
+
+  const deleteEvent = useCallback(async (id: string) => {
+    setEventList(prev => prev.filter(e => e.id !== id));
+    try {
+      await deleteDoc(doc(db, 'events', id));
+    } catch (e) {
+      console.warn('Firestore event delete warning:', e);
     }
   }, []);
 
@@ -691,9 +785,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermintaanList(prev => [newReq, ...prev]);
 
     try {
-      await setDoc(doc(db, 'permintaan_mitra', id), newReq);
+      await setDoc(doc(db, 'permintaan_mitra', id), sanitizeForFirestore(newReq));
     } catch (e) {
       console.warn('Firestore write warning:', e);
+    }
+  }, []);
+
+  const updatePermintaan = useCallback(async (permintaan: PermintaanMitra) => {
+    setPermintaanList(prev => prev.map(p => p.id === permintaan.id ? permintaan : p));
+    try {
+      await setDoc(doc(db, 'permintaan_mitra', permintaan.id), sanitizeForFirestore(permintaan));
+    } catch (e) {
+      console.warn('Firestore permintaan update warning:', e);
+    }
+  }, []);
+
+  const deletePermintaan = useCallback(async (id: string) => {
+    setPermintaanList(prev => prev.filter(p => p.id !== id));
+    try {
+      await deleteDoc(doc(db, 'permintaan_mitra', id));
+    } catch (e) {
+      console.warn('Firestore permintaan delete warning:', e);
     }
   }, []);
 
@@ -714,34 +826,83 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const target = permintaanList.find(p => p.id === id);
       if (target) {
-        await setDoc(doc(db, 'permintaan_mitra', id), {
+        await setDoc(doc(db, 'permintaan_mitra', id), sanitizeForFirestore({
           ...target,
           status,
           noResi: noResi || target.noResi,
           catatanAdmin: catatanAdmin || target.catatanAdmin,
-        });
+        }));
       }
     } catch (e) {
       console.warn('Firestore update warning:', e);
     }
   }, [permintaanList]);
 
-  // Action: Add/Update Sekolah Mitra
+  // Action: Add/Update/Delete Sekolah Mitra
   const addSekolah = useCallback(async (sekolah: SekolahMitra) => {
-    setSekolahList(prev => [...prev, sekolah]);
+    const cleanSekolah = sanitizeForFirestore(sekolah);
+    setSekolahList(prev => [...prev, cleanSekolah]);
     try {
-      await setDoc(doc(db, 'mitra', sekolah.id), sekolah);
+      const safeId = sekolah.id.replace(/\//g, '_');
+      await setDoc(doc(db, 'mitra', safeId), cleanSekolah);
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
   }, []);
 
-  const updateSekolah = useCallback(async (sekolah: SekolahMitra) => {
-    setSekolahList(prev => prev.map(s => s.id === sekolah.id ? sekolah : s));
+  const updateSekolah = useCallback(async (sekolahOrId: SekolahMitra | string, updates?: Partial<SekolahMitra>) => {
+    let targetId: string;
+    let newObj: SekolahMitra;
+
+    if (typeof sekolahOrId === 'string') {
+      targetId = sekolahOrId;
+      const existing = sekolahList.find(s => s.id === targetId || s.kodeMitra === targetId);
+      newObj = {
+        ...(existing || { 
+          id: targetId, 
+          kodeMitra: targetId, 
+          namaSekolah: '', 
+          alamat: '', 
+          pimpinan: '', 
+          jenjang: 'SD', 
+          jumlahSiswa: 0, 
+          statusKerjasama: 'Aktif', 
+          tahunBergabung: 2026 
+        }),
+        ...(updates || {}),
+        id: targetId,
+      } as SekolahMitra;
+    } else {
+      targetId = sekolahOrId.id;
+      newObj = { ...sekolahOrId, ...(updates || {}) };
+    }
+
+    const cleanObj = sanitizeForFirestore(newObj);
+
+    setSekolahList(prev => prev.map(s => (s.id === targetId || s.kodeMitra === targetId) ? cleanObj : s));
+
+    // Sinkronkan nama sekolah bila berubah
+    if (cleanObj.namaSekolah) {
+      setInvoiceList(prev => prev.map(inv => inv.mitraId === targetId ? { ...inv, namaSekolah: cleanObj.namaSekolah } : inv));
+      setPembayaranList(prev => prev.map(pay => pay.mitraId === targetId ? { ...pay, namaSekolah: cleanObj.namaSekolah } : pay));
+      setLaporanList(prev => prev.map(lap => lap.mitraId === targetId ? { ...lap, namaSekolah: cleanObj.namaSekolah } : lap));
+    }
+
     try {
-      await setDoc(doc(db, 'mitra', sekolah.id), sekolah);
+      const safeId = targetId.replace(/\//g, '_');
+      await setDoc(doc(db, 'mitra', safeId), cleanObj);
     } catch (e) {
       console.warn('Firestore update warning:', e);
+    }
+  }, [sekolahList]);
+
+  const deleteSekolah = useCallback(async (id: string) => {
+    setSekolahList(prev => prev.filter(s => s.id !== id));
+    try {
+      const safeId = id.replace(/\//g, '_');
+      await deleteDoc(doc(db, 'mitra', safeId));
+    } catch (e) {
+      console.warn('Firestore delete warning:', e);
     }
   }, []);
 
@@ -752,7 +913,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStaffActivityList(prev => [newAct, ...prev]);
 
     try {
-      await setDoc(doc(db, 'staff_activities', id), newAct);
+      await setDoc(doc(db, 'staff_activities', id), sanitizeForFirestore(newAct));
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
@@ -761,7 +922,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateStaffActivity = useCallback(async (activity: StaffActivity) => {
     setStaffActivityList(prev => prev.map(a => a.id === activity.id ? activity : a));
     try {
-      await setDoc(doc(db, 'staff_activities', activity.id), activity);
+      await setDoc(doc(db, 'staff_activities', activity.id), sanitizeForFirestore(activity));
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
@@ -783,7 +944,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newStaff: AdminMitraStaff = { ...staffData, id };
     setAdminStaffList(prev => [...prev, newStaff]);
     try {
-      await setDoc(doc(db, 'admin_staff', id), newStaff);
+      await setDoc(doc(db, 'admin_staff', id), sanitizeForFirestore(newStaff));
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
@@ -792,7 +953,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateAdminStaff = useCallback(async (staff: AdminMitraStaff) => {
     setAdminStaffList(prev => prev.map(s => s.id === staff.id ? staff : s));
     try {
-      await setDoc(doc(db, 'admin_staff', staff.id), staff);
+      await setDoc(doc(db, 'admin_staff', staff.id), sanitizeForFirestore(staff));
     } catch (e) {
       console.warn('Firestore write warning:', e);
     }
@@ -815,9 +976,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTemplateList(prev => [newTpl, ...prev]);
 
     try {
-      await setDoc(doc(db, 'templates', id), newTpl);
+      await setDoc(doc(db, 'templates', id), sanitizeForFirestore(newTpl));
     } catch (e) {
       console.warn('Firestore write warning:', e);
+    }
+  }, []);
+
+  const updateTemplate = useCallback(async (template: TemplateDokumen) => {
+    setTemplateList(prev => prev.map(t => t.id === template.id ? template : t));
+    try {
+      await setDoc(doc(db, 'templates', template.id), sanitizeForFirestore(template));
+    } catch (e) {
+      console.warn('Firestore template update warning:', e);
+    }
+  }, []);
+
+  const deleteTemplate = useCallback(async (id: string) => {
+    setTemplateList(prev => prev.filter(t => t.id !== id));
+    try {
+      await deleteDoc(doc(db, 'templates', id));
+    } catch (e) {
+      console.warn('Firestore template delete warning:', e);
     }
   }, []);
 
@@ -834,9 +1013,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     try {
-      await setDoc(doc(db, 'performance_mendaki', perf.id), perf);
+      await setDoc(doc(db, 'performance_mendaki', perf.id), sanitizeForFirestore(perf));
     } catch (e) {
       console.warn('Firestore write warning:', e);
+    }
+  }, []);
+
+  const updatePerformance = savePerformance;
+
+  const deletePerformance = useCallback(async (id: string) => {
+    setPerformanceList(prev => prev.filter(p => p.id !== id));
+    try {
+      await deleteDoc(doc(db, 'performance_mendaki', id));
+    } catch (e) {
+      console.warn('Firestore performance delete warning:', e);
     }
   }, []);
 
@@ -876,7 +1066,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           await Promise.all(
             newSchools.map((school) =>
-              setDoc(doc(db, 'mitra', school.id), school)
+              setDoc(doc(db, 'mitra', school.id), sanitizeForFirestore(school))
             )
           );
         }
@@ -932,12 +1122,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deleteInvoice,
       updateInvoiceStatus,
       addPembayaran,
+      updatePembayaran,
+      deletePembayaran,
       verifyPembayaran,
       addEvent,
+      updateEvent,
+      deleteEvent,
       addPermintaan,
+      updatePermintaan,
+      deletePermintaan,
       updatePermintaanStatus,
       addSekolah,
       updateSekolah,
+      deleteSekolah,
       addStaffActivity,
       updateStaffActivity,
       deleteStaffActivity,
@@ -945,7 +1142,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateAdminStaff,
       deleteAdminStaff,
       addTemplate,
+      updateTemplate,
+      deleteTemplate,
       savePerformance,
+      updatePerformance,
+      deletePerformance,
       syncWithSheetData,
       bulkImportInvoiceAndPayment,
       loadHistoricalTransactionsSince2022,

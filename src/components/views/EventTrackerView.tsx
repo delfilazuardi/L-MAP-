@@ -14,7 +14,9 @@ import {
   Copy,
   Check,
   BookOpen,
-  Info
+  Info,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -25,11 +27,12 @@ export const LAZUARDI_CLASSROOM_CODE = 'ljp5l3k';
 
 export const EventTrackerView: React.FC = () => {
   const { isAdmin } = useAuth();
-  const { eventList, addEvent } = useData();
+  const { eventList, addEvent, updateEvent, deleteEvent } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKategori, setSelectedKategori] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Form State
@@ -41,6 +44,7 @@ export const EventTrackerView: React.FC = () => {
   const [formPic, setFormPic] = useState('Anita Sulastri');
   const [formMitra, setFormMitra] = useState('Semua Sekolah Mitra');
   const [formDeskripsi, setFormDeskripsi] = useState('');
+  const [formStatus, setFormStatus] = useState<EventStatus>('Direncanakan');
   const [formClassroomUrl, setFormClassroomUrl] = useState(LAZUARDI_CLASSROOM_URL);
   const [formClassCode, setFormClassCode] = useState(LAZUARDI_CLASSROOM_CODE);
 
@@ -58,26 +62,77 @@ export const EventTrackerView: React.FC = () => {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await addEvent({
-      judul: formJudul,
-      kategori: formKategori,
-      tanggal: formTanggal,
-      waktu: formWaktu,
-      lokasi: formLokasi,
-      pic: formPic,
-      mitraPeserta: formMitra,
-      status: 'Direncanakan',
-      deskripsi: formDeskripsi,
-      classroomUrl: formClassroomUrl.trim() || LAZUARDI_CLASSROOM_URL,
-      classCode: formClassCode.trim() || LAZUARDI_CLASSROOM_CODE,
-    });
-    setIsModalOpen(false);
+  const handleOpenAdd = () => {
+    setEditingEvent(null);
     setFormJudul('');
+    setFormKategori('Workshop Kurikulum');
+    setFormTanggal(new Date().toISOString().split('T')[0]);
+    setFormWaktu('09:00 - 12:00 WIB');
+    setFormLokasi('Auditorium Lazuardi Pusat / Hybrid Zoom');
+    setFormPic('Anita Sulastri');
+    setFormMitra('Semua Sekolah Mitra');
     setFormDeskripsi('');
+    setFormStatus('Direncanakan');
     setFormClassroomUrl(LAZUARDI_CLASSROOM_URL);
     setFormClassCode(LAZUARDI_CLASSROOM_CODE);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (evt: EventItem) => {
+    setEditingEvent(evt);
+    setFormJudul(evt.judul);
+    setFormKategori(evt.kategori);
+    setFormTanggal(evt.tanggal);
+    setFormWaktu(evt.waktu);
+    setFormLokasi(evt.lokasi);
+    setFormPic(evt.pic);
+    setFormMitra(evt.mitraPeserta);
+    setFormDeskripsi(evt.deskripsi);
+    setFormStatus(evt.status);
+    setFormClassroomUrl(evt.classroomUrl || LAZUARDI_CLASSROOM_URL);
+    setFormClassCode(evt.classCode || LAZUARDI_CLASSROOM_CODE);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string, judul: string) => {
+    if (window.confirm(`Hapus agenda event "${judul}"?`)) {
+      await deleteEvent(id);
+    }
+  };
+
+  const handleSaveEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingEvent) {
+      await updateEvent({
+        ...editingEvent,
+        judul: formJudul,
+        kategori: formKategori,
+        tanggal: formTanggal,
+        waktu: formWaktu,
+        lokasi: formLokasi,
+        pic: formPic,
+        mitraPeserta: formMitra,
+        status: formStatus,
+        deskripsi: formDeskripsi,
+        classroomUrl: formClassroomUrl.trim() || LAZUARDI_CLASSROOM_URL,
+        classCode: formClassCode.trim() || LAZUARDI_CLASSROOM_CODE,
+      });
+    } else {
+      await addEvent({
+        judul: formJudul,
+        kategori: formKategori,
+        tanggal: formTanggal,
+        waktu: formWaktu,
+        lokasi: formLokasi,
+        pic: formPic,
+        mitraPeserta: formMitra,
+        status: formStatus,
+        deskripsi: formDeskripsi,
+        classroomUrl: formClassroomUrl.trim() || LAZUARDI_CLASSROOM_URL,
+        classCode: formClassCode.trim() || LAZUARDI_CLASSROOM_CODE,
+      });
+    }
+    setIsModalOpen(false);
   };
 
   /**
@@ -151,7 +206,7 @@ export const EventTrackerView: React.FC = () => {
           {isAdmin && (
             <button
               id="btn-tambah-event"
-              onClick={() => setIsModalOpen(true)}
+              onClick={handleOpenAdd}
               className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer"
             >
               <Plus size={16} />
@@ -359,6 +414,25 @@ export const EventTrackerView: React.FC = () => {
                     <span>Google Calendar</span>
                     <ExternalLink size={11} />
                   </a>
+
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <button
+                        onClick={() => handleOpenEdit(evt)}
+                        className="p-1.5 rounded-xl border border-slate-200 hover:bg-blue-50 text-blue-600 transition cursor-pointer"
+                        title="Edit agenda event"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(evt.id, evt.judul)}
+                        className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 transition cursor-pointer"
+                        title="Hapus event"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -366,14 +440,14 @@ export const EventTrackerView: React.FC = () => {
         )}
       </div>
 
-      {/* MODAL: Tambah Event */}
+      {/* MODAL: Tambah/Edit Event */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <CalendarDays size={18} className="text-blue-600" />
-                <span>Tambah Agenda Event Mitra</span>
+                <span>{editingEvent ? 'Edit Agenda Event Mitra' : 'Tambah Agenda Event Mitra'}</span>
               </h3>
               <button 
                 type="button"
@@ -384,7 +458,7 @@ export const EventTrackerView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateEvent} className="space-y-3 mt-4 text-xs">
+            <form onSubmit={handleSaveEvent} className="space-y-3 mt-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Judul Kegiatan / Event</label>
                 <input
@@ -531,7 +605,7 @@ export const EventTrackerView: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-600/30 cursor-pointer"
                 >
-                  Simpan Event
+                  {editingEvent ? 'Simpan Pembaruan Event' : 'Simpan Event'}
                 </button>
               </div>
             </form>

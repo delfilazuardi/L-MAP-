@@ -12,8 +12,7 @@ import { Header } from './components/layout/Header';
 import { LoginView } from './components/auth/LoginView';
 import { DashboardView } from './components/views/DashboardView';
 import { LaporanBulananView } from './components/views/LaporanBulananView';
-import { InvoiceView } from './components/views/InvoiceView';
-import { PembayaranView } from './components/views/PembayaranView';
+import { InvoicePembayaranView } from './components/views/InvoicePembayaranView';
 import { EventTrackerView } from './components/views/EventTrackerView';
 import { PermintaanMitraView } from './components/views/PermintaanMitraView';
 import { DataMitraView } from './components/views/DataMitraView';
@@ -40,9 +39,8 @@ function MainApp() {
       case 'laporan-bulanan':
         return 'Laporan Bulanan Sekolah Mitra';
       case 'invoice':
-        return 'Invoice & Piutang Mitra';
       case 'pembayaran':
-        return 'Riwayat & Konfirmasi Pembayaran';
+        return 'Invoice & Pembayaran Mitra';
       case 'event-tracker':
         return 'Event Tracker & Kalender Agenda';
       case 'permintaan-mitra':
@@ -101,12 +99,11 @@ function MainApp() {
             <LaporanBulananView />
           )}
 
-          {activeTab === 'invoice' && (
-            <InvoiceView onNavigateToPayment={handleNavigateToPayment} />
-          )}
-
-          {activeTab === 'pembayaran' && (
-            <PembayaranView preselectedInvoiceId={selectedInvoiceId} />
+          {(activeTab === 'invoice' || activeTab === 'pembayaran') && (
+            <InvoicePembayaranView 
+              initialInvoiceId={selectedInvoiceId}
+              onNavigateToPayment={handleNavigateToPayment}
+            />
           )}
 
           {activeTab === 'event-tracker' && (

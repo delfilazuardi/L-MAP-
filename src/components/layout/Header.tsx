@@ -82,19 +82,28 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu size={22} />
         </button>
 
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-black text-blue-600 uppercase tracking-widest">
-              Lazuardi Mitra Office
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-              T.A. 2026/2027
-            </span>
+        <div className="flex items-center gap-3">
+          <img
+            src="/lmap-logo.jpg"
+            alt="L-MAP Logo"
+            className="w-10 h-10 object-contain rounded-xl shadow-xs border border-slate-200/90 bg-white p-0.5 shrink-0"
+          />
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black text-blue-900 tracking-wider flex items-center">
+                <span>L</span>
+                <span className="text-amber-500 font-black mx-0.5">-</span>
+                <span>MAP</span>
+              </span>
+              <span className="text-slate-300 hidden sm:inline">•</span>
+              <span className="text-xs text-slate-600 font-bold hidden sm:inline">
+                Lazuardi Mitra Administration Platform
+              </span>
+            </div>
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+              {activeTitle}
+            </h1>
           </div>
-          <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-            {activeTitle}
-          </h1>
         </div>
       </div>
 

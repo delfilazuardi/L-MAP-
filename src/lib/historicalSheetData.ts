@@ -622,6 +622,14 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
   const pembayaran: Pembayaran[] = [];
 
   data.forEach((row, idx) => {
+    const kategoriNorm: InvoiceKategori = (row.kategori === 'Piutang Mitra' || (row.kategori as string).toLowerCase().includes('piutang') || (row.kategori as string).toLowerCase().includes('lampau'))
+      ? 'Piutang Lampau'
+      : (row.kategori === 'Jenjang Baru' || (row.kategori as string).toLowerCase().includes('jenjang'))
+      ? 'Jenjang Baru'
+      : (row.kategori === 'Franchise Fee' || (row.kategori as string).toLowerCase().includes('franchise'))
+      ? 'Franchise Fee'
+      : 'Renewal Fee';
+
     const inv: Invoice = {
       id: row.nomorInvoice,
       nomorInvoice: row.nomorInvoice,
@@ -629,7 +637,7 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
       namaSekolah: row.namaSekolah,
       bulan: row.bulan,
       tahunAjaran: row.tahunAjaran,
-      kategori: row.kategori,
+      kategori: kategoriNorm,
       nominal: row.tagihanRealisasi,
       tagihanFull: row.tagihanFull,
       tagihanRealisasi: row.tagihanRealisasi,
@@ -652,14 +660,14 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
         invoiceId: row.nomorInvoice,
         mitraId: row.kodeMitra,
         namaSekolah: row.namaSekolah,
-        kategori: row.kategori,
+        kategori: kategoriNorm,
         jumlah: row.nominalPembayaran,
         tanggalBayar: row.tanggalDibayar || row.tanggalKirim,
         metodeBayar: row.metodeBayar || 'Bank Mandiri Transfer',
         noReferensi: row.noReferensi || `REF-${row.tahun}-${idx + 100}`,
         buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=60',
         status: payStatus,
-        catatan: `Pembayaran ${row.kategori} ${row.tahunAjaran} via sheet sinkronisasi`,
+        catatan: `Pembayaran ${kategoriNorm} ${row.tahunAjaran} via sheet sinkronisasi`,
       };
       pembayaran.push(pay);
     }

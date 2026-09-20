@@ -268,7 +268,7 @@ export function parseInvoicePaymentSheetData(csvOrTsvText: string): {
     // Kategori mapping
     let kategori: InvoiceKategori = 'Renewal Fee';
     if (kategoriRaw.toLowerCase().includes('franchise')) kategori = 'Franchise Fee';
-    else if (kategoriRaw.toLowerCase().includes('piutang') || kategoriRaw.toLowerCase().includes('seragam') || kategoriRaw.toLowerCase().includes('buku')) kategori = 'Piutang Mitra';
+    else if (kategoriRaw.toLowerCase().includes('piutang') || kategoriRaw.toLowerCase().includes('seragam') || kategoriRaw.toLowerCase().includes('buku') || kategoriRaw.toLowerCase().includes('lampau')) kategori = 'Piutang Lampau';
     else if (kategoriRaw.toLowerCase().includes('jenjang') || kategoriRaw.toLowerCase().includes('baru')) kategori = 'Jenjang Baru';
 
     // Status Invoice
@@ -320,7 +320,7 @@ export function parseInvoicePaymentSheetData(csvOrTsvText: string): {
         invoiceId: cleanedNomorInvoice,
         mitraId: kodeMitra,
         namaSekolah: namaSekolah || 'Sekolah Mitra',
-        kategori: kategori === 'Piutang Mitra' ? 'Piutang' : kategori,
+        kategori: kategori === 'Piutang Lampau' ? 'Piutang Lampau' : kategori,
         jumlah: nominalPembayaran,
         tanggalBayar: tanggalDibayar || tanggalKirim,
         metodeBayar,

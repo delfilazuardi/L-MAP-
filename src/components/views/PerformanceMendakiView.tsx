@@ -17,12 +17,18 @@ import { PerformanceMendaki } from '../../types';
 
 export const PerformanceMendakiView: React.FC = () => {
   const { currentUser, isAdmin } = useAuth();
-  const { performanceList, sekolahList, updatePerformance } = useData();
+  const { performanceList, sekolahList, updatePerformance, deletePerformance } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSekolah, setSelectedSekolah] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PerformanceMendaki | null>(null);
+
+  const handleDelete = async (id: string, nama: string) => {
+    if (window.confirm(`Yakin ingin menghapus evaluasi MenDAKI untuk "${nama}"?`)) {
+      await deletePerformance(id);
+    }
+  };
 
   // Form State
   const [formMitraId, setFormMitraId] = useState(sekolahList[0]?.id || 'MO004');
@@ -268,12 +274,18 @@ export const PerformanceMendakiView: React.FC = () => {
             </div>
 
             {isAdmin && (
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   onClick={() => handleOpenEdit(item)}
                   className="px-4 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition cursor-pointer"
                 >
                   Edit Penilaian MenDAKI
+                </button>
+                <button
+                  onClick={() => handleDelete(item.id, item.namaSekolah)}
+                  className="px-3 py-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-bold transition cursor-pointer"
+                >
+                  Hapus
                 </button>
               </div>
             )}

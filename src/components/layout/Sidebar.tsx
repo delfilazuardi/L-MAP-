@@ -62,19 +62,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'invoice' as ActiveNavTab,
-      label: 'Invoice & Piutang',
+      label: 'Invoice & Pembayaran',
       icon: Receipt,
-      badge: unpaidInvoices > 0 ? unpaidInvoices : null,
-      badgeColor: 'bg-rose-100 text-rose-700',
-      desc: 'Renewal, Piutang, Jenjang',
-    },
-    {
-      id: 'pembayaran' as ActiveNavTab,
-      label: 'Pembayaran',
-      icon: CreditCard,
-      badge: pendingPayments > 0 ? pendingPayments : null,
-      badgeColor: 'bg-blue-100 text-blue-700',
-      desc: 'Franchise, Renewal, Verifikasi',
+      badge: unpaidInvoices > 0 ? unpaidInvoices : pendingPayments > 0 ? pendingPayments : null,
+      badgeColor: unpaidInvoices > 0 ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700',
+      desc: 'Franchise, Piutang, Renewal, Jenjang',
     },
     {
       id: 'event-tracker' as ActiveNavTab,
@@ -149,24 +141,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Brand Header */}
         <div className="p-4 border-b border-blue-900/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Squircle LM with gold star */}
-            <div className="relative shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/25 text-white font-black text-base tracking-wider border border-blue-400/40">
-                LM
-              </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gradient-to-tr from-amber-400 to-amber-300 text-slate-950 flex items-center justify-center shadow-sm">
-                <Sparkles size={8} className="text-slate-950 fill-slate-950" />
-              </div>
-            </div>
+            <img
+              src="/lmap-logo.jpg"
+              alt="L-MAP Logo"
+              className="w-10 h-10 object-contain rounded-xl shadow-lg border border-white/20 bg-white p-0.5 shrink-0"
+            />
 
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-lg text-white tracking-wider">L-MAP</span>
+                <span className="font-black text-lg text-white tracking-wider flex items-center">
+                  <span>L</span>
+                  <span className="text-amber-400 font-black mx-0.5">-</span>
+                  <span>MAP</span>
+                </span>
                 <span className="text-[9px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   v2.6
                 </span>
               </div>
-              <p className="text-[10px] text-blue-200/80 font-medium tracking-tight">Lazuardi Mitra Administration Platform</p>
+              <p className="text-[10px] text-blue-200/90 font-medium tracking-tight">Lazuardi Mitra Administration Platform</p>
             </div>
           </div>
           <button 

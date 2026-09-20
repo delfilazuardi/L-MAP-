@@ -239,11 +239,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* Box 1: Pembayaran */}
+              {/* Box 1: Invoice & Pembayaran */}
               <button
                 id="dash-quick-pembayaran"
-                onClick={() => onNavigate('pembayaran')}
-                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition"
+                onClick={() => onNavigate('invoice')}
+                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition cursor-pointer"
               >
                 <div className="flex items-center justify-between text-blue-600 mb-2">
                   <CreditCard size={18} />
@@ -253,9 +253,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                     </span>
                   )}
                 </div>
-                <div className="text-xs font-bold text-slate-800">Pembayaran</div>
+                <div className="text-xs font-bold text-slate-800">Invoice & Pembayaran</div>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  {pendingPaymentCount > 0 ? `${pendingPaymentCount} butuh cek` : 'Semua aman'}
+                  {pendingPaymentCount > 0 ? `${pendingPaymentCount} butuh cek` : 'Franchise, Renewal, Piutang'}
                 </p>
               </button>
 

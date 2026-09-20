@@ -76,3 +76,26 @@ export async function testConnection(): Promise<boolean> {
     return true;
   }
 }
+
+/**
+ * Strips undefined values recursively so Firestore setDoc/updateDoc does not throw
+ * "Function setDoc() called with invalid data. Unsupported field value: undefined"
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const clean: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        clean[key] = sanitizeForFirestore(value);
+      }
+    }
+    return clean as any;
+  }
+  return data;
+}

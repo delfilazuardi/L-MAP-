@@ -1,68 +1,131 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
 
 interface LMapLogoProps {
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showSubtitle?: boolean;
-  align?: 'center' | 'left';
+  layout?: 'horizontal' | 'vertical' | 'iconOnly';
+  theme?: 'dark' | 'light';
   className?: string;
+  showTagline?: boolean;
 }
 
 export const LMapLogo: React.FC<LMapLogoProps> = ({
-  size = 'lg',
+  size = 'md',
   showSubtitle = true,
-  align = 'center',
+  layout = 'horizontal',
+  theme = 'light',
   className = '',
+  showTagline = false,
 }) => {
-  const isCenter = align === 'center';
+  const isDark = theme === 'dark';
 
-  const squircleSizes = {
-    sm: 'w-8 h-8 rounded-xl text-xs',
-    md: 'w-10 h-10 rounded-xl text-sm',
-    lg: 'w-14 h-14 rounded-2xl text-xl',
-    xl: 'w-16 h-16 rounded-2xl text-2xl',
+  const imageSizes = {
+    xs: 'w-7 h-7',
+    sm: 'w-8 h-8',
+    md: 'w-10 h-10',
+    lg: 'w-14 h-14',
+    xl: 'w-20 h-20',
   };
 
   const titleSizes = {
-    sm: 'text-sm font-black',
-    md: 'text-base font-black',
+    xs: 'text-sm font-black',
+    sm: 'text-base font-black',
+    md: 'text-lg font-black',
     lg: 'text-2xl font-black',
     xl: 'text-3xl font-black',
   };
 
-  return (
-    <div className={`flex flex-col ${isCenter ? 'items-center text-center' : 'items-start text-left'} ${className}`}>
-      {/* Royal Blue Squircle Badge with Gold Sparkle */}
-      <div className="relative inline-block mb-3">
-        {/* Soft Ambient Glow */}
-        <div className="absolute -inset-1.5 rounded-3xl bg-blue-500/25 blur-lg pointer-events-none" />
-        
-        {/* Squircle Icon */}
-        <div 
-          className={`relative ${squircleSizes[size]} bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 text-white font-black tracking-wider flex items-center justify-center shadow-xl shadow-blue-900/50 border border-blue-400/40`}
-        >
-          <span>LM</span>
+  const subtitleSizes = {
+    xs: 'text-[9px]',
+    sm: 'text-[10px]',
+    md: 'text-[11px]',
+    lg: 'text-xs',
+    xl: 'text-sm',
+  };
 
-          {/* Golden Star/Sparkle Pill at top-right corner matching user's image */}
-          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gradient-to-tr from-amber-400 to-amber-300 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/30 border border-amber-200">
-            <Sparkles size={11} className="text-slate-950 fill-slate-950" />
-          </div>
+  if (layout === 'iconOnly') {
+    return (
+      <div className={`relative inline-flex items-center justify-center shrink-0 ${className}`}>
+        <img
+          src="/lmap-logo.jpg"
+          alt="L-MAP Logo"
+          className={`${imageSizes[size]} object-contain rounded-xl shadow-xs border ${
+            isDark ? 'border-white/20 bg-white' : 'border-slate-200/90 bg-white'
+          } p-0.5`}
+        />
+      </div>
+    );
+  }
+
+  if (layout === 'vertical') {
+    return (
+      <div className={`flex flex-col items-center text-center ${className}`}>
+        {/* Logo Image */}
+        <div className="relative mb-3 inline-block">
+          <div className="absolute -inset-2 rounded-2xl bg-blue-500/20 blur-md pointer-events-none" />
+          <img
+            src="/lmap-logo.jpg"
+            alt="L-MAP Logo"
+            className={`${imageSizes[size]} object-contain rounded-2xl shadow-lg border ${
+              isDark ? 'border-white/25 bg-white' : 'border-slate-200 bg-white'
+            } p-1`}
+          />
         </div>
-      </div>
 
-      {/* Brand Title: L-MAP */}
-      <div className="flex items-center gap-2 tracking-tight">
-        <h1 className={`${titleSizes[size]} text-white font-black tracking-widest`}>
-          L-MAP
-        </h1>
-      </div>
+        {/* Title: L-MAP with gold dash */}
+        <div className="flex items-center justify-center tracking-tight">
+          <span className={`${titleSizes[size]} ${isDark ? 'text-white' : 'text-blue-900'} tracking-widest flex items-center`}>
+            <span>L</span>
+            <span className="text-amber-500 font-black mx-0.5">-</span>
+            <span>MAP</span>
+          </span>
+        </div>
 
-      {/* Subtitle: Lazuardi Mitra Administration Platform */}
-      {showSubtitle && (
-        <p className="text-xs sm:text-sm text-blue-200/90 font-medium mt-1 tracking-wide">
-          Lazuardi Mitra Administration Platform
-        </p>
-      )}
+        {/* Subtitle */}
+        {showSubtitle && (
+          <p className={`${subtitleSizes[size]} ${isDark ? 'text-blue-200/90' : 'text-slate-600 font-semibold'} tracking-wider uppercase mt-0.5`}>
+            Lazuardi Mitra Administration Platform
+          </p>
+        )}
+
+        {/* Tagline */}
+        {showTagline && (
+          <div className="flex items-center gap-2 mt-1 text-[10px] text-amber-500 font-medium tracking-wide">
+            <span className="w-3 h-0.5 bg-amber-400 rounded-full" />
+            <span className="italic">Together for Greater Impact</span>
+            <span className="w-3 h-0.5 bg-amber-400 rounded-full" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Default: Horizontal Layout
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <img
+        src="/lmap-logo.jpg"
+        alt="L-MAP Logo"
+        className={`${imageSizes[size]} object-contain rounded-xl shadow-xs border ${
+          isDark ? 'border-white/20 bg-white' : 'border-slate-200/90 bg-white'
+        } p-0.5 shrink-0`}
+      />
+
+      <div className="flex flex-col">
+        <div className="flex items-center gap-1.5">
+          <span className={`${titleSizes[size]} ${isDark ? 'text-white' : 'text-blue-900'} tracking-wider flex items-center leading-tight`}>
+            <span>L</span>
+            <span className="text-amber-500 font-black mx-0.5">-</span>
+            <span>MAP</span>
+          </span>
+        </div>
+
+        {showSubtitle && (
+          <p className={`${subtitleSizes[size]} ${isDark ? 'text-blue-200/90' : 'text-slate-600 font-semibold'} tracking-tight leading-tight mt-0.5`}>
+            Lazuardi Mitra Administration Platform
+          </p>
+        )}
+      </div>
     </div>
   );
 };

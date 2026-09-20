@@ -206,7 +206,7 @@ export const LoginView: React.FC = () => {
         
         {/* Logo L-MAP & Title matching the user's provided design */}
         <div className="mb-6">
-          <LMapLogo size="xl" showSubtitle={true} align="center" />
+          <LMapLogo size="xl" showSubtitle={true} layout="vertical" theme="dark" showTagline={true} />
         </div>
 
         {/* Dark Navy Card */}

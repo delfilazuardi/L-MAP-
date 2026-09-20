@@ -11,7 +11,9 @@ import {
   Edit3, 
   X, 
   ExternalLink,
-  GraduationCap
+  GraduationCap,
+  Trash2,
+  CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -19,22 +21,29 @@ import { SekolahMitra } from '../../types';
 
 export const DataMitraView: React.FC = () => {
   const { isAdmin } = useAuth();
-  const { sekolahList, addSekolah, updateSekolah } = useData();
+  const { sekolahList, addSekolah, updateSekolah, deleteSekolah } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSekolah, setEditingSekolah] = useState<SekolahMitra | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form State
   const [formId, setFormId] = useState('');
   const [formNama, setFormNama] = useState('');
   const [formAlamat, setFormAlamat] = useState('');
+  const [formKota, setFormKota] = useState('');
   const [formPimpinan, setFormPimpinan] = useState('');
   const [formSiswa, setFormSiswa] = useState<number>(100);
   const [formEmail, setFormEmail] = useState('');
   const [formTelepon, setFormTelepon] = useState('');
   const [formJenjang, setFormJenjang] = useState('TK & SD');
   const [formStatus, setFormStatus] = useState<'Aktif' | 'Nonaktif' | 'Masa Perpanjangan'>('Aktif');
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const filtered = sekolahList.filter(s => {
     return s.namaSekolah.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -48,6 +57,7 @@ export const DataMitraView: React.FC = () => {
     setFormId(`MO0${sekolahList.length + 4}`);
     setFormNama('');
     setFormAlamat('');
+    setFormKota('');
     setFormPimpinan('');
     setFormSiswa(120);
     setFormEmail('');
@@ -62,49 +72,84 @@ export const DataMitraView: React.FC = () => {
     setFormId(s.id);
     setFormNama(s.namaSekolah);
     setFormAlamat(s.alamat);
+    setFormKota(s.kota || '');
     setFormPimpinan(s.pimpinan);
     setFormSiswa(s.jumlahSiswa);
-    setFormEmail(s.kontakEmail);
-    setFormTelepon(s.kontakTelepon);
+    setFormEmail(s.kontakEmail || s.email || '');
+    setFormTelepon(s.kontakTelepon || s.kontak || '');
     setFormJenjang(s.jenjang);
-    setFormStatus(s.statusKerjasama);
+    setFormStatus(s.statusKerjasama as any);
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingSekolah) {
-      await updateSekolah(editingSekolah.id, {
-        namaSekolah: formNama,
-        alamat: formAlamat,
-        pimpinan: formPimpinan,
-        jumlahSiswa: Number(formSiswa),
-        kontakEmail: formEmail,
-        kontakTelepon: formTelepon,
-        jenjang: formJenjang,
-        statusKerjasama: formStatus,
-      });
-    } else {
-      await addSekolah({
-        id: formId,
-        namaSekolah: formNama,
-        alamat: formAlamat,
-        pimpinan: formPimpinan,
-        jumlahSiswa: Number(formSiswa),
-        kontakEmail: formEmail,
-        kontakTelepon: formTelepon,
-        jenjang: formJenjang,
-        statusKerjasama: formStatus,
-        tahunBergabung: 2026,
-      });
+    try {
+      if (editingSekolah) {
+        const updatedMitra: SekolahMitra = {
+          ...editingSekolah,
+          id: editingSekolah.id,
+          kodeMitra: editingSekolah.kodeMitra || editingSekolah.id,
+          namaSekolah: formNama.trim(),
+          alamat: formAlamat.trim(),
+          kota: formKota.trim() || editingSekolah.kota || '',
+          pimpinan: formPimpinan.trim(),
+          jumlahSiswa: Number(formSiswa) || 0,
+          kontakEmail: formEmail.trim(),
+          email: formEmail.trim(),
+          kontakTelepon: formTelepon.trim(),
+          kontak: formTelepon.trim(),
+          jenjang: formJenjang.trim(),
+          statusKerjasama: formStatus,
+          tahunBergabung: editingSekolah.tahunBergabung || 2026,
+        };
+        await updateSekolah(updatedMitra);
+        showToast(`Data sekolah "${formNama}" berhasil diperbarui.`);
+      } else {
+        const newMitra: SekolahMitra = {
+          id: formId.trim() || `MO0${sekolahList.length + 5}`,
+          kodeMitra: formId.trim() || `MO0${sekolahList.length + 5}`,
+          namaSekolah: formNama.trim(),
+          alamat: formAlamat.trim(),
+          kota: formKota.trim() || '',
+          pimpinan: formPimpinan.trim(),
+          jumlahSiswa: Number(formSiswa) || 0,
+          kontakEmail: formEmail.trim(),
+          email: formEmail.trim(),
+          kontakTelepon: formTelepon.trim(),
+          kontak: formTelepon.trim(),
+          jenjang: formJenjang.trim(),
+          statusKerjasama: formStatus,
+          tahunBergabung: new Date().getFullYear(),
+        };
+        await addSekolah(newMitra);
+        showToast(`Sekolah mitra baru "${formNama}" berhasil ditambahkan.`);
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      showToast('Gagal menyimpan data mitra: ' + (err instanceof Error ? err.message : 'Terjadi kesalahan'));
     }
-    setIsModalOpen(false);
+  };
+
+  const handleDelete = async (id: string, nama: string) => {
+    if (window.confirm(`Yakin ingin menghapus data sekolah mitra "${nama}"?`)) {
+      await deleteSekolah(id);
+      showToast(`Data sekolah "${nama}" telah dihapus.`);
+    }
   };
 
   const totalSiswa = sekolahList.reduce((acc, s) => acc + s.jumlahSiswa, 0);
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2 shadow-xs transition animate-fade-in">
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          <span className="font-semibold">{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -220,23 +265,30 @@ export const DataMitraView: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail size={14} className="text-slate-400 shrink-0" />
-                  <span className="truncate">{s.kontakEmail}</span>
+                  <span className="truncate">{s.kontakEmail || s.email || 'Email belum diatur'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone size={14} className="text-slate-400 shrink-0" />
-                  <span>{s.kontakTelepon}</span>
+                  <span>{s.kontakTelepon || s.kontak || 'Telepon belum diatur'}</span>
                 </div>
               </div>
             </div>
 
             {isAdmin && (
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   onClick={() => handleOpenEdit(s)}
                   className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <Edit3 size={13} className="text-blue-600" />
-                  <span>Edit Data Sekolah</span>
+                  <span>Edit Data</span>
+                </button>
+                <button
+                  onClick={() => handleDelete(s.id, s.namaSekolah)}
+                  className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                  title="Hapus data sekolah mitra"
+                >
+                  <Trash2 size={14} />
                 </button>
               </div>
             )}
@@ -292,6 +344,17 @@ export const DataMitraView: React.FC = () => {
                   value={formAlamat}
                   onChange={(e) => setFormAlamat(e.target.value)}
                   placeholder="Jl. ..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Kota / Wilayah</label>
+                <input
+                  type="text"
+                  value={formKota}
+                  onChange={(e) => setFormKota(e.target.value)}
+                  placeholder="Contoh: Depok, Jakarta Selatan, dsb."
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                 />
               </div>

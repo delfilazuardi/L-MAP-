@@ -87,7 +87,7 @@ export interface LaporanBulanan {
   sheetPerhitungan?: SheetPerhitunganData;
 }
 
-export type InvoiceKategori = 'Renewal Fee' | 'Franchise Fee' | 'Piutang Mitra' | 'Jenjang Baru' | 'Lainnya';
+export type InvoiceKategori = 'Franchise Fee' | 'Piutang Lampau' | 'Piutang Mitra' | 'Renewal Fee' | 'Jenjang Baru' | 'Lainnya';
 export type InvoiceStatus = 'Belum Bayar' | 'Menunggu Konfirmasi' | 'Lunas' | 'Jatuh Tempo' | 'Sebagian';
 export type InvoiceOperationalStatus = 'Terkirim' | 'Draft' | 'Menunggu Persetujuan' | 'Revisi' | 'Dibatalkan';
 
@@ -112,7 +112,7 @@ export interface Invoice {
   keterangan?: string;
 }
 
-export type PembayaranKategori = 'Franchise Fee' | 'Renewal Fee' | 'Piutang' | 'Piutang Mitra' | 'Jenjang Baru' | 'Lainnya';
+export type PembayaranKategori = 'Franchise Fee' | 'Piutang Lampau' | 'Renewal Fee' | 'Piutang' | 'Piutang Mitra' | 'Jenjang Baru' | 'Lainnya';
 export type PembayaranStatus = 'Menunggu Verifikasi' | 'Terverifikasi' | 'Ditolak';
 
 export interface Pembayaran {

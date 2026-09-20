@@ -11,7 +11,9 @@ import {
   FileText, 
   ShieldCheck, 
   GraduationCap,
-  X
+  X,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -19,11 +21,12 @@ import { TemplateDokumen, TemplateKategori } from '../../types';
 
 export const TemplateDokumenView: React.FC = () => {
   const { isAdmin } = useAuth();
-  const { templateList, addTemplate } = useData();
+  const { templateList, addTemplate, updateTemplate, deleteTemplate } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKategori, setSelectedKategori] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<TemplateDokumen | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Form State
@@ -46,16 +49,54 @@ export const TemplateDokumenView: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleCreateTemplate = async (e: React.FormEvent) => {
+  const handleOpenAdd = () => {
+    setEditingTemplate(null);
+    setFormJudul('');
+    setFormKategori('SOP');
+    setFormDeskripsi('');
+    setFormLink('');
+    setFormTipe('Google Docs');
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (t: TemplateDokumen) => {
+    setEditingTemplate(t);
+    setFormJudul(t.judul);
+    setFormKategori(t.kategori);
+    setFormDeskripsi(t.deskripsi);
+    setFormLink(t.linkUrl);
+    setFormTipe(t.tipeFile);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string, judul: string) => {
+    if (window.confirm(`Hapus berkas template "${judul}"?`)) {
+      await deleteTemplate(id);
+    }
+  };
+
+  const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await addTemplate({
-      judul: formJudul,
-      kategori: formKategori,
-      deskripsi: formDeskripsi,
-      linkUrl: formLink,
-      tipeFile: formTipe,
-      terakhirUpdate: 'September 2026',
-    });
+    if (editingTemplate) {
+      await updateTemplate({
+        ...editingTemplate,
+        judul: formJudul,
+        kategori: formKategori,
+        deskripsi: formDeskripsi,
+        linkUrl: formLink,
+        tipeFile: formTipe,
+        terakhirUpdate: new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+      });
+    } else {
+      await addTemplate({
+        judul: formJudul,
+        kategori: formKategori,
+        deskripsi: formDeskripsi,
+        linkUrl: formLink,
+        tipeFile: formTipe,
+        terakhirUpdate: new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+      });
+    }
     setIsModalOpen(false);
     setFormJudul('');
     setFormDeskripsi('');
@@ -94,7 +135,7 @@ export const TemplateDokumenView: React.FC = () => {
         {isAdmin && (
           <button
             id="btn-tambah-template"
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenAdd}
             className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer self-start sm:self-auto"
           >
             <Plus size={16} />
@@ -187,24 +228,45 @@ export const TemplateDokumenView: React.FC = () => {
                   <span>Buka Link</span>
                   <ExternalLink size={12} />
                 </a>
+
+                {isAdmin && (
+                  <div className="flex items-center gap-1 ml-1">
+                    <button
+                      onClick={() => handleOpenEdit(item)}
+                      className="p-1.5 rounded-xl border border-slate-200 hover:bg-blue-50 text-blue-600 transition cursor-pointer"
+                      title="Edit template dokumen"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.judul)}
+                      className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 transition cursor-pointer"
+                      title="Hapus template dokumen"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* MODAL: Tambah Template */}
+      {/* MODAL: Tambah/Edit Template */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">Tambah Template & Berkas Resmi</h3>
+              <h3 className="text-sm font-bold text-slate-900">
+                {editingTemplate ? 'Edit Template Dokumen' : 'Tambah Template & Berkas Resmi'}
+              </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateTemplate} className="space-y-3 mt-4 text-xs">
+            <form onSubmit={handleSaveTemplate} className="space-y-3 mt-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Judul Dokumen / Video</label>
                 <input
@@ -284,7 +346,7 @@ export const TemplateDokumenView: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-600/30"
                 >
-                  Simpan Tautan
+                  {editingTemplate ? 'Simpan Pembaruan Dokumen' : 'Simpan Tautan'}
                 </button>
               </div>
             </form>
