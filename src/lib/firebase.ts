@@ -99,3 +99,13 @@ export function sanitizeForFirestore<T>(data: T): T {
   }
   return data;
 }
+
+/**
+ * Normalizes document IDs by replacing forward slashes ('/') with underscores ('_').
+ * Firestore treats slashes as subcollection path separators, which breaks top-level collection operations.
+ */
+export function toFirestoreDocId(id: string): string {
+  if (!id) return '';
+  return id.replace(/\//g, '_');
+}
+

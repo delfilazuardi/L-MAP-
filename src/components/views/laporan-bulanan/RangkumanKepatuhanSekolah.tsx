@@ -42,13 +42,22 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
   const [filterMissingOnly, setFilterMissingOnly] = useState(false);
   const [copiedReminder, setCopiedReminder] = useState<string | null>(null);
 
-  // Determine current active academic month based on current date (September 2026):
-  // For academic year 2026/2027, months that are expected to be submitted up to now:
-  // Juli, Agustus, September
+  // Determine expected passed months based on selected academic year:
+  // For past academic years (e.g. 2022/2023 - 2025/2026), all 12 months are expected.
+  // For current active academic year (2026/2027 as of September 2026), Juli - September are expected.
   const EXPECTED_PASSED_MONTHS = useMemo(() => {
-    // In standard operation, we check up to current month (September)
-    return ['Juli', 'Agustus', 'September'];
-  }, []);
+    const [startYearStr] = (selectedTahunAjaran || '2026/2027').split('/');
+    const startYear = parseInt(startYearStr, 10);
+    if (isNaN(startYear)) return ['Juli', 'Agustus', 'September'];
+
+    if (startYear < 2026) {
+      return [...BULAN_ACADEMIC_LIST];
+    } else if (startYear === 2026) {
+      return ['Juli', 'Agustus', 'September'];
+    } else {
+      return [];
+    }
+  }, [selectedTahunAjaran]);
 
   // Compute school compliance analytics
   const analyticsData = useMemo(() => {

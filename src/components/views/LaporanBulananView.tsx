@@ -30,7 +30,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { LaporanBulanan, LaporanKategori, LaporanStatus, SheetPerhitunganData } from '../../types';
 import { SheetPerhitunganModal } from './laporan-bulanan/SheetPerhitunganModal';
-import { FormLaporanModal, BULAN_ACADEMIC_LIST, TAHUN_AJARAN_OPTIONS } from './laporan-bulanan/FormLaporanModal';
+import { FormLaporanModal, BULAN_ACADEMIC_LIST, BASE_TAHUN_AJARAN_OPTIONS } from './laporan-bulanan/FormLaporanModal';
 import { RangkumanKepatuhanSekolah } from './laporan-bulanan/RangkumanKepatuhanSekolah';
 
 export const LaporanBulananView: React.FC = () => {
@@ -50,6 +50,21 @@ export const LaporanBulananView: React.FC = () => {
 
   // Academic Year State
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>('2026/2027');
+
+  // Dynamically aggregate all academic years from base options (starting 2022/2023) + all reports
+  const allTahunAjaranOptions = useMemo(() => {
+    const set = new Set<string>(BASE_TAHUN_AJARAN_OPTIONS);
+    laporanList.forEach(l => {
+      if (l.tahunAjaran && l.tahunAjaran.trim()) {
+        set.add(l.tahunAjaran.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => {
+      const yA = parseInt(a.split('/')[0], 10) || 0;
+      const yB = parseInt(b.split('/')[0], 10) || 0;
+      return yA - yB;
+    });
+  }, [laporanList]);
 
   // Search & Filter State for Daftar Arsip
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,7 +277,7 @@ export const LaporanBulananView: React.FC = () => {
             onChange={(e) => setSelectedTahunAjaran(e.target.value)}
             className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-bold text-blue-700 text-xs focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
           >
-            {TAHUN_AJARAN_OPTIONS.map(ta => (
+            {allTahunAjaranOptions.map(ta => (
               <option key={ta} value={ta}>TA {ta}</option>
             ))}
           </select>
@@ -576,6 +591,7 @@ export const LaporanBulananView: React.FC = () => {
           defaultSekolahId={defaultFormSekolahId}
           defaultBulan={defaultFormBulan}
           defaultTahunAjaran={selectedTahunAjaran}
+          existingTahunAjaranList={allTahunAjaranOptions}
           isAdmin={isAdmin}
           currentUserSchoolId={currentUser?.sekolahId}
           onSave={handleSaveLaporan}

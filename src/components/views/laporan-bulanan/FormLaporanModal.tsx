@@ -7,7 +7,9 @@ import {
   Clock, 
   Send, 
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  Plus,
+  Check
 } from 'lucide-react';
 import { SekolahMitra, LaporanBulanan, LaporanStatus, SheetPerhitunganData } from '../../../types';
 
@@ -26,11 +28,17 @@ export const BULAN_ACADEMIC_LIST = [
   'Juni'
 ] as const;
 
-export const TAHUN_AJARAN_OPTIONS = [
-  '2026/2027',
+export const BASE_TAHUN_AJARAN_OPTIONS: string[] = [
+  '2022/2023',
+  '2023/2024',
+  '2024/2025',
   '2025/2026',
-  '2027/2028'
-] as const;
+  '2026/2027',
+  '2027/2028',
+  '2028/2029'
+];
+
+export const TAHUN_AJARAN_OPTIONS = BASE_TAHUN_AJARAN_OPTIONS;
 
 interface FormLaporanModalProps {
   isOpen: boolean;
@@ -40,6 +48,7 @@ interface FormLaporanModalProps {
   defaultSekolahId?: string;
   defaultBulan?: string;
   defaultTahunAjaran?: string;
+  existingTahunAjaranList?: string[];
   isAdmin: boolean;
   currentUserSchoolId?: string;
   onSave: (data: Omit<LaporanBulanan, 'id' | 'tanggalDiajukan'>, editId?: string) => Promise<void>;
@@ -54,6 +63,7 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
   defaultSekolahId,
   defaultBulan,
   defaultTahunAjaran = '2026/2027',
+  existingTahunAjaranList,
   isAdmin,
   currentUserSchoolId,
   onSave
@@ -67,13 +77,61 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
   const [statusLaporan, setStatusLaporan] = useState<LaporanStatus>('Diajukan');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Dynamic academic year list starting from 2022/2023 + user added
+  const [availableTahunAjaranList, setAvailableTahunAjaranList] = useState<string[]>(() => {
+    const set = new Set<string>(BASE_TAHUN_AJARAN_OPTIONS);
+    if (existingTahunAjaranList) {
+      existingTahunAjaranList.forEach(ta => ta && set.add(ta.trim()));
+    }
+    if (initialData?.tahunAjaran) {
+      set.add(initialData.tahunAjaran.trim());
+    }
+    if (defaultTahunAjaran) {
+      set.add(defaultTahunAjaran.trim());
+    }
+    return Array.from(set).sort((a, b) => {
+      const yA = parseInt(a.split('/')[0], 10) || 0;
+      const yB = parseInt(b.split('/')[0], 10) || 0;
+      return yA - yB;
+    });
+  });
+
+  const [isCustomTAMode, setIsCustomTAMode] = useState(false);
+  const [customTAInput, setCustomTAInput] = useState('');
+  const [customTAError, setCustomTAError] = useState('');
+
+  useEffect(() => {
+    if (existingTahunAjaranList && existingTahunAjaranList.length > 0) {
+      setAvailableTahunAjaranList(prev => {
+        const set = new Set<string>([...prev, ...existingTahunAjaranList]);
+        return Array.from(set).sort((a, b) => {
+          const yA = parseInt(a.split('/')[0], 10) || 0;
+          const yB = parseInt(b.split('/')[0], 10) || 0;
+          return yA - yB;
+        });
+      });
+    }
+  }, [existingTahunAjaranList]);
+
   useEffect(() => {
     if (initialData) {
       setSekolahId(initialData.mitraId);
       setBulan(initialData.bulan);
-      setTahunAjaran(initialData.tahunAjaran || '2026/2027');
+      const ta = initialData.tahunAjaran || '2026/2027';
+      setTahunAjaran(ta);
+      setAvailableTahunAjaranList(prev => {
+        if (!prev.includes(ta)) {
+          return [...prev, ta].sort((a, b) => {
+            const yA = parseInt(a.split('/')[0], 10) || 0;
+            const yB = parseInt(b.split('/')[0], 10) || 0;
+            return yA - yB;
+          });
+        }
+        return prev;
+      });
       setTanggalKirim(initialData.tanggalKirim || initialData.tanggalDiajukan || new Date().toISOString().split('T')[0]);
       setStatusLaporan(initialData.status);
+      setIsCustomTAMode(false);
     } else {
       const initialSchId = defaultSekolahId || (currentUserSchoolId ? currentUserSchoolId : sekolahList[0]?.id || 'MO004');
       setSekolahId(initialSchId);
@@ -81,8 +139,55 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
       setTahunAjaran(defaultTahunAjaran);
       setTanggalKirim(new Date().toISOString().split('T')[0]);
       setStatusLaporan('Diajukan');
+      setIsCustomTAMode(false);
     }
   }, [initialData, defaultSekolahId, defaultBulan, defaultTahunAjaran, currentUserSchoolId, sekolahList]);
+
+  const formatTahunAjaran = (val: string) => {
+    const clean = val.trim();
+    if (!clean) return '';
+    if (clean.includes('-')) {
+      const parts = clean.split('-').map(p => p.trim());
+      if (parts.length === 2) return `${parts[0]}/${parts[1]}`;
+    }
+    if (clean.includes(' ')) {
+      const parts = clean.split(/\s+/);
+      if (parts.length === 2 && parts[0].length === 4 && parts[1].length === 4) {
+        return `${parts[0]}/${parts[1]}`;
+      }
+    }
+    if (/^\d{4}$/.test(clean)) {
+      const y = parseInt(clean, 10);
+      return `${y}/${y + 1}`;
+    }
+    return clean;
+  };
+
+  const handleApplyCustomTA = () => {
+    const formatted = formatTahunAjaran(customTAInput);
+    if (!formatted) {
+      setCustomTAError('Harap masukkan tahun ajaran (contoh: 2029/2030).');
+      return;
+    }
+    if (!/^\d{4}\/\d{4}$/.test(formatted)) {
+      setCustomTAError('Format harus berupa tahun/tahun (contoh: 2029/2030).');
+      return;
+    }
+
+    setAvailableTahunAjaranList(prev => {
+      const set = new Set<string>([...prev, formatted]);
+      return Array.from(set).sort((a, b) => {
+        const yA = parseInt(a.split('/')[0], 10) || 0;
+        const yB = parseInt(b.split('/')[0], 10) || 0;
+        return yA - yB;
+      });
+    });
+
+    setTahunAjaran(formatted);
+    setIsCustomTAMode(false);
+    setCustomTAInput('');
+    setCustomTAError('');
+  };
 
   if (!isOpen) return null;
 
@@ -95,9 +200,17 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
       const selectedSchool = sekolahList.find(s => s.id === sekolahId);
       const namaSekolah = selectedSchool ? selectedSchool.namaSekolah : 'Sekolah Mitra';
       
+      let finalTahunAjaran = tahunAjaran;
+      if (isCustomTAMode && customTAInput.trim()) {
+        const formatted = formatTahunAjaran(customTAInput);
+        if (formatted) {
+          finalTahunAjaran = formatted;
+        }
+      }
+
       // Calculate numeric calendar year from academic year and month:
       // In academic year '2026/2027', Juli-Desember is 2026, Januari-Juni is 2027
-      const startYear = parseInt(tahunAjaran.split('/')[0], 10) || 2026;
+      const startYear = parseInt(finalTahunAjaran.split('/')[0], 10) || 2026;
       const isSecondHalf = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni'].includes(bulan);
       const calculatedYear = isSecondHalf ? startYear + 1 : startYear;
 
@@ -106,11 +219,11 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
         namaSekolah,
         bulan,
         tahun: calculatedYear,
-        tahunAjaran,
+        tahunAjaran: finalTahunAjaran,
         tanggalKirim,
         status: statusLaporan,
         kategori: initialData?.kategori || 'Komprehensif',
-        ringkasan: initialData?.ringkasan || `Laporan Bulanan periode ${bulan} ${calculatedYear} TA ${tahunAjaran}`,
+        ringkasan: initialData?.ringkasan || `Laporan Bulanan periode ${bulan} ${calculatedYear} TA ${finalTahunAjaran}`,
         kendala: initialData?.kendala || '',
         solusi: initialData?.solusi || '',
         linkDokumen: initialData?.linkDokumen || '',
@@ -207,22 +320,101 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="flex items-center gap-1.5 font-bold text-slate-700 text-xs">
-                <CalendarDays size={14} className="text-blue-600" />
-                <span>Tahun Ajaran <span className="text-rose-500">*</span></span>
-              </label>
-              <select
-                id="form-tahun-ajaran"
-                value={tahunAjaran}
-                onChange={(e) => setTahunAjaran(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white cursor-pointer"
-                required
-              >
-                {TAHUN_AJARAN_OPTIONS.map(ta => (
-                  <option key={ta} value={ta}>TA {ta}</option>
-                ))}
-              </select>
-              <span className="text-[10px] text-slate-400 block">Tahun ajaran operasional</span>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 font-bold text-slate-700 text-xs">
+                  <CalendarDays size={14} className="text-blue-600" />
+                  <span>Tahun Ajaran <span className="text-rose-500">*</span></span>
+                </label>
+                {!isCustomTAMode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomTAMode(true);
+                      setCustomTAInput('');
+                      setCustomTAError('');
+                    }}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    <span>Tambah TA Baru</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomTAMode(false);
+                      setCustomTAError('');
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-slate-700 transition cursor-pointer"
+                  >
+                    ← Pilih dari List
+                  </button>
+                )}
+              </div>
+
+              {!isCustomTAMode ? (
+                <>
+                  <select
+                    id="form-tahun-ajaran"
+                    value={tahunAjaran}
+                    onChange={(e) => {
+                      if (e.target.value === '__TAMBAH_BARU__') {
+                        setIsCustomTAMode(true);
+                        setCustomTAInput('');
+                        setCustomTAError('');
+                      } else {
+                        setTahunAjaran(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white cursor-pointer"
+                    required
+                  >
+                    {availableTahunAjaranList.map(ta => (
+                      <option key={ta} value={ta}>TA {ta}</option>
+                    ))}
+                    <option value="__TAMBAH_BARU__" className="text-blue-600 font-bold bg-blue-50">
+                      ➕ Tambah Tahun Ajaran Baru...
+                    </option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 block">Tahun ajaran operasional (mulai 2022/2023)</span>
+                </>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="input-custom-ta"
+                      type="text"
+                      value={customTAInput}
+                      onChange={(e) => {
+                        setCustomTAInput(e.target.value);
+                        if (customTAError) setCustomTAError('');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleApplyCustomTA();
+                        }
+                      }}
+                      placeholder="Contoh: 2029/2030"
+                      className="flex-1 px-3.5 py-2 bg-blue-50/50 border border-blue-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCustomTA}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Check size={14} />
+                      <span>Gunakan</span>
+                    </button>
+                  </div>
+                  {customTAError ? (
+                    <span className="text-[10px] text-rose-500 font-semibold block">{customTAError}</span>
+                  ) : (
+                    <span className="text-[10px] text-blue-600 block">Ketik format YYYY/YYYY (misal: 2029/2030) lalu klik Gunakan</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
