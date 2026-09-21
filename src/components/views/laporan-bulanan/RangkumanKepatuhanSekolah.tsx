@@ -16,10 +16,19 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  Award,
+  Flame
 } from 'lucide-react';
 import { SekolahMitra, LaporanBulanan, LaporanStatus } from '../../../types';
 import { BULAN_ACADEMIC_LIST } from './FormLaporanModal';
+import { 
+  rankMonthlyReports, 
+  computeConsortiumYearlyRankings,
+  SchoolConsortiumStanding,
+  SchoolMonthlyEvaluation,
+  getReportDeadlineInfo 
+} from '../../../lib/laporanTimeliness';
 
 interface RangkumanKepatuhanSekolahProps {
   sekolahList: SekolahMitra[];
@@ -28,6 +37,7 @@ interface RangkumanKepatuhanSekolahProps {
   onChangeTahunAjaran: (ta: string) => void;
   onOpenCreateModal: (sekolahId?: string, bulan?: string) => void;
   onViewLaporanDetail: (laporan: LaporanBulanan) => void;
+  onNavigateToPenilaian?: () => void;
 }
 
 export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps> = ({
@@ -59,6 +69,39 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
     }
   }, [selectedTahunAjaran]);
 
+  // 1. Calculate Academic Year standings (cumulative timeliness, medals, and consistency)
+  const yearlyStandings = useMemo(() => {
+    return computeConsortiumYearlyRankings(
+      sekolahList,
+      laporanList,
+      selectedTahunAjaran,
+      EXPECTED_PASSED_MONTHS
+    );
+  }, [sekolahList, laporanList, selectedTahunAjaran, EXPECTED_PASSED_MONTHS]);
+
+  const standingsMap = useMemo(() => {
+    const map = new Map<string, SchoolConsortiumStanding>();
+    yearlyStandings.forEach(s => map.set(s.sekolah.id, s));
+    return map;
+  }, [yearlyStandings]);
+
+  // 2. Pre-calculate monthly timeliness evaluations for all 12 months in the academic year
+  const monthlyEvalsMap = useMemo(() => {
+    const map = new Map<string, Map<string, SchoolMonthlyEvaluation>>();
+    BULAN_ACADEMIC_LIST.forEach(bulan => {
+      const { evaluations } = rankMonthlyReports(sekolahList, laporanList, selectedTahunAjaran, bulan);
+      const subMap = new Map<string, SchoolMonthlyEvaluation>();
+      evaluations.forEach(ev => subMap.set(ev.sekolah.id, ev));
+      map.set(bulan, subMap);
+    });
+    return map;
+  }, [sekolahList, laporanList, selectedTahunAjaran]);
+
+  // Top 1, 2, 3 of the selected Academic Year
+  const top1Standing = useMemo(() => yearlyStandings.find(s => s.rank === 1), [yearlyStandings]);
+  const top2Standing = useMemo(() => yearlyStandings.find(s => s.rank === 2), [yearlyStandings]);
+  const top3Standing = useMemo(() => yearlyStandings.find(s => s.rank === 3), [yearlyStandings]);
+
   // Compute school compliance analytics
   const analyticsData = useMemo(() => {
     // Filter reports for the selected academic year
@@ -81,7 +124,7 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
 
       // Calculate score & status
       const totalSubmittedExpected = EXPECTED_PASSED_MONTHS.length - missingExpectedMonths.length;
-      const complianceRate = Math.round((totalSubmittedExpected / EXPECTED_PASSED_MONTHS.length) * 100);
+      const complianceRate = Math.round((totalSubmittedExpected / (EXPECTED_PASSED_MONTHS.length || 1)) * 100);
       const diterimaCount = schoolReports.filter(r => r.status === 'Diterima').length;
       const direviewCount = schoolReports.filter(r => r.status === 'Direview').length;
       const diajukanCount = schoolReports.filter(r => r.status === 'Diajukan').length;
@@ -90,8 +133,11 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
       // Weight score for ranking: Diterima = 100, Direview = 85, Diajukan = 75, Revisi = 50
       const totalScore = (diterimaCount * 100) + (direviewCount * 85) + (diajukanCount * 75) + (revisiCount * 50);
 
+      const standing = standingsMap.get(sekolah.id);
+
       return {
         sekolah,
+        standing,
         schoolReports,
         monthMap,
         missingExpectedMonths,
@@ -106,17 +152,15 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
         isFullyCompliant: missingExpectedMonths.length === 0,
       };
     });
-  }, [sekolahList, laporanList, selectedTahunAjaran, EXPECTED_PASSED_MONTHS]);
+  }, [sekolahList, laporanList, selectedTahunAjaran, EXPECTED_PASSED_MONTHS, standingsMap]);
 
-  // Sort by highest score / compliance rate to find "Paling Rajin"
+  // Sort by Academic Year Standing (Top 1, Top 2, Top 3, then subsequent ranks)
   const sortedSchools = useMemo(() => {
     return [...analyticsData].sort((a, b) => {
-      if (b.totalSubmittedExpected !== a.totalSubmittedExpected) {
-        return b.totalSubmittedExpected - a.totalSubmittedExpected;
-      }
-      if (b.diterimaCount !== a.diterimaCount) {
-        return b.diterimaCount - a.diterimaCount;
-      }
+      const rankA = a.standing?.rank ?? 999;
+      const rankB = b.standing?.rank ?? 999;
+      if (rankA !== rankB) return rankA - rankB;
+      if (b.complianceRate !== a.complianceRate) return b.complianceRate - a.complianceRate;
       return b.totalScore - a.totalScore;
     });
   }, [analyticsData]);
@@ -124,13 +168,6 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
   // Schools that have missing reports up to current month
   const schoolsWithMissingReports = useMemo(() => {
     return sortedSchools.filter(s => s.missingExpectedMonths.length > 0);
-  }, [sortedSchools]);
-
-  // Top Most Diligent School(s)
-  const topSchools = useMemo(() => {
-    if (sortedSchools.length === 0) return [];
-    const highestCount = sortedSchools[0].totalSubmittedExpected;
-    return sortedSchools.filter(s => s.totalSubmittedExpected === highestCount && highestCount > 0);
   }, [sortedSchools]);
 
   // Filter for display
@@ -154,14 +191,14 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
     <div className="space-y-6">
       {/* 1. Summary Cards: Paling Rajin, Belum Lapor Bulan Ini, Kepatuhan Global */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Card 1: Sekolah Paling Rajin */}
+        {/* Card 1: Sekolah Paling Rajin (Top 1 TA) */}
         <div className="bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white p-5 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between">
           <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
           <div>
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/20 backdrop-blur-xs text-[11px] font-extrabold uppercase tracking-wide text-amber-100">
                 <Trophy size={13} className="text-yellow-300" />
-                Sekolah Paling Rajin
+                Juara 1 Ketepatan TA
               </span>
               <span className="text-xs font-mono bg-white/20 px-2 py-0.5 rounded-md font-bold">
                 TA {selectedTahunAjaran}
@@ -169,13 +206,13 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
             </div>
 
             <div className="mt-3">
-              {topSchools.length > 0 ? (
+              {top1Standing ? (
                 <div>
                   <h3 className="text-lg font-black tracking-tight text-white leading-tight">
-                    {topSchools.map(s => s.sekolah.namaSekolah).join(', ')}
+                    {top1Standing.sekolah.namaSekolah}
                   </h3>
                   <p className="text-amber-100 text-xs mt-1">
-                    Kepatuhan sempurna: <strong>{topSchools[0].totalSubmittedExpected} dari {EXPECTED_PASSED_MONTHS.length} bulan</strong> telah diserahkan dengan tertib.
+                    {top1Standing.kepatuhanRate}% kepatuhan • <strong>{top1Standing.totalPoin} Poin Ketepatan</strong> ({top1Standing.top1Count}x Juara 1 Bulan, {top1Standing.sangatCepatCount}x Sangat Cepat $\le$ tgl 25).
                   </p>
                 </div>
               ) : (
@@ -185,9 +222,9 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
           </div>
 
           <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs text-amber-100">
-            <span>Tingkat Kepatuhan:</span>
+            <span>Tingkat Kepatuhan TA:</span>
             <span className="font-extrabold text-white text-sm">
-              {topSchools[0]?.complianceRate || 0}% Tepat Waktu
+              {top1Standing?.kepatuhanRate || 0}% Tepat Waktu
             </span>
           </div>
         </div>
@@ -254,10 +291,10 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
             <div className="mt-3 space-y-2">
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-black text-slate-900">
-                  {Math.round((analyticsData.reduce((acc, s) => acc + s.totalSubmittedExpected, 0) / (sekolahList.length * EXPECTED_PASSED_MONTHS.length || 1)) * 100)}%
+                  {Math.round((analyticsData.reduce((acc, s) => acc + s.totalSubmittedExpected, 0) / (sekolahList.length * (EXPECTED_PASSED_MONTHS.length || 1) || 1)) * 100)}%
                 </span>
                 <span className="text-xs text-slate-500">
-                  {analyticsData.reduce((acc, s) => acc + s.totalSubmittedExpected, 0)} dari {sekolahList.length * EXPECTED_PASSED_MONTHS.length} Target
+                  {analyticsData.reduce((acc, s) => acc + s.totalSubmittedExpected, 0)} dari {sekolahList.length * (EXPECTED_PASSED_MONTHS.length || 1)} Target
                 </span>
               </div>
 
@@ -266,13 +303,13 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
                 <div 
                   className="h-full bg-gradient-to-r from-blue-600 to-emerald-500 rounded-full transition-all duration-500"
                   style={{ 
-                    width: `${Math.round((analyticsData.reduce((acc, s) => acc + s.totalSubmittedExpected, 0) / (sekolahList.length * EXPECTED_PASSED_MONTHS.length || 1)) * 100)}%` 
+                    width: `${Math.round((analyticsData.reduce((acc, s) => acc + s.totalSubmittedExpected, 0) / (sekolahList.length * (EXPECTED_PASSED_MONTHS.length || 1) || 1)) * 100)}%` 
                   }}
                 />
               </div>
 
               <p className="text-[11px] text-slate-500">
-                Dihitung dari kepatuhan penyerahan laporan s/d bulan {EXPECTED_PASSED_MONTHS[EXPECTED_PASSED_MONTHS.length - 1]}.
+                Dihitung dari kepatuhan penyerahan laporan s/d bulan {EXPECTED_PASSED_MONTHS[EXPECTED_PASSED_MONTHS.length - 1] || 'September'}.
               </p>
             </div>
           </div>
@@ -292,143 +329,239 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
         </div>
       </div>
 
-      {/* 2. Controls & Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="flex flex-1 items-center gap-3 w-full">
-          <div className="relative flex-1">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nama sekolah mitra atau kota..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setFilterMissingOnly(!filterMissingOnly)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
-              filterMissingOnly 
-                ? 'bg-rose-100 text-rose-800 border border-rose-300' 
-                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <AlertTriangle size={13} className={filterMissingOnly ? 'text-rose-600' : 'text-slate-400'} />
-            <span>{filterMissingOnly ? 'Filter: Belum Lengkap' : 'Hanya Sekolah Belum Lengkap'}</span>
-          </button>
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center gap-2 text-[10px] text-slate-600 flex-wrap justify-end">
-          <span className="font-bold text-slate-800">Keterangan:</span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Diterima
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Direview
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Diajukan
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span> Revisi
-          </span>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold border border-rose-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span> ⚠️ Belum Lapor
-          </span>
-        </div>
-      </div>
-
-      {/* 3. Interactive Monthly Matrix: Sekolah vs 12 Bulan Tahun Ajaran */}
+      {/* 2. Matriks Pelaporan Bulanan & Peringkat Ketepatan Waktu Rentang Tahun Ajaran */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Calendar size={18} className="text-blue-600" />
-              <span>Matriks Pelaporan Bulanan Seluruh Sekolah Mitra</span>
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Klik pada kotak bulan yang berstatus <strong>&quot;Belum Lapor&quot;</strong> untuk langsung mengisi laporan untuk sekolah tersebut
-            </p>
+        {/* Header Section */}
+        <div className="p-5 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Calendar size={19} className="text-blue-600" />
+                  <span>Matriks Pelaporan Bulanan &amp; Peringkat Ketepatan Waktu</span>
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-extrabold border border-blue-200">
+                  Rentang TA {selectedTahunAjaran}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Peringkat <strong>Top 1, 2, dan 3</strong> dinilai berdasarkan ketepatan waktu pengiriman dalam rentang Tahun Ajaran {selectedTahunAjaran}: <strong>target s/d tgl 25 bulan berjalan</strong> (Sangat Cepat) dan <strong>batas akhir tgl 25 bulan berikutnya</strong> (Tepat Waktu).
+              </p>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => onOpenCreateModal()}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm shadow-blue-600/20 transition cursor-pointer self-start sm:self-auto shrink-0"
+            >
+              <Plus size={14} />
+              <span>+ Input Laporan Baru</span>
+            </button>
           </div>
-          
-          <button
-            type="button"
-            onClick={() => onOpenCreateModal()}
-            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer self-start sm:self-auto"
-          >
-            <Plus size={14} />
-            <span>+ Input Laporan Baru</span>
-          </button>
+
+          {/* Podium Top 1, 2, 3 Rentang Tahun Ajaran */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Top 1 TA */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 to-yellow-500/10 border-2 border-amber-400/60 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                🥇
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-black tracking-wider text-amber-800 bg-amber-200/60 px-1.5 py-0.2 rounded">
+                    Top 1 TA {selectedTahunAjaran}
+                  </span>
+                </div>
+                <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
+                  {top1Standing ? top1Standing.sekolah.namaSekolah : 'Belum Ada'}
+                </h5>
+                <p className="text-[11px] text-slate-600">
+                  {top1Standing 
+                    ? `${top1Standing.totalPoin} Poin • ${top1Standing.kepatuhanRate}% Kepatuhan (${top1Standing.top1Count}x Juara Bulan)` 
+                    : 'Menunggu penilaian'}
+                </p>
+              </div>
+            </div>
+
+            {/* Top 2 TA */}
+            <div className="p-3.5 rounded-2xl bg-slate-100/90 border-2 border-slate-300/80 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-800 font-bold text-xl flex items-center justify-center shrink-0 shadow-xs border border-slate-300">
+                🥈
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-700 bg-slate-200/80 px-1.5 py-0.2 rounded">
+                    Top 2 TA {selectedTahunAjaran}
+                  </span>
+                </div>
+                <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
+                  {top2Standing ? top2Standing.sekolah.namaSekolah : 'Belum Ada'}
+                </h5>
+                <p className="text-[11px] text-slate-600">
+                  {top2Standing 
+                    ? `${top2Standing.totalPoin} Poin • ${top2Standing.kepatuhanRate}% Kepatuhan (${top2Standing.top2Count}x Runner-up)` 
+                    : 'Menunggu penilaian'}
+                </p>
+              </div>
+            </div>
+
+            {/* Top 3 TA */}
+            <div className="p-3.5 rounded-2xl bg-amber-900/5 border-2 border-amber-700/30 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-700 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-xs">
+                🥉
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded">
+                    Top 3 TA {selectedTahunAjaran}
+                  </span>
+                </div>
+                <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
+                  {top3Standing ? top3Standing.sekolah.namaSekolah : 'Belum Ada'}
+                </h5>
+                <p className="text-[11px] text-slate-600">
+                  {top3Standing 
+                    ? `${top3Standing.totalPoin} Poin • ${top3Standing.kepatuhanRate}% Kepatuhan (${top3Standing.top3Count}x Top 3)` 
+                    : 'Menunggu penilaian'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Matrix Search & Filter Bar */}
+          <div className="mt-4 pt-3 border-t border-slate-200 flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="flex flex-1 items-center gap-3 w-full">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari nama sekolah mitra atau kota di matriks..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFilterMissingOnly(!filterMissingOnly)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  filterMissingOnly 
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300' 
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <AlertTriangle size={13} className={filterMissingOnly ? 'text-rose-600' : 'text-slate-400'} />
+                <span>{filterMissingOnly ? 'Filter: Belum Lengkap' : 'Hanya Sekolah Belum Lengkap'}</span>
+              </button>
+            </div>
+
+            {/* Matrix Legend */}
+            <div className="flex items-center gap-2 text-[10px] text-slate-600 flex-wrap justify-end">
+              <span className="font-bold text-slate-800">Petunjuk Matriks:</span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-950 font-black border border-amber-300">
+                🥇 Top 1 / 🥈 Top 2 / 🥉 Top 3
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Diterima
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Review
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold border border-rose-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span> + Kirim
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Matrix Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse min-w-[980px]">
+          <table className="w-full text-xs text-left border-collapse min-w-[1020px]">
             <thead>
-              <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                <th className="py-3 px-4 w-12 text-center">Rank</th>
-                <th className="py-3 px-4 min-w-[200px]">Sekolah Mitra</th>
-                <th className="py-3 px-3 text-center min-w-[110px]">Kepatuhan</th>
-                <th className="py-3 px-2 text-center min-w-[140px]">Bulan Belum Lapor</th>
+              <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                <th className="py-3 px-3 w-24 text-center">Peringkat TA</th>
+                <th className="py-3 px-4 min-w-[210px]">Sekolah Mitra</th>
+                <th className="py-3 px-3 text-center min-w-[125px]">Kepatuhan &amp; Skor TA</th>
+                <th className="py-3 px-2 text-center min-w-[130px]">Bulan Belum Lapor</th>
                 {BULAN_ACADEMIC_LIST.map((m, idx) => {
                   const isExpected = EXPECTED_PASSED_MONTHS.includes(m);
                   return (
                     <th 
                       key={m} 
-                      className={`py-3 px-1.5 text-center min-w-[58px] ${
-                        isExpected ? 'bg-blue-50/70 text-blue-950 font-extrabold' : ''
+                      className={`py-3 px-1 text-center min-w-[62px] ${
+                        isExpected ? 'bg-blue-50/80 text-blue-950 font-extrabold' : ''
                       }`}
                     >
                       <div>{m.slice(0, 3)}</div>
                       <div className="text-[9px] font-normal text-slate-400">
-                        {idx < 6 ? '2026' : '2027'}
+                        {idx < 6 ? selectedTahunAjaran.split('/')[0] : selectedTahunAjaran.split('/')[1]}
                       </div>
                     </th>
                   );
                 })}
-                <th className="py-3 px-3 text-center w-28">Aksi</th>
+                <th className="py-3 px-3 text-center w-24">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedSchools.length === 0 ? (
                 <tr>
                   <td colSpan={17} className="py-8 text-center text-slate-400">
-                    Tidak ditemukan sekolah mitra yang cocok dengan filter.
+                    Tidak ditemukan sekolah mitra yang cocok dengan pencarian / filter.
                   </td>
                 </tr>
               ) : (
-                displayedSchools.map((item, idx) => {
-                  const isTopRank = idx === 0 && item.totalSubmittedExpected > 0;
-                  const isSecondRank = idx === 1 && item.totalSubmittedExpected > 0;
+                displayedSchools.map((item) => {
+                  const standing = item.standing;
+                  const rank = standing?.rank ?? 999;
+                  const isTop1 = rank === 1;
+                  const isTop2 = rank === 2;
+                  const isTop3 = rank === 3;
 
                   return (
                     <tr 
                       key={item.sekolah.id}
-                      className={`hover:bg-blue-50/30 transition ${
-                        isTopRank ? 'bg-amber-50/20' : ''
+                      className={`hover:bg-blue-50/40 transition ${
+                        isTop1 
+                          ? 'bg-amber-50/30' 
+                          : isTop2 
+                          ? 'bg-slate-50/50' 
+                          : isTop3 
+                          ? 'bg-amber-50/15' 
+                          : ''
                       }`}
                     >
-                      {/* Rank */}
-                      <td className="py-3 px-4 text-center">
-                        {isTopRank ? (
-                          <span className="w-6 h-6 rounded-full bg-amber-500 text-white font-black text-xs inline-flex items-center justify-center shadow-xs">
-                            1
-                          </span>
-                        ) : isSecondRank ? (
-                          <span className="w-6 h-6 rounded-full bg-slate-400 text-white font-bold text-xs inline-flex items-center justify-center">
-                            2
-                          </span>
+                      {/* Peringkat TA: Top 1, 2, 3 Indicator */}
+                      <td className="py-3 px-3 text-center">
+                        {isTop1 ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[11px] shadow-xs border border-amber-500 flex items-center gap-1">
+                              🥇 <span>Top 1</span>
+                            </span>
+                            <span className="text-[9px] text-amber-800 font-extrabold mt-0.5">Juara 1</span>
+                          </div>
+                        ) : isTop2 ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2 py-0.5 rounded-lg bg-slate-200 text-slate-800 font-bold text-[11px] border border-slate-300 flex items-center gap-1">
+                              🥈 <span>Top 2</span>
+                            </span>
+                            <span className="text-[9px] text-slate-500 font-bold mt-0.5">Juara 2</span>
+                          </div>
+                        ) : isTop3 ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2 py-0.5 rounded-lg bg-amber-700/15 text-amber-900 font-bold text-[11px] border border-amber-700/30 flex items-center gap-1">
+                              🥉 <span>Top 3</span>
+                            </span>
+                            <span className="text-[9px] text-amber-800 font-bold mt-0.5">Juara 3</span>
+                          </div>
                         ) : (
-                          <span className="font-bold text-slate-400">
-                            #{idx + 1}
+                          <span className="font-bold text-slate-400 font-mono text-xs">
+                            #{rank}
                           </span>
                         )}
                       </td>
 
-                      {/* School Name & Details */}
+                      {/* School Name & Academic Year Standings */}
                       <td className="py-3 px-4">
                         <div className="flex items-start gap-2">
                           <div>
@@ -436,21 +569,50 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
                               <span className="font-bold text-slate-900 hover:text-blue-600 transition">
                                 {item.sekolah.namaSekolah}
                               </span>
-                              {isTopRank && (
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 font-extrabold text-[9px] border border-amber-300">
-                                  <Trophy size={10} className="text-amber-600" />
-                                  Paling Rajin
+                              {isTop1 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 font-black text-[9px] border border-amber-300">
+                                  👑 Top 1 TA
+                                </span>
+                              )}
+                              {isTop2 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-700 font-bold text-[9px] border border-slate-300">
+                                  🥈 Top 2 TA
+                                </span>
+                              )}
+                              {isTop3 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-800 font-bold text-[9px] border border-amber-200">
+                                  🥉 Top 3 TA
                                 </span>
                               )}
                             </div>
                             <p className="text-[10px] text-slate-500 mt-0.5">
                               {item.sekolah.kota} • {item.sekolah.jenjang} • {item.sekolah.jumlahSiswa} Siswa
                             </p>
+                            {/* Monthly Medals Summary */}
+                            {standing && (standing.top1Count > 0 || standing.top2Count > 0 || standing.top3Count > 0) && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {standing.top1Count > 0 && (
+                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 px-1 rounded">
+                                    🥇x{standing.top1Count}
+                                  </span>
+                                )}
+                                {standing.top2Count > 0 && (
+                                  <span className="text-[10px] font-bold text-slate-700 bg-slate-200/80 px-1 rounded">
+                                    🥈x{standing.top2Count}
+                                  </span>
+                                )}
+                                {standing.top3Count > 0 && (
+                                  <span className="text-[10px] font-bold text-amber-900 bg-amber-200/60 px-1 rounded">
+                                    🥉x{standing.top3Count}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
 
-                      {/* Compliance Rate Badge */}
+                      {/* Compliance & Academic Year Timeliness Score */}
                       <td className="py-3 px-3 text-center">
                         <div className="inline-flex flex-col items-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
@@ -464,8 +626,11 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
                           }`}>
                             {item.totalSubmittedExpected} / {EXPECTED_PASSED_MONTHS.length} ({item.complianceRate}%)
                           </span>
-                          <span className="text-[9px] text-slate-400 mt-0.5 font-medium">
-                            {item.diterimaCount} Diterima
+                          <span className="text-[10px] font-black text-blue-700 mt-1">
+                            +{standing?.totalPoin || 0} Poin TA
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium">
+                            {standing?.sangatCepatCount || 0} Cepat (≤25) • {standing?.tepatWaktuCount || 0} Tepat
                           </span>
                         </div>
                       </td>
@@ -491,10 +656,11 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
                         )}
                       </td>
 
-                      {/* 12 Month Cells */}
+                      {/* 12 Month Cells with Top 1, 2, 3 Indicators */}
                       {BULAN_ACADEMIC_LIST.map((m) => {
                         const rep = item.monthMap.get(m);
                         const isExpected = EXPECTED_PASSED_MONTHS.includes(m);
+                        const monthEval = monthlyEvalsMap.get(m)?.get(item.sekolah.id);
 
                         if (rep) {
                           // Report exists
@@ -517,11 +683,18 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
                               <button
                                 type="button"
                                 onClick={() => onViewLaporanDetail(rep)}
-                                className={`w-full py-1.5 px-0.5 rounded-lg border text-[9px] font-bold transition flex flex-col items-center justify-center cursor-pointer shadow-2xs hover:scale-105 ${badgeBg}`}
-                                title={`${item.sekolah.namaSekolah} - Laporan ${m} (${rep.status}) - Klik untuk lihat`}
+                                className={`w-full py-1.5 px-0.5 rounded-lg border text-[9px] font-bold transition flex flex-col items-center justify-center cursor-pointer shadow-2xs hover:scale-105 relative ${badgeBg}`}
+                                title={`${item.sekolah.namaSekolah} - Laporan ${m} (${rep.status})\nDikirim: ${monthEval?.tanggalKirim || rep.tanggalKirim || rep.tanggalDiajukan || '-'}\nKetepatan: ${monthEval?.keterangan || '-'}${monthEval?.isTop1 ? '\n🥇 Top 1 Tercepat Bulan Ini' : monthEval?.isTop2 ? '\n🥈 Top 2 Tercepat Bulan Ini' : monthEval?.isTop3 ? '\n🥉 Top 3 Tercepat Bulan Ini' : ''}`}
                               >
-                                <span>{m.slice(0, 3)}</span>
-                                <span className="text-[8px] font-normal opacity-90">{labelText}</span>
+                                <div className="flex items-center gap-0.5">
+                                  <span>{m.slice(0, 3)}</span>
+                                  {monthEval?.isTop1 && <span className="text-[10px]" title="Top 1 Tercepat Bulan Ini">🥇</span>}
+                                  {monthEval?.isTop2 && <span className="text-[10px]" title="Top 2 Tercepat Bulan Ini">🥈</span>}
+                                  {monthEval?.isTop3 && <span className="text-[10px]" title="Top 3 Tercepat Bulan Ini">🥉</span>}
+                                </div>
+                                <span className="text-[8px] font-normal opacity-90 truncate max-w-full">
+                                  {labelText}
+                                </span>
                               </button>
                             </td>
                           );
@@ -599,9 +772,9 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
         {/* Matrix Footer Note */}
         <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500">
           <div className="flex items-center gap-1.5">
-            <Sparkles size={13} className="text-blue-600 shrink-0" />
+            <Sparkles size={13} className="text-amber-500 shrink-0" />
             <span>
-              Status &quot;Paling Rajin&quot; dihitung secara dinamis dari persentase penyerahan tepat waktu, keterverifikasian dokumen, dan kelengkapan bulan kalender pendidikan.
+              Peringkat <strong>Top 1, 2, dan 3</strong> dihitung secara dinamis dari akumulasi ketepatan waktu (&le; tgl 25), perolehan medali bulanan, serta tingkat kelengkapan laporan pada rentang Tahun Ajaran {selectedTahunAjaran}.
             </span>
           </div>
           <span className="font-mono text-[10px] text-slate-400 shrink-0">

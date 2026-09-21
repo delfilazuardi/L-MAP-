@@ -231,7 +231,7 @@ export const LaporanBulananView: React.FC = () => {
 
       {/* Main Sub-Tabs Navigation */}
       <div className="flex items-center justify-between border-b border-slate-200 pb-1 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveTab('rangkuman')}
@@ -241,12 +241,12 @@ export const LaporanBulananView: React.FC = () => {
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <Trophy size={14} className={activeTab === 'rangkuman' ? 'text-yellow-300' : 'text-slate-400'} />
+            <Calendar size={14} className={activeTab === 'rangkuman' ? 'text-white' : 'text-slate-400'} />
             <span>Rangkuman & Matriks Kepatuhan</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
               activeTab === 'rangkuman' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}>
-              Paling Rajin & Belum Lapor
+              12 Bulan
             </span>
           </button>
 
@@ -285,7 +285,7 @@ export const LaporanBulananView: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab 1: Rangkuman & Matriks Kepatuhan (Paling Rajin & Laporan Belum Lapor) */}
+      {/* Tab 1: Rangkuman & Matriks Kepatuhan (Peringkat Top 1, 2, 3 TA & Matriks 12 Bulan) */}
       {activeTab === 'rangkuman' && (
         <RangkumanKepatuhanSekolah
           sekolahList={sekolahList}
