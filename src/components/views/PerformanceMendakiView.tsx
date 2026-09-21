@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { PerformanceMendaki } from '../../types';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const PerformanceMendakiView: React.FC = () => {
   const { currentUser, isAdmin } = useAuth();
@@ -23,11 +24,10 @@ export const PerformanceMendakiView: React.FC = () => {
   const [selectedSekolah, setSelectedSekolah] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PerformanceMendaki | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; nama: string } | null>(null);
 
-  const handleDelete = async (id: string, nama: string) => {
-    if (window.confirm(`Yakin ingin menghapus evaluasi MenDAKI untuk "${nama}"?`)) {
-      await deletePerformance(id);
-    }
+  const handleDelete = (id: string, nama: string) => {
+    setDeleteTarget({ id, nama });
   };
 
   // Form State
@@ -430,6 +430,20 @@ export const PerformanceMendakiView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deletePerformance(deleteTarget.id);
+          }
+        }}
+        title="Hapus Evaluasi MenDAKI"
+        message="Apakah Anda yakin ingin menghapus data evaluasi MenDAKI untuk sekolah ini dari Firestore?"
+        itemName={deleteTarget ? deleteTarget.nama : ''}
+        confirmLabel="Hapus Evaluasi"
+      />
     </div>
   );
 };

@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { PermintaanMitra, PermintaanKategori, PermintaanStatus } from '../../types';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const PermintaanMitraView: React.FC = () => {
   const { currentUser, isAdmin } = useAuth();
@@ -28,6 +29,7 @@ export const PermintaanMitraView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPermintaan, setEditingPermintaan] = useState<PermintaanMitra | null>(null);
   const [updateModalItem, setUpdateModalItem] = useState<PermintaanMitra | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; namaItem: string; namaSekolah: string } | null>(null);
 
   // Form State
   const [formMitraId, setFormMitraId] = useState(currentUser?.sekolahId || sekolahList[0]?.id || 'MO004');
@@ -77,10 +79,8 @@ export const PermintaanMitraView: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, namaItem: string) => {
-    if (window.confirm(`Hapus permintaan "${namaItem}"?`)) {
-      await deletePermintaan(id);
-    }
+  const handleDelete = (id: string, namaItem: string, namaSekolah: string) => {
+    setDeleteTarget({ id, namaItem, namaSekolah });
   };
 
   const handleSavePermintaan = async (e: React.FormEvent) => {
@@ -281,7 +281,7 @@ export const PermintaanMitraView: React.FC = () => {
                     <Edit3 size={14} />
                   </button>
                   <button
-                    onClick={() => handleDelete(item.id, item.namaItem)}
+                    onClick={() => handleDelete(item.id, item.namaItem, item.namaSekolah)}
                     className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 transition cursor-pointer"
                     title="Hapus permintaan"
                   >
@@ -482,6 +482,20 @@ export const PermintaanMitraView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deletePermintaan(deleteTarget.id);
+          }
+        }}
+        title="Hapus Permintaan Mitra"
+        message="Apakah Anda yakin ingin menghapus permintaan logistik ini dari Firestore? Data yang dihapus tidak dapat dipulihkan."
+        itemName={deleteTarget ? `${deleteTarget.namaSekolah} - ${deleteTarget.namaItem}` : ''}
+        confirmLabel="Hapus Permintaan"
+      />
     </div>
   );
 };

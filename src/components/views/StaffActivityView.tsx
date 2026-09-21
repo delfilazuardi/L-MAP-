@@ -26,6 +26,7 @@ import { MasterKpiModal } from './staff-activity/MasterKpiModal';
 import { GoogleSheetTable } from './staff-activity/GoogleSheetTable';
 import { KpiSyncSection } from './staff-activity/KpiSyncSection';
 import { GoogleCalendarView } from './staff-activity/GoogleCalendarView';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const StaffActivityView: React.FC = () => {
   const { currentUser, isAdmin } = useAuth();
@@ -71,6 +72,8 @@ export const StaffActivityView: React.FC = () => {
   // Modals state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<StaffActivity | null>(null);
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState<{ id: string; nama: string } | null>(null);
+  const [deleteAdminTarget, setDeleteAdminTarget] = useState<{ id: string; nama: string } | null>(null);
 
   const [isMasterKpiModalOpen, setIsMasterKpiModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -119,10 +122,9 @@ export const StaffActivityView: React.FC = () => {
     }
   };
 
-  const handleDeleteTask = async (id: string) => {
-    if (window.confirm('Hapus baris tugas ini dari sheet?')) {
-      await deleteStaffActivity(id);
-    }
+  const handleDeleteTask = (id: string) => {
+    const task = staffActivityList.find(t => t.id === id);
+    setDeleteTaskTarget({ id, nama: task?.tugas || task?.judulAktivitas || `Tugas #${id}` });
   };
 
   const handleQuickUpdateStatus = async (id: string, newStatus: StaffActivity['status']) => {
@@ -155,14 +157,11 @@ export const StaffActivityView: React.FC = () => {
     }
   };
 
-  const handleDeleteAdmin = async (id: string, nama: string) => {
+  const handleDeleteAdmin = (id: string, nama: string) => {
     if (adminStaffList.length <= 1) {
-      alert('Minimal harus ada 1 Admin Mitra Office yang terdaftar.');
       return;
     }
-    if (window.confirm(`Hapus admin ${nama} dari daftar Admin Mitra Office?`)) {
-      await deleteAdminStaff(id);
-    }
+    setDeleteAdminTarget({ id, nama });
   };
 
   /**
@@ -485,6 +484,36 @@ export const StaffActivityView: React.FC = () => {
         masterList={masterKpiList}
         onSaveMasterList={handleSaveMasterList}
         onSelectKpiForTask={handleSelectKpiForTask}
+      />
+
+      {/* Delete Task Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTaskTarget}
+        onClose={() => setDeleteTaskTarget(null)}
+        onConfirm={async () => {
+          if (deleteTaskTarget) {
+            await deleteStaffActivity(deleteTaskTarget.id);
+          }
+        }}
+        title="Hapus Baris Tugas"
+        message="Apakah Anda yakin ingin menghapus baris tugas staff ini dari Firestore? Data tugas dan skor KPI terkait akan dihapus."
+        itemName={deleteTaskTarget ? deleteTaskTarget.nama : ''}
+        confirmLabel="Hapus Tugas"
+      />
+
+      {/* Delete Admin Staff Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteAdminTarget}
+        onClose={() => setDeleteAdminTarget(null)}
+        onConfirm={async () => {
+          if (deleteAdminTarget) {
+            await deleteAdminStaff(deleteAdminTarget.id);
+          }
+        }}
+        title="Hapus Admin Mitra Office"
+        message="Apakah Anda yakin ingin menghapus admin ini dari daftar staf Admin Mitra Office?"
+        itemName={deleteAdminTarget ? deleteAdminTarget.nama : ''}
+        confirmLabel="Hapus Admin"
       />
     </div>
   );

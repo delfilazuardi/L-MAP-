@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { MasterKpiStandar } from '../../../types';
 import { DAFTAR_15_STANDAR_KPI } from '../../../data/masterKpiStandar';
+import { ConfirmDeleteModal } from '../../common/ConfirmDeleteModal';
 
 interface MasterKpiModalProps {
   isOpen: boolean;
@@ -36,6 +37,9 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [editingKpi, setEditingKpi] = useState<MasterKpiStandar | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Form State for editing or adding a standard
   const [formNomor, setFormNomor] = useState(1);
@@ -85,9 +89,10 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
   const handleSaveForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formNamaStandar.trim() || !formProgramKpi.trim() || !formPenjelasanKpi.trim()) {
-      alert('Mohon lengkapi Nama Standar, Sasaran Program, dan Penjelasan KPI.');
+      setFormError('Mohon lengkapi Nama Standar, Sasaran Program, dan Penjelasan KPI.');
       return;
     }
+    setFormError(null);
 
     if (isAddingNew) {
       const newItem: MasterKpiStandar = {
@@ -123,16 +128,11 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
   };
 
   const handleDeleteKpi = (id: string, name: string) => {
-    if (window.confirm(`Hapus standar "${name}" dari master KPI?`)) {
-      const updated = masterList.filter(item => item.id !== id);
-      onSaveMasterList(updated);
-    }
+    setDeleteTarget({ id, name });
   };
 
   const handleResetToDefault = () => {
-    if (window.confirm('Kembalikan seluruh 15 Standar & 15 KPI ke format standar resmi Lazuardi Mitra Office?')) {
-      onSaveMasterList(DAFTAR_15_STANDAR_KPI);
-    }
+    setIsResetConfirmOpen(true);
   };
 
   return (
@@ -206,6 +206,12 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
           {/* Edit / Add Form Panel if active */}
           {(editingKpi || isAddingNew) && (
             <form onSubmit={handleSaveForm} className="p-5 rounded-2xl bg-blue-50/70 border-2 border-blue-300 space-y-4 animate-in fade-in">
+              {formError && (
+                <div className="p-3 bg-rose-100/90 border border-rose-300 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                  <X size={14} className="shrink-0 text-rose-600" />
+                  <span>{formError}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
@@ -420,6 +426,35 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            const updated = masterList.filter(item => item.id !== deleteTarget.id);
+            onSaveMasterList(updated);
+          }
+        }}
+        title="Hapus Standar KPI"
+        message="Apakah Anda yakin ingin menghapus standar KPI ini dari daftar master?"
+        itemName={deleteTarget ? deleteTarget.name : ''}
+        confirmLabel="Hapus Standar"
+      />
+
+      {/* Reset Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isResetConfirmOpen}
+        onClose={() => setIsResetConfirmOpen(false)}
+        onConfirm={() => {
+          onSaveMasterList(DAFTAR_15_STANDAR_KPI);
+        }}
+        title="Reset ke Standar Resmi"
+        message="Kembalikan seluruh 15 Standar & 15 KPI ke format standar resmi Lazuardi Mitra Office?"
+        confirmLabel="Reset Sekarang"
+        variant="warning"
+      />
     </div>
   );
 };

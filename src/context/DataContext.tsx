@@ -248,6 +248,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLaporanList(prev => prev.filter(item => item.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'laporan_bulanan', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'laporan_bulanan', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   const reviewLaporan = useCallback(async (id: string, status: LaporanStatus, catatanAdmin?: string) => {
@@ -331,6 +338,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInvoiceList(prev => prev.filter(inv => inv.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'invoices', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'invoices', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   const updateInvoiceStatus = useCallback(async (id: string, status: Invoice['status']) => {
@@ -387,6 +401,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPembayaranList(prev => prev.filter(p => p.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'pembayaran', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'pembayaran', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   const verifyPembayaran = useCallback(async (id: string, status: PembayaranStatus, catatan?: string) => {
@@ -491,6 +512,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEventList(prev => prev.filter(e => e.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'events', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'events', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================
@@ -521,6 +549,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermintaanList(prev => prev.filter(p => p.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'permintaan_mitra', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'permintaan_mitra', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   const updatePermintaanStatus = useCallback(async (id: string, status: PermintaanStatus, noResi?: string, catatanAdmin?: string) => {
@@ -597,6 +632,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSekolahList(prev => prev.filter(s => s.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'mitra', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'mitra', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================
@@ -622,6 +664,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStaffActivityList(prev => prev.filter(a => a.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'staff_activities', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'staff_activities', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================
@@ -647,6 +696,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAdminStaffList(prev => prev.filter(s => s.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'admin_staff', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'admin_staff', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================
@@ -672,6 +728,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTemplateList(prev => prev.filter(t => t.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'templates', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'templates', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================
@@ -698,6 +761,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPerformanceList(prev => prev.filter(p => p.id !== id));
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'performance_mendaki', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'performance_mendaki', id));
+      } catch (e) {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================

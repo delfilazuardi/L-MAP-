@@ -32,6 +32,7 @@ import { LaporanBulanan, LaporanKategori, LaporanStatus, SheetPerhitunganData } 
 import { SheetPerhitunganModal } from './laporan-bulanan/SheetPerhitunganModal';
 import { FormLaporanModal, BULAN_ACADEMIC_LIST, BASE_TAHUN_AJARAN_OPTIONS } from './laporan-bulanan/FormLaporanModal';
 import { RangkumanKepatuhanSekolah } from './laporan-bulanan/RangkumanKepatuhanSekolah';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const LaporanBulananView: React.FC = () => {
   const { currentUser, isAdmin } = useAuth();
@@ -148,6 +149,8 @@ export const LaporanBulananView: React.FC = () => {
     }
   };
 
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; nama: string; bulan: string; tahunAjaran: string } | null>(null);
+
   // Handle Review Action
   const handleReviewAction = async (status: LaporanStatus) => {
     if (!selectedLaporanForReview) return;
@@ -157,10 +160,8 @@ export const LaporanBulananView: React.FC = () => {
   };
 
   // Handle Delete
-  const handleDeleteLaporan = async (id: string, nama: string) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus arsip laporan untuk ${nama}?`)) {
-      await deleteLaporan(id);
-    }
+  const handleDeleteLaporan = (id: string, nama: string, bulan: string, tahunAjaran: string) => {
+    setDeleteTarget({ id, nama, bulan, tahunAjaran });
   };
 
   const getStatusBadge = (status: LaporanStatus) => {
@@ -546,28 +547,28 @@ export const LaporanBulananView: React.FC = () => {
                       </button>
 
                       {isAdmin && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedLaporanForReview(item);
-                              setReviewCatatan(item.catatanAdmin || '');
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition cursor-pointer flex items-center gap-1"
-                          >
-                            <MessageSquare size={13} />
-                            <span>Review</span>
-                          </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedLaporanForReview(item);
+                            setReviewCatatan(item.catatanAdmin || '');
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition cursor-pointer flex items-center gap-1"
+                        >
+                          <MessageSquare size={13} />
+                          <span>Review</span>
+                        </button>
+                      )}
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLaporan(item.id, item.namaSekolah)}
-                            className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer"
-                            title="Hapus laporan"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
+                      {(isAdmin || item.mitraId === currentUser?.sekolahId) && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLaporan(item.id, item.namaSekolah, item.bulan, item.tahunAjaran)}
+                          className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer"
+                          title="Hapus laporan"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -821,6 +822,20 @@ export const LaporanBulananView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteLaporan(deleteTarget.id);
+          }
+        }}
+        title="Hapus Laporan Bulanan"
+        message="Apakah Anda yakin ingin menghapus data laporan bulanan ini? Data yang telah dihapus tidak dapat dipulihkan."
+        itemName={deleteTarget ? `${deleteTarget.nama} (${deleteTarget.bulan} - ${deleteTarget.tahunAjaran})` : ''}
+        confirmLabel="Hapus Laporan"
+      />
     </div>
   );
 };

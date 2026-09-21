@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { EventItem, EventKategori, EventStatus } from '../../types';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const LAZUARDI_CLASSROOM_URL = 'https://classroom.google.com/c/NjkxOTI2Nzk4ODY5?cjc=ljp5l3k';
 export const LAZUARDI_CLASSROOM_CODE = 'ljp5l3k';
@@ -33,6 +34,7 @@ export const EventTrackerView: React.FC = () => {
   const [selectedKategori, setSelectedKategori] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; judul: string; tanggal: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Form State
@@ -94,10 +96,8 @@ export const EventTrackerView: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, judul: string) => {
-    if (window.confirm(`Hapus agenda event "${judul}"?`)) {
-      await deleteEvent(id);
-    }
+  const handleDelete = (id: string, judul: string, tanggal: string) => {
+    setDeleteTarget({ id, judul, tanggal });
   };
 
   const handleSaveEvent = async (e: React.FormEvent) => {
@@ -425,7 +425,7 @@ export const EventTrackerView: React.FC = () => {
                         <Edit3 size={14} />
                       </button>
                       <button
-                        onClick={() => handleDelete(evt.id, evt.judul)}
+                        onClick={() => handleDelete(evt.id, evt.judul, evt.tanggal)}
                         className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 transition cursor-pointer"
                         title="Hapus event"
                       >
@@ -612,6 +612,20 @@ export const EventTrackerView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteEvent(deleteTarget.id);
+          }
+        }}
+        title="Hapus Agenda Event"
+        message="Apakah Anda yakin ingin menghapus agenda event ini dari Firestore? Tindakan ini tidak dapat dibatalkan."
+        itemName={deleteTarget ? `${deleteTarget.judul} (${deleteTarget.tanggal})` : ''}
+        confirmLabel="Hapus Event"
+      />
     </div>
   );
 };

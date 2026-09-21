@@ -34,6 +34,7 @@ import { PembayaranModal } from './invoice-pembayaran/PembayaranModal';
 import { InvoiceDetailModal } from './invoice-pembayaran/InvoiceDetailModal';
 import { BuktiPreviewModal } from './invoice-pembayaran/BuktiPreviewModal';
 import { InputSheetInvoicePembayaranModal } from '../modals/InputSheetInvoicePembayaranModal';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 interface InvoicePembayaranViewProps {
   initialInvoiceId?: string;
@@ -194,6 +195,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   };
 
   // Handlers for Invoice CRUD
+  const [deleteInvoiceTarget, setDeleteInvoiceTarget] = useState<{ id: string; nomor: string } | null>(null);
+  const [deletePaymentTarget, setDeletePaymentTarget] = useState<{ id: string; namaSekolah: string; noRef: string } | null>(null);
+
   const handleOpenAddInvoice = (kategori: RuangKategoriId = 'Renewal Fee') => {
     setEditingInvoice(null);
     setActiveKategoriForInvoice(kategori);
@@ -206,10 +210,8 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     setIsInvoiceModalOpen(true);
   };
 
-  const handleDeleteInvoice = async (id: string, nomor: string) => {
-    if (window.confirm(`Hapus invoice ${nomor}? Tindakan ini tidak dapat dibatalkan.`)) {
-      await deleteInvoice(id);
-    }
+  const handleDeleteInvoice = (id: string, nomor: string) => {
+    setDeleteInvoiceTarget({ id, nomor });
   };
 
   const handleSaveInvoice = async (data: Partial<Invoice>) => {
@@ -237,10 +239,8 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     setIsPaymentModalOpen(true);
   };
 
-  const handleDeletePayment = async (id: string, namaSekolah: string, noRef: string) => {
-    if (window.confirm(`Hapus catatan pembayaran ${namaSekolah} (${noRef})?`)) {
-      await deletePembayaran(id);
-    }
+  const handleDeletePayment = (id: string, namaSekolah: string, noRef: string) => {
+    setDeletePaymentTarget({ id, namaSekolah, noRef });
   };
 
   const handleVerifyPayment = async (id: string, status: PembayaranStatus) => {
@@ -611,6 +611,36 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           onClose={() => setIsSheetModalOpen(false)}
         />
       )}
+
+      {/* Delete Invoice Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteInvoiceTarget}
+        onClose={() => setDeleteInvoiceTarget(null)}
+        onConfirm={async () => {
+          if (deleteInvoiceTarget) {
+            await deleteInvoice(deleteInvoiceTarget.id);
+          }
+        }}
+        title="Hapus Invoice"
+        message="Apakah Anda yakin ingin menghapus tagihan invoice ini dari Firestore? Tindakan ini tidak dapat dibatalkan."
+        itemName={deleteInvoiceTarget ? `Invoice No: ${deleteInvoiceTarget.nomor}` : ''}
+        confirmLabel="Hapus Invoice"
+      />
+
+      {/* Delete Payment Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deletePaymentTarget}
+        onClose={() => setDeletePaymentTarget(null)}
+        onConfirm={async () => {
+          if (deletePaymentTarget) {
+            await deletePembayaran(deletePaymentTarget.id);
+          }
+        }}
+        title="Hapus Catatan Pembayaran"
+        message="Apakah Anda yakin ingin menghapus data pembayaran ini? Transaksi yang dihapus akan mempengaruhi saldo piutang."
+        itemName={deletePaymentTarget ? `${deletePaymentTarget.namaSekolah} (${deletePaymentTarget.noRef})` : ''}
+        confirmLabel="Hapus Pembayaran"
+      />
     </div>
   );
 };

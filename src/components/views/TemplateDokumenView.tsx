@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { TemplateDokumen, TemplateKategori } from '../../types';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const TemplateDokumenView: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -27,6 +28,7 @@ export const TemplateDokumenView: React.FC = () => {
   const [selectedKategori, setSelectedKategori] = useState<string>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TemplateDokumen | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; judul: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Form State
@@ -69,10 +71,8 @@ export const TemplateDokumenView: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, judul: string) => {
-    if (window.confirm(`Hapus berkas template "${judul}"?`)) {
-      await deleteTemplate(id);
-    }
+  const handleDelete = (id: string, judul: string) => {
+    setDeleteTarget({ id, judul });
   };
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
@@ -353,6 +353,20 @@ export const TemplateDokumenView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteTemplate(deleteTarget.id);
+          }
+        }}
+        title="Hapus Template Dokumen"
+        message="Apakah Anda yakin ingin menghapus berkas/tautan template dokumen ini dari Firestore? Tindakan ini tidak dapat dibatalkan."
+        itemName={deleteTarget ? deleteTarget.judul : ''}
+        confirmLabel="Hapus Dokumen"
+      />
     </div>
   );
 };

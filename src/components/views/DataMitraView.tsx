@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { SekolahMitra } from '../../types';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const DataMitraView: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -27,6 +28,7 @@ export const DataMitraView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSekolah, setEditingSekolah] = useState<SekolahMitra | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; nama: string } | null>(null);
 
   // Form State
   const [formId, setFormId] = useState('');
@@ -131,11 +133,8 @@ export const DataMitraView: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, nama: string) => {
-    if (window.confirm(`Yakin ingin menghapus data sekolah mitra "${nama}"?`)) {
-      await deleteSekolah(id);
-      showToast(`Data sekolah "${nama}" telah dihapus.`);
-    }
+  const handleDelete = (id: string, nama: string) => {
+    setDeleteTarget({ id, nama });
   };
 
   const totalSiswa = sekolahList.reduce((acc, s) => acc + s.jumlahSiswa, 0);
@@ -453,6 +452,21 @@ export const DataMitraView: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteSekolah(deleteTarget.id);
+            showToast(`Data sekolah "${deleteTarget.nama}" telah dihapus.`);
+          }
+        }}
+        title="Hapus Sekolah Mitra"
+        message="Apakah Anda yakin ingin menghapus profil sekolah mitra ini dari Firestore? Data yang dihapus tidak dapat dipulihkan."
+        itemName={deleteTarget ? deleteTarget.nama : ''}
+        confirmLabel="Hapus Sekolah"
+      />
     </div>
   );
 };
