@@ -20,6 +20,7 @@ import {
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { isSchoolPelaporanSaja, getSchoolObligationBadgeInfo } from '../../lib/invoiceUtils';
 
 interface DashboardViewProps {
   onNavigate: (tab: ActiveNavTab) => void;
@@ -40,25 +41,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
   // Filter if logged in as school mitra
   const mySchoolId = currentUser?.sekolahId;
-  const filteredLaporan = isAdmin ? laporanList : laporanList.filter(l => l.mitraId === mySchoolId);
-  const filteredInvoices = isAdmin ? invoiceList : invoiceList.filter(i => i.mitraId === mySchoolId);
-  const filteredPembayaran = isAdmin ? pembayaranList : pembayaranList.filter(p => p.mitraId === mySchoolId);
-  const filteredPermintaan = isAdmin ? permintaanList : permintaanList.filter(p => p.mitraId === mySchoolId);
-  const filteredPerf = isAdmin ? performanceList : performanceList.filter(p => p.mitraId === mySchoolId);
+  const currentSchoolData = sekolahList.find(s => s.id === mySchoolId);
+  const isPelaporanSchool = !isAdmin && mySchoolId ? isSchoolPelaporanSaja(mySchoolId) : false;
+  const obligationInfo = mySchoolId ? getSchoolObligationBadgeInfo(mySchoolId) : null;
+
+  const filteredLaporan = isAdmin 
+    ? laporanList 
+    : laporanList.filter(l => l.sekolahId === mySchoolId || (l as any).mitraId === mySchoolId);
+  const filteredInvoices = isAdmin 
+    ? invoiceList 
+    : invoiceList.filter(i => i.mitraId === mySchoolId || (i as any).sekolahId === mySchoolId);
+  const filteredPembayaran = isAdmin 
+    ? pembayaranList 
+    : pembayaranList.filter(p => p.mitraId === mySchoolId || (p as any).sekolahId === mySchoolId);
+  const filteredPermintaan = isAdmin 
+    ? permintaanList 
+    : permintaanList.filter(p => p.mitraId === mySchoolId || (p as any).sekolahId === mySchoolId);
+  const filteredPerf = isAdmin 
+    ? performanceList 
+    : performanceList.filter(p => p.mitraId === mySchoolId || (p as any).sekolahId === mySchoolId);
 
   // Statistics
-  const totalSiswa = sekolahList.reduce((acc, s) => acc + s.jumlahSiswa, 0);
-  const totalUnpaidNominal = filteredInvoices
-    .filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo')
-    .reduce((acc, i) => acc + i.nominal, 0);
+  const totalSiswa = isAdmin 
+    ? sekolahList.reduce((acc, s) => acc + s.jumlahSiswa, 0)
+    : (currentSchoolData?.jumlahSiswa || 0);
+
+  const totalUnpaidNominal = isPelaporanSchool
+    ? 0
+    : filteredInvoices
+        .filter(i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId, { date: i.tanggalKirim, tahunAjaran: i.tahunAjaran })))
+        .filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo')
+        .reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
 
   const pendingLaporanCount = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
+  const approvedLaporanCount = filteredLaporan.filter(l => l.status === 'Disetujui').length;
   const pendingPaymentCount = filteredPembayaran.filter(p => p.status === 'Menunggu Verifikasi').length;
   const upcomingEventsCount = eventList.filter(e => e.status === 'Direncanakan' || e.status === 'Berjalan').length;
   const activeRequestsCount = filteredPermintaan.filter(r => r.status === 'Diajukan' || r.status === 'Diproses' || r.status === 'Dikirim').length;
 
   const avgMenDaki = performanceList.length > 0 
     ? (performanceList.reduce((acc, p) => acc + p.totalSkor, 0) / performanceList.length).toFixed(1)
+    : '0.0';
+
+  const myMenDaki = filteredPerf.length > 0
+    ? (filteredPerf.reduce((acc, p) => acc + p.totalSkor, 0) / filteredPerf.length).toFixed(1)
     : '0.0';
 
   const formatRupiah = (val: number) => {
@@ -173,31 +199,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Tagihan & Piutang
+              {isPelaporanSchool ? 'Status Kewajiban' : 'Tagihan & Piutang'}
             </span>
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition ${
+              isPelaporanSchool 
+                ? 'bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white' 
+                : 'bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white'
+            }`}>
               <Receipt size={20} />
             </div>
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-lg sm:text-xl font-black text-rose-600 truncate">
-              {formatRupiah(totalUnpaidNominal)}
+            <span className={`text-lg sm:text-xl font-black truncate ${isPelaporanSchool ? 'text-purple-700' : 'text-rose-600'}`}>
+              {isPelaporanSchool ? 'Khusus Pelaporan' : formatRupiah(totalUnpaidNominal)}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
-            <span>{filteredInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length} invoice belum selesai</span>
-            <ArrowUpRight size={12} className="text-rose-600" />
+            <span>
+              {isPelaporanSchool 
+                ? 'Bebas kewajiban pembayaran' 
+                : `${filteredInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length} invoice belum lunas`}
+            </span>
+            <ArrowUpRight size={12} className={isPelaporanSchool ? 'text-purple-600' : 'text-rose-600'} />
           </p>
         </div>
 
-        {/* KPI 4: MenDAKI Score */}
+        {/* KPI 4: MenDAKI Score or School Performance */}
         <div 
-          onClick={() => onNavigate('performance-mendaki')}
+          onClick={() => onNavigate(isAdmin ? 'performance-mendaki' : 'laporan-bulanan')}
           className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-300 hover:shadow-md transition cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Rata-rata MenDAKI
+              {isAdmin ? 'Rata-rata MenDAKI' : 'Kepatuhan Laporan'}
             </span>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition">
               <TrendingUp size={20} />
@@ -205,14 +239,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-emerald-700">
-              {avgMenDaki}
+              {isAdmin ? avgMenDaki : `${approvedLaporanCount} Disetujui`}
             </span>
             <span className="text-xs text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
-              Predikat A/B
+              {isAdmin ? 'Predikat A/B' : 'Tepat Waktu'}
             </span>
           </div>
           <p className="text-[11px] text-emerald-700 font-semibold mt-2 flex items-center gap-1">
-            <span>5 Pilar Mutu Lazuardi</span>
+            <span>{isAdmin ? '5 Pilar Mutu Lazuardi' : 'Cek Peringkat Bulanan'}</span>
             <ArrowUpRight size={12} />
           </p>
         </div>
@@ -255,7 +289,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 </div>
                 <div className="text-xs font-bold text-slate-800">Invoice & Pembayaran</div>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  {pendingPaymentCount > 0 ? `${pendingPaymentCount} butuh cek` : 'Franchise, Renewal, Piutang'}
+                  {isPelaporanSchool ? 'Pelaporan Saja' : (pendingPaymentCount > 0 ? `${pendingPaymentCount} butuh cek` : 'Franchise & Renewal')}
                 </p>
               </button>
 
@@ -263,7 +297,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               <button
                 id="dash-quick-events"
                 onClick={() => onNavigate('event-tracker')}
-                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition"
+                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition cursor-pointer"
               >
                 <div className="flex items-center justify-between text-indigo-600 mb-2">
                   <CalendarDays size={18} />
@@ -279,7 +313,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               <button
                 id="dash-quick-permintaan"
                 onClick={() => onNavigate('permintaan-mitra')}
-                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition"
+                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition cursor-pointer"
               >
                 <div className="flex items-center justify-between text-emerald-600 mb-2">
                   <Package size={18} />
@@ -288,24 +322,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                   </span>
                 </div>
                 <div className="text-xs font-bold text-slate-800">Permintaan</div>
-                <p className="text-[11px] text-slate-500 mt-0.5">Seragam & Cetak</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Seragam & Berkas</p>
               </button>
 
-              {/* Box 4: Staff Activity */}
-              <button
-                id="dash-quick-staff"
-                onClick={() => onNavigate('staff-activity')}
-                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition"
-              >
-                <div className="flex items-center justify-between text-amber-600 mb-2">
-                  <Clock size={18} />
-                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded-full">
-                    GCal
-                  </span>
-                </div>
-                <div className="text-xs font-bold text-slate-800">Staff Activity</div>
-                <p className="text-[11px] text-slate-500 mt-0.5">Supervisi & GCal</p>
-              </button>
+              {/* Box 4: Staff Activity (Admin) or Template & Berkas (Mitra) */}
+              {isAdmin ? (
+                <button
+                  id="dash-quick-staff"
+                  onClick={() => onNavigate('staff-activity')}
+                  className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition cursor-pointer"
+                >
+                  <div className="flex items-center justify-between text-amber-600 mb-2">
+                    <Clock size={18} />
+                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded-full">
+                      GCal
+                    </span>
+                  </div>
+                  <div className="text-xs font-bold text-slate-800">Staff Activity</div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Supervisi & GCal</p>
+                </button>
+              ) : (
+                <button
+                  id="dash-quick-template"
+                  onClick={() => onNavigate('template')}
+                  className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition cursor-pointer"
+                >
+                  <div className="flex items-center justify-between text-cyan-600 mb-2">
+                    <FileText size={18} />
+                    <span className="text-[10px] bg-cyan-100 text-cyan-800 font-bold px-1.5 py-0.5 rounded-full">
+                      SOP
+                    </span>
+                  </div>
+                  <div className="text-xs font-bold text-slate-800">Template & Berkas</div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Format & Buku Panduan</p>
+                </button>
+              )}
             </div>
           </div>
 

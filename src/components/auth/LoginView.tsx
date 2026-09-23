@@ -365,24 +365,11 @@ export const LoginView: React.FC = () => {
                       >
                         {INITIAL_SEKOLAH.map((school) => (
                           <option key={school.id} value={school.id} className="bg-[#0b1329] text-slate-100 py-2">
-                            {school.namaSekolah} — {school.kota}
+                            {school.namaSekolah}
                           </option>
                         ))}
                       </select>
                     </div>
-                  </div>
-
-                  {/* School Info Badge */}
-                  <div className="mt-2.5 p-2.5 rounded-xl bg-blue-950/30 border border-blue-900/40 flex items-center justify-between text-xs">
-                    <div className="min-w-0 pr-2">
-                      <p className="font-bold text-blue-200 truncate">{currentSchool.namaSekolah}</p>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        Pimpinan: {currentSchool.pimpinan} • {currentSchool.kota}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Aktif
-                    </span>
                   </div>
                 </div>
 
@@ -494,7 +481,7 @@ export const LoginView: React.FC = () => {
                   </optgroup>
                   <optgroup label="Sekolah Mitra">
                     {INITIAL_SEKOLAH.map(s => (
-                      <option key={s.id} value={s.id}>{s.namaSekolah} ({s.kodeMitra})</option>
+                      <option key={s.id} value={s.id}>{s.namaSekolah}</option>
                     ))}
                   </optgroup>
                 </select>
@@ -595,7 +582,7 @@ export const LoginView: React.FC = () => {
                   className="w-full bg-[#060c1c] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
                 >
                   {INITIAL_SEKOLAH.map(s => (
-                    <option key={s.id} value={s.id}>{s.namaSekolah} ({s.kodeMitra})</option>
+                    <option key={s.id} value={s.id}>{s.namaSekolah}</option>
                   ))}
                 </select>
               </div>

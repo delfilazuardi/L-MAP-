@@ -217,16 +217,23 @@ export const LaporanBulananView: React.FC = () => {
         </div>
 
         {/* Action Button */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            id="btn-tambah-laporan"
-            onClick={() => handleOpenCreateModal()}
-            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <Plus size={15} />
-            <span>+ Buat Laporan Bulanan</span>
-          </button>
-        </div>
+        {isAdmin ? (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              id="btn-tambah-laporan"
+              onClick={() => handleOpenCreateModal()}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Plus size={15} />
+              <span>+ Buat Laporan Bulanan</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+            <Eye size={14} className="text-blue-600" />
+            <span>Mode View (Sekolah Mitra)</span>
+          </div>
+        )}
       </div>
 
       {/* Main Sub-Tabs Navigation */}
@@ -489,20 +496,22 @@ export const LaporanBulananView: React.FC = () => {
                         className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer shrink-0"
                       >
                         <FileSpreadsheet size={14} className="text-emerald-700" />
-                        <span>Buka & Audit Sheet</span>
+                        <span>{isAdmin ? 'Buka & Audit Sheet' : 'Lihat Sheet Perhitungan'}</span>
                       </button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-xs">
                       <span className="text-slate-500 text-[11px]">Belum ada sheet perhitungan terlampir untuk laporan ini.</span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveSheetLaporan(item)}
-                        className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus size={13} />
-                        <span>+ Tambah Sheet Perhitungan</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveSheetLaporan(item)}
+                          className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus size={13} />
+                          <span>+ Tambah Sheet Perhitungan</span>
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -536,38 +545,48 @@ export const LaporanBulananView: React.FC = () => {
                         </a>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(item)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold inline-flex items-center gap-1 transition cursor-pointer"
-                        title="Edit data laporan ini"
-                      >
-                        <Edit2 size={13} />
-                        <span>Edit</span>
-                      </button>
+                      {isAdmin ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(item)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                            title="Edit data laporan ini"
+                          >
+                            <Edit2 size={13} />
+                            <span>Edit</span>
+                          </button>
 
-                      {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedLaporanForReview(item);
+                              setReviewCatatan(item.catatanAdmin || '');
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition cursor-pointer flex items-center gap-1"
+                          >
+                            <MessageSquare size={13} />
+                            <span>Review</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLaporan(item.id, item.namaSekolah, item.bulan, item.tahunAjaran)}
+                            className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer"
+                            title="Hapus laporan"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedLaporanForReview(item);
-                            setReviewCatatan(item.catatanAdmin || '');
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition cursor-pointer flex items-center gap-1"
+                          onClick={() => setDetailLaporan(item)}
+                          className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                          title="Lihat rincian laporan (Mode View)"
                         >
-                          <MessageSquare size={13} />
-                          <span>Review</span>
-                        </button>
-                      )}
-
-                      {(isAdmin || item.mitraId === currentUser?.sekolahId) && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteLaporan(item.id, item.namaSekolah, item.bulan, item.tahunAjaran)}
-                          className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer"
-                          title="Hapus laporan"
-                        >
-                          <Trash2 size={14} />
+                          <Eye size={13} />
+                          <span>Lihat Rincian</span>
                         </button>
                       )}
                     </div>
@@ -636,7 +655,7 @@ export const LaporanBulananView: React.FC = () => {
             await updateLaporanSheet(activeSheetLaporan.id, updatedSheet);
             setActiveSheetLaporan(null);
           }}
-          isReadOnly={false}
+          isReadOnly={!isAdmin}
         />
       )}
 
@@ -798,17 +817,19 @@ export const LaporanBulananView: React.FC = () => {
                 )}
 
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rep = detailLaporan;
-                      setDetailLaporan(null);
-                      handleOpenEditModal(rep);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 transition cursor-pointer"
-                  >
-                    Edit Laporan
-                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const rep = detailLaporan;
+                        setDetailLaporan(null);
+                        handleOpenEditModal(rep);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 transition cursor-pointer"
+                    >
+                      Edit Laporan
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setDetailLaporan(null)}

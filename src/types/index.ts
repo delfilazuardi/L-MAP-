@@ -31,8 +31,10 @@ export interface SekolahMitra {
   kontakTelepon?: string;
   jenjang: string; // e.g. "TK, SD", "SMP", "SMA"
   jumlahSiswa: number;
-  statusKerjasama: 'Aktif' | 'Masa Percobaan' | 'Perpanjangan' | 'Masa Perpanjangan' | 'Nonaktif';
+  statusKerjasama: 'Aktif' | 'Masa Percobaan' | 'Perpanjangan' | 'Masa Perpanjangan' | 'Nonaktif' | 'Afiliasi';
+  kategoriSekolah?: 'Mitra Reguler' | 'Sekolah Afiliasi' | 'Khusus Pelaporan';
   tahunBergabung: number;
+  keteranganKhusus?: string;
 }
 
 
@@ -109,6 +111,7 @@ export interface Invoice {
   jatuhTempo: string;
   statusInvoice?: InvoiceOperationalStatus; // Status penerbitan invoice
   status: InvoiceStatus; // Status pembayaran invoice (Lunas, Belum Bayar, dll)
+  isPelaporanSaja?: boolean; // Khusus sekolah tanpa kewajiban pembayaran (hanya pelaporan)
   keterangan?: string;
 }
 

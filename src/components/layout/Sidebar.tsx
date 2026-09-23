@@ -35,16 +35,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen, 
   onClose 
 }) => {
-  const { currentUser, isAdmin, logout } = useAuth();
+  const { currentUser, isAdmin, isSekolahMitra, logout } = useAuth();
   const { laporanList, invoiceList, permintaanList, pembayaranList } = useData();
 
-  // Badges for pending items
-  const pendingLaporan = laporanList.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
-  const unpaidInvoices = invoiceList.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length;
-  const pendingRequests = permintaanList.filter(p => p.status === 'Diajukan' || p.status === 'Diproses').length;
-  const pendingPayments = pembayaranList.filter(p => p.status === 'Menunggu Verifikasi').length;
+  // Filter lists for current school if Sekolah Mitra
+  const filteredLaporan = isSekolahMitra && currentUser?.sekolahId
+    ? laporanList.filter(l => l.sekolahId === currentUser.sekolahId)
+    : laporanList;
 
-  const navItems = [
+  const filteredInvoices = isSekolahMitra && currentUser?.sekolahId
+    ? invoiceList.filter(i => i.mitraId === currentUser.sekolahId)
+    : invoiceList;
+
+  const filteredPermintaan = isSekolahMitra && currentUser?.sekolahId
+    ? permintaanList.filter(p => p.sekolahId === currentUser.sekolahId)
+    : permintaanList;
+
+  const filteredPembayaran = isSekolahMitra && currentUser?.sekolahId
+    ? pembayaranList.filter(p => p.sekolahId === currentUser.sekolahId)
+    : pembayaranList;
+
+  // Badges for pending items
+  const pendingLaporan = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
+  const unpaidInvoices = filteredInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length;
+  const pendingRequests = filteredPermintaan.filter(p => p.status === 'Diajukan' || p.status === 'Diproses').length;
+  const pendingPayments = filteredPembayaran.filter(p => p.status === 'Menunggu Verifikasi').length;
+
+  const allNavItems = [
     {
       id: 'dashboard' as ActiveNavTab,
       label: 'Dashboard',
@@ -120,6 +137,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       desc: 'Impor & Ekspor Data Sheet',
     },
   ];
+
+  // Specific tabs allowed for Sekolah Mitra per requirement
+  const allowedTabsForSchool: ActiveNavTab[] = [
+    'dashboard',
+    'laporan-bulanan',
+    'invoice',
+    'event-tracker',
+    'permintaan-mitra',
+    'data-mitra',
+    'template',
+  ];
+
+  const navItems = isAdmin 
+    ? allNavItems 
+    : allNavItems.filter(item => allowedTabsForSchool.includes(item.id));
 
   return (
     <>

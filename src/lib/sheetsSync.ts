@@ -181,12 +181,39 @@ export function exportAllToCsv(data: {
 export function parseCurrencyString(val: any): number {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (!val) return 0;
-  const cleaned = String(val)
-    .replace(/Rp\.?/gi, '')
-    .replace(/\s+/g, '')
-    .replace(/\./g, '')
-    .replace(/,/g, '.');
-  const num = parseFloat(cleaned);
+  let str = String(val).trim().replace(/Rp\.?/gi, '').replace(/\s+/g, '');
+  if (!str) return 0;
+
+  const hasDot = str.includes('.');
+  const hasComma = str.includes(',');
+
+  if (hasDot && hasComma) {
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+      // Indonesian: dots are thousands, comma is decimal (e.g. 15.000.000,50)
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US: commas are thousands, dot is decimal (e.g. 15,000,000.50)
+      str = str.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    const parts = str.split(',');
+    if (parts.length > 2) {
+      str = str.replace(/,/g, '');
+    } else if (parts.length === 2) {
+      str = str.replace(',', '.');
+    }
+  } else if (hasDot) {
+    const parts = str.split('.');
+    if (parts.length > 2) {
+      str = str.replace(/\./g, '');
+    } else if (parts.length === 2) {
+      if (parts[1].length === 3 && parts[0].length <= 3 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+        str = str.replace(/\./g, '');
+      }
+    }
+  }
+
+  const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
 }
 

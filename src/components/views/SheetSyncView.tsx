@@ -369,7 +369,7 @@ export const SheetSyncView: React.FC = () => {
                   <th className="py-2.5 px-4">Sekolah</th>
                   <th className="py-2.5 px-4">Kategori</th>
                   <th className="py-2.5 px-4">Nominal</th>
-                  <th className="py-2.5 px-4">Jatuh Tempo</th>
+                  <th className="py-2.5 px-4">Tanggal Kirim</th>
                   <th className="py-2.5 px-4">Status</th>
                 </tr>
               </thead>
@@ -382,7 +382,7 @@ export const SheetSyncView: React.FC = () => {
                     <td className="py-2 px-4 font-black text-slate-900">
                       {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(i.nominal)}
                     </td>
-                    <td className="py-2 px-4 text-slate-600">{i.jatuhTempo}</td>
+                    <td className="py-2 px-4 text-slate-600">{i.tanggalKirim || '-'}</td>
                     <td className="py-2 px-4"><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100">{i.status}</span></td>
                   </tr>
                 ))}

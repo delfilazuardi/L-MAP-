@@ -48,7 +48,13 @@ export const InputSheetInvoicePembayaranModal: React.FC<InputSheetInvoicePembaya
   if (!isOpen) return null;
 
   const formatRupiah = (val: number) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+    const hasDecimals = val % 1 !== 0;
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+    }).format(val || 0);
   };
 
   // Muat preset historis sejak 2022 ke input / preview

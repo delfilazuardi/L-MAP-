@@ -14,9 +14,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 }) => {
   if (!invoice) return null;
 
+  const tagihanFull = invoice.tagihanFull || invoice.nominal || 0;
   const realisasi = invoice.tagihanRealisasi || invoice.nominal || 0;
   const dibayar = invoice.nominalPembayaran || 0;
-  const sisa = Math.max(0, realisasi - dibayar);
+  const isPelaporan = Boolean(invoice.isPelaporanSaja);
+  const sisa = isPelaporan ? 0 : Math.max(0, realisasi - dibayar);
 
   const handlePrint = () => {
     window.print();
@@ -99,14 +101,67 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             </div>
             <div className="text-right">
               <span className="text-slate-400 uppercase font-bold text-[10px] block">
-                Periode & Jatuh Tempo:
+                Periode Tagihan:
               </span>
               <strong className="text-xs font-bold text-slate-900 block mt-0.5">
                 {invoice.bulan || '-'} • TA {invoice.tahunAjaran || '2026/2027'}
               </strong>
-              <span className="text-rose-600 font-bold block mt-0.5">
-                Jatuh Tempo: {invoice.jatuhTempo || '-'}
-              </span>
+              {invoice.tanggalKirim && (
+                <span className="text-slate-500 font-medium block mt-0.5">
+                  Tgl Kirim: {invoice.tanggalKirim}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Perincian Nilai Tagihan (3 Nilai Inti) */}
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">1. Tagihan Full</span>
+                <strong className="text-sm sm:text-base font-mono font-black text-slate-800 block mt-0.5">
+                  {formatRupiah(tagihanFull)}
+                </strong>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200">
+                <span className="text-[10px] uppercase font-bold text-blue-700 block">2. Tagihan Realisasi</span>
+                <strong className="text-sm sm:text-base font-mono font-black text-blue-900 block mt-0.5">
+                  {formatRupiah(realisasi)}
+                </strong>
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 block">3. Telah Bayar</span>
+                <strong className="text-sm sm:text-base font-mono font-black text-emerald-700 block mt-0.5">
+                  {formatRupiah(dibayar)}
+                </strong>
+              </div>
+            </div>
+
+            {/* Sisa Hutang / Piutang (Posisi di Bawah) */}
+            <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
+              sisa > 0 && !isPelaporan
+                ? 'bg-rose-50/80 border-rose-200 text-rose-950'
+                : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+            }`}>
+              <div>
+                <span className="text-xs font-bold block">
+                  Sisa Hutang (Kewajiban Berjalan)
+                </span>
+                <span className="text-[11px] text-slate-500 block">
+                  {isPelaporan
+                    ? 'Khusus pelaporan tagihan (Bebas kewajiban pembayaran)'
+                    : sisa > 0
+                    ? `Sisa kewajiban: Realisasi (${formatRupiah(realisasi)}) − Telah Bayar (${formatRupiah(dibayar)})`
+                    : 'Kewajiban telah lunas 100%'}
+                </span>
+              </div>
+              <div className="text-right">
+                <strong className={`text-base sm:text-lg font-mono font-black block ${
+                  sisa > 0 && !isPelaporan ? 'text-rose-600' : 'text-emerald-700'
+                }`}>
+                  {isPelaporan ? 'Rp 0 (Bebas Biaya)' : formatRupiah(sisa)}
+                </strong>
+              </div>
             </div>
           </div>
 

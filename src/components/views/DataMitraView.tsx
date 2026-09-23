@@ -21,7 +21,7 @@ import { SekolahMitra } from '../../types';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const DataMitraView: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   const { sekolahList, addSekolah, updateSekolah, deleteSekolah } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +47,11 @@ export const DataMitraView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const filtered = sekolahList.filter(s => {
+  const baseList = isAdmin
+    ? sekolahList
+    : sekolahList.filter(s => s.id === currentUser?.sekolahId);
+
+  const filtered = baseList.filter(s => {
     return s.namaSekolah.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.alamat.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.pimpinan.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -240,13 +244,32 @@ export const DataMitraView: React.FC = () => {
                   <h3 className="text-sm font-bold text-slate-900 mt-1.5 leading-snug">
                     {s.namaSekolah}
                   </h3>
-                  <p className="text-xs font-semibold text-blue-700 mt-0.5">{s.jenjang}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <p className="text-xs font-semibold text-blue-700">{s.jenjang}</p>
+                    {s.kategoriSekolah && (
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        s.kategoriSekolah === 'Sekolah Afiliasi'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : s.kategoriSekolah === 'Khusus Pelaporan'
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                          : 'bg-blue-100 text-blue-800 border border-blue-200'
+                      }`}>
+                        {s.kategoriSekolah}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
                   {s.statusKerjasama}
                 </span>
               </div>
+
+              {s.keteranganKhusus && (
+                <div className="mb-3 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
+                  <span className="font-bold">Catatan Kemitraan:</span> {s.keteranganKhusus}
+                </div>
+              )}
 
               {/* Data Rows */}
               <div className="space-y-2 text-xs text-slate-600 mb-4">

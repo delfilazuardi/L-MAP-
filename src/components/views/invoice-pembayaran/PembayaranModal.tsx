@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Building } from 'lucide-react';
 import { Pembayaran, PembayaranKategori, PembayaranStatus, Invoice, SekolahMitra } from '../../../types';
 import { RuangKategoriId } from './types';
+import { NominalInput } from './NominalInput';
 
 interface PembayaranModalProps {
   isOpen: boolean;
@@ -205,17 +206,13 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
           {/* Nominal Setoran & Tanggal Bayar */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Jumlah Setoran (Rp)
-              </label>
-              <input
-                type="number"
-                min="1000"
-                step="1000"
+              <NominalInput
+                label="Jumlah Setoran (Rp)"
                 required
                 value={jumlah}
-                onChange={(e) => setJumlah(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(val) => setJumlah(val)}
+                inputClassName="border-slate-300 text-emerald-700"
+                showQuickChips={true}
               />
             </div>
 

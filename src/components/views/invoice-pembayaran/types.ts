@@ -109,9 +109,12 @@ export function normalizeRuang(kategori?: string): RuangKategoriId {
 }
 
 export function formatRupiah(val: number): string {
+  if (val === undefined || val === null || isNaN(val)) return 'Rp 0';
+  const hasDecimals = val % 1 !== 0;
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(val || 0);
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: hasDecimals ? 2 : 0,
+  }).format(val);
 }

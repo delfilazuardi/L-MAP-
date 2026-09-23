@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ActiveNavTab } from './types';
@@ -22,10 +22,18 @@ import { PerformanceMendakiView } from './components/views/PerformanceMendakiVie
 import { SheetSyncView } from './components/views/SheetSyncView';
 
 function MainApp() {
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | undefined>(undefined);
+
+  // If non-admin attempts to view admin-only tabs, redirect to dashboard
+  useEffect(() => {
+    const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'performance-mendaki', 'sheet-sync'];
+    if (!isAdmin && adminOnlyTabs.includes(activeTab)) {
+      setActiveTab('dashboard');
+    }
+  }, [isAdmin, activeTab]);
 
   // If user is not authenticated, display login view
   if (!currentUser) {

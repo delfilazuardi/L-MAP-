@@ -14,11 +14,19 @@ import {
   TrendingUp,
   School,
   Calendar,
-  Sparkles
+  Sparkles,
+  Building2,
+  BookmarkCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { Invoice, Pembayaran, PembayaranStatus } from '../../types';
+import { 
+  isSchoolPelaporanSaja, 
+  getSchoolObligationBadgeInfo,
+  isSekolahAfiliasiTab,
+  SEKOLAH_AFILIASI_3
+} from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
   RuangConfig, 
@@ -63,6 +71,8 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const [filterSekolah, setFilterSekolah] = useState<string>('ALL');
   const [filterTahun, setFilterTahun] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  // Tab Pemisahan Status Kewajiban: 'MITRA' (Sekolah Mitra) vs 'AFILIASI' (3 Sekolah Khusus) vs 'ALL' (Semua)
+  const [tabKewajiban, setTabKewajiban] = useState<'MITRA' | 'AFILIASI' | 'ALL'>('MITRA');
 
   // Per-room active sub-view ('invoices' or 'payments')
   const [roomActiveView, setRoomActiveView] = useState<Record<RuangKategoriId, 'invoices' | 'payments'>>({
@@ -102,9 +112,31 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       : pembayaranList.filter(p => p.mitraId === currentUser?.sekolahId);
   }, [isAdmin, pembayaranList, currentUser]);
 
-  // Global filtered lists
+  // List of Sekolah Mitra vs Sekolah Afiliasi (3 Sekolah Khusus)
+  const mitraSekolahList = useMemo(() => {
+    return sekolahList.filter(s => !isSekolahAfiliasiTab(s.id || s.namaSekolah));
+  }, [sekolahList]);
+
+  const afiliasiSekolahList = useMemo(() => {
+    return sekolahList.filter(s => isSekolahAfiliasiTab(s.id || s.namaSekolah));
+  }, [sekolahList]);
+
+  const availableSchoolsForFilter = useMemo(() => {
+    if (tabKewajiban === 'MITRA') return mitraSekolahList;
+    if (tabKewajiban === 'AFILIASI') return afiliasiSekolahList;
+    return sekolahList;
+  }, [tabKewajiban, mitraSekolahList, afiliasiSekolahList, sekolahList]);
+
+  // Global filtered invoices: strictly separated by active tab
   const filteredInvoices = useMemo(() => {
     return baseInvoices.filter(inv => {
+      const isAfiliasi = isSekolahAfiliasiTab(inv.mitraId || inv.namaSekolah);
+
+      // Pada tab sekolah mitra hanya sekolah mitra yg terhitung
+      if (tabKewajiban === 'MITRA' && isAfiliasi) return false;
+      // Pada tab sekolah afiliasi hanya sekolah afiliasi yg terhitung
+      if (tabKewajiban === 'AFILIASI' && !isAfiliasi) return false;
+
       const q = searchQuery.toLowerCase();
       const matchSearch = 
         !q ||
@@ -124,10 +156,18 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [baseInvoices, searchQuery, filterSekolah, filterTahun, filterStatus]);
+  }, [baseInvoices, searchQuery, filterSekolah, filterTahun, filterStatus, tabKewajiban]);
 
+  // Global filtered payments: strictly separated by active tab
   const filteredPayments = useMemo(() => {
     return basePayments.filter(pay => {
+      const isAfiliasi = isSekolahAfiliasiTab(pay.mitraId || pay.namaSekolah);
+
+      // Pada tab sekolah mitra hanya sekolah mitra yg terhitung
+      if (tabKewajiban === 'MITRA' && isAfiliasi) return false;
+      // Pada tab sekolah afiliasi hanya sekolah afiliasi yg terhitung
+      if (tabKewajiban === 'AFILIASI' && !isAfiliasi) return false;
+
       const q = searchQuery.toLowerCase();
       const matchSearch = 
         !q ||
@@ -146,9 +186,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [basePayments, searchQuery, filterSekolah, filterTahun, filterStatus]);
+  }, [basePayments, searchQuery, filterSekolah, filterTahun, filterStatus, tabKewajiban]);
 
-  // Grand Totals across all 4 categories
+  // Grand Totals strictly calculated based on active tab
   const grandTotals = useMemo(() => {
     const totalTagihanFull = filteredInvoices.reduce(
       (acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0
@@ -156,12 +196,37 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     const totalTagihanRealisasi = filteredInvoices.reduce(
       (acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0
     );
+
+    // Tab Sekolah Afiliasi: 3 Sekolah Khusus (Bebas Kewajiban Bayar, Piutang = 0)
+    if (tabKewajiban === 'AFILIASI') {
+      return {
+        totalTagihanFull,
+        totalTagihanRealisasi,
+        totalTagihanRealisasiPayable: 0,
+        totalTagihanPelaporanSaja: totalTagihanRealisasi,
+        pelaporanCount: filteredInvoices.length,
+        payableCount: 0,
+        totalPembayaranMasuk: 0,
+        totalSisaPiutang: 0,
+        totalUnpaidInvoices: 0,
+        totalPendingPayments: 0,
+        persenLunas: 100,
+      };
+    }
+
+    // Tab Sekolah Mitra atau Semua:
+    const payableInvoices = filteredInvoices.filter(
+      i => !isSekolahAfiliasiTab(i.mitraId || i.namaSekolah)
+    );
+    const totalTagihanRealisasiPayable = payableInvoices.reduce(
+      (acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0
+    );
     const totalPembayaranMasuk = filteredPayments
       .filter(p => p.status === 'Terverifikasi')
       .reduce((acc, p) => acc + p.jumlah, 0);
 
-    const totalSisaPiutang = Math.max(0, totalTagihanRealisasi - totalPembayaranMasuk);
-    const totalUnpaidInvoices = filteredInvoices.filter(
+    const totalSisaPiutang = Math.max(0, totalTagihanRealisasiPayable - totalPembayaranMasuk);
+    const totalUnpaidInvoices = payableInvoices.filter(
       i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo'
     ).length;
     const totalPendingPayments = filteredPayments.filter(
@@ -171,15 +236,19 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     return {
       totalTagihanFull,
       totalTagihanRealisasi,
+      totalTagihanRealisasiPayable,
+      totalTagihanPelaporanSaja: totalTagihanRealisasi - totalTagihanRealisasiPayable,
+      pelaporanCount: filteredInvoices.length - payableInvoices.length,
+      payableCount: payableInvoices.length,
       totalPembayaranMasuk,
       totalSisaPiutang,
       totalUnpaidInvoices,
       totalPendingPayments,
-      persenLunas: totalTagihanRealisasi > 0 
-        ? Math.min(100, Math.round((totalPembayaranMasuk / totalTagihanRealisasi) * 100))
+      persenLunas: totalTagihanRealisasiPayable > 0 
+        ? Math.min(100, Math.round((totalPembayaranMasuk / totalTagihanRealisasiPayable) * 100))
         : 0,
     };
-  }, [filteredInvoices, filteredPayments]);
+  }, [filteredInvoices, filteredPayments, tabKewajiban]);
 
   // Smooth scroll handler
   const scrollToAnchor = (anchorId: string) => {
@@ -316,59 +385,287 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
             </div>
           </div>
 
-          {/* Aggregate Stats Cards (4 Core Numbers) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6">
+          {/* TAB PEMISAHAN STATUS KEWAJIBAN PEMBAYARAN */}
+          <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-1.5 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Tab 1: Sekolah Mitra */}
+              <button
+                type="button"
+                onClick={() => {
+                  setTabKewajiban('MITRA');
+                  setFilterSekolah('ALL');
+                }}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+                  tabKewajiban === 'MITRA'
+                    ? 'bg-white text-blue-900 shadow-md shadow-black/10'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <Building2 size={16} className={tabKewajiban === 'MITRA' ? 'text-blue-600' : 'text-blue-200'} />
+                <span>Sekolah Mitra</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  tabKewajiban === 'MITRA' ? 'bg-blue-100 text-blue-800' : 'bg-white/20 text-white'
+                }`}>
+                  {mitraSekolahList.length} Sekolah
+                </span>
+              </button>
+
+              {/* Tab 2: Sekolah Afiliasi (3 Sekolah Khusus) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setTabKewajiban('AFILIASI');
+                  setFilterSekolah('ALL');
+                }}
+                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+                  tabKewajiban === 'AFILIASI'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
+                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <School size={16} className={tabKewajiban === 'AFILIASI' ? 'text-amber-300' : 'text-purple-200'} />
+                <span>Sekolah Afiliasi</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  tabKewajiban === 'AFILIASI' ? 'bg-purple-800 text-amber-300' : 'bg-purple-500/40 text-purple-200'
+                }`}>
+                  3 Sekolah Khusus
+                </span>
+              </button>
+            </div>
+
+            {/* Tab 3: Konsolidasi Semua Sekolah */}
+            <div className="flex items-center justify-end sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setTabKewajiban('ALL');
+                  setFilterSekolah('ALL');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  tabKewajiban === 'ALL'
+                    ? 'bg-slate-900/80 text-white font-bold border border-white/30'
+                    : 'text-white/70 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                Semua Sekolah (Konsolidasi)
+              </button>
+            </div>
+          </div>
+
+          {/* Aggregate Stats Cards: 4 Perincian Nilai Tagihan (Simple & Jelas) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4">
+            {/* 1. Tagihan Full */}
             <div className="p-4 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-xs">
-              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
-                Total Tagihan Full (Kotor)
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
+                  1. Tagihan Full
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/20 text-white font-semibold">
+                  {tabKewajiban === 'MITRA' ? 'Mitra' : tabKewajiban === 'AFILIASI' ? 'Afiliasi' : 'Total'}
+                </span>
+              </div>
               <div className="text-lg sm:text-xl font-black text-white mt-1 truncate">
                 {formatRupiah(grandTotals.totalTagihanFull)}
               </div>
-              <span className="text-[11px] text-blue-200/80 mt-0.5 block">
-                Total {filteredInvoices.length} invoice terbit
+              <span className="text-[11px] text-blue-200/80 mt-0.5 block truncate">
+                {filteredInvoices.length} invoice terbit
               </span>
             </div>
 
+            {/* 2. Tagihan Realisasi */}
             <div className="p-4 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-xs">
-              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
-                Total Tagihan Realisasi
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
+                  2. Tagihan Realisasi
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200 font-semibold">
+                  Netto
+                </span>
+              </div>
               <div className="text-lg sm:text-xl font-black text-amber-300 mt-1 truncate">
                 {formatRupiah(grandTotals.totalTagihanRealisasi)}
               </div>
-              <span className="text-[11px] text-blue-200/80 mt-0.5 block">
-                Netto kewajiban seluruh mitra
+              <span className="text-[11px] text-blue-200/80 mt-0.5 block truncate">
+                {tabKewajiban === 'AFILIASI' 
+                  ? 'Bebas kewajiban bayar' 
+                  : `Kewajiban bayar: ${formatRupiah(grandTotals.totalTagihanRealisasiPayable)}`}
               </span>
             </div>
 
+            {/* 3. Nominal Telah Bayar */}
             <div className="p-4 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-xs">
-              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
-                Pembayaran Terverifikasi
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
+                  3. Nominal Telah Bayar
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-200 font-semibold">
+                  Masuk
+                </span>
+              </div>
               <div className="text-lg sm:text-xl font-black text-emerald-400 mt-1 truncate">
-                {formatRupiah(grandTotals.totalPembayaranMasuk)}
+                {tabKewajiban === 'AFILIASI' ? 'Bebas Bayar' : formatRupiah(grandTotals.totalPembayaranMasuk)}
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 mt-0.5">
-                <CheckCircle2 size={12} />
-                <span>{grandTotals.persenLunas}% lunas terbayar</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 mt-0.5 truncate">
+                <CheckCircle2 size={12} className="shrink-0" />
+                <span>
+                  {tabKewajiban === 'AFILIASI' 
+                    ? 'Khusus pelaporan tagihan' 
+                    : `${grandTotals.persenLunas}% lunas terbayar`}
+                </span>
               </div>
             </div>
 
+            {/* 4. Sisa Piutang */}
             <div className="p-4 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-xs">
-              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
-                Sisa Piutang Berjalan
-              </span>
-              <div className="text-lg sm:text-xl font-black text-rose-400 mt-1 truncate">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider block">
+                  4. Sisa Piutang
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                  grandTotals.totalSisaPiutang > 0 
+                    ? 'bg-rose-400/20 text-rose-200' 
+                    : 'bg-emerald-400/20 text-emerald-200'
+                }`}>
+                  {grandTotals.totalSisaPiutang > 0 ? 'Berjalan' : 'Nihil'}
+                </span>
+              </div>
+              <div className={`text-lg sm:text-xl font-black mt-1 truncate ${
+                grandTotals.totalSisaPiutang > 0 ? 'text-rose-400' : 'text-emerald-300'
+              }`}>
                 {formatRupiah(grandTotals.totalSisaPiutang)}
               </div>
-              <span className="text-[11px] text-rose-200/90 mt-0.5 block">
-                {grandTotals.totalUnpaidInvoices} invoice belum lunas
+              <span className="text-[11px] text-rose-200/90 mt-0.5 block truncate">
+                {tabKewajiban === 'AFILIASI' 
+                  ? 'Rp 0 (Bebas Biaya / Pelaporan)' 
+                  : `${grandTotals.totalUnpaidInvoices} invoice belum lunas`}
               </span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* INFORMASI KHUSUS SESUAI TAB AKTIF */}
+      {tabKewajiban === 'AFILIASI' && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white shadow-md space-y-4">
+          <div className="flex items-start justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-purple-700 text-amber-300 shrink-0 shadow-sm border border-purple-500/40">
+                <School size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
+                    Tab Khusus 3 Sekolah Afiliasi
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-700 text-amber-300 border border-purple-500">
+                    Bebas Kewajiban Pembayaran
+                  </span>
+                </div>
+                <p className="text-xs text-purple-200 mt-0.5">
+                  Menghitung <strong>khusus 3 sekolah afiliasi</strong> untuk pelaporan tagihan resmi Lazuardi (tanpa beban piutang).
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold text-purple-300 block">Total Tagihan Pelaporan 3 Sekolah:</span>
+              <strong className="text-sm sm:text-base font-mono font-black text-amber-300 block">
+                {formatRupiah(grandTotals.totalTagihanRealisasi)}
+              </strong>
+            </div>
+          </div>
+
+          {/* 3 School Details Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {SEKOLAH_AFILIASI_3.map((sch, idx) => {
+              const schInvoices = filteredInvoices.filter(i => 
+                (i.mitraId || '').toLowerCase().includes(sch.id.toLowerCase()) || 
+                (i.namaSekolah || '').toLowerCase().includes(sch.namaSekolah.toLowerCase())
+              );
+              const schFull = schInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
+              const schReal = schInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
+
+              return (
+                <div key={sch.id} className="p-3.5 rounded-xl bg-white/10 border border-white/15 backdrop-blur-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-amber-300">
+                        {idx + 1}. {sch.namaSekolah}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 text-white font-bold">
+                        {sch.id}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-purple-300 block mt-0.5 font-medium">
+                      Kota: {sch.kota} • {sch.badge}
+                    </span>
+                    <p className="text-[11px] text-purple-200 mt-1 leading-snug">
+                      {sch.keterangan}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-white/15 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-purple-300 text-[11px]">Invoice Terbit:</span>
+                      <strong className="text-white font-bold">{schInvoices.length} Invoice</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-purple-300 text-[11px]">Tagihan Realisasi:</span>
+                      <strong className="font-mono text-amber-300 font-bold">{formatRupiah(schReal)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-emerald-300 font-semibold pt-0.5">
+                      <span>Status:</span>
+                      <span>✓ Bebas Piutang</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {tabKewajiban === 'MITRA' && (
+        <div className="p-3.5 rounded-2xl bg-blue-50/90 border border-blue-200 text-blue-950 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-blue-600 text-white shrink-0">
+              <Building2 size={18} />
+            </div>
+            <div>
+              <strong className="font-bold text-slate-900 block text-xs sm:text-sm">
+                Tab Sekolah Mitra (Kewajiban Pembayaran Reguler)
+              </strong>
+              <span className="text-slate-600 text-[11px]">
+                Menghitung hanya <strong>{mitraSekolahList.length} sekolah mitra</strong> dengan kewajiban pembayaran fee kemitraan resmi. (3 Sekolah afiliasi dikecualikan pada tab ini).
+              </span>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+            {mitraSekolahList.length} Mitra Aktif Terhitung
+          </span>
+        </div>
+      )}
+
+      {tabKewajiban === 'ALL' && (
+        <div className="p-3.5 rounded-2xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-slate-700 text-white shrink-0">
+              <Layers size={18} />
+            </div>
+            <div>
+              <strong className="font-bold text-slate-900 block text-xs sm:text-sm">
+                Mode Konsolidasi Seluruh Sekolah ({sekolahList.length} Sekolah)
+              </strong>
+              <span className="text-slate-600 text-[11px]">
+                Menampilkan gabungan {mitraSekolahList.length} Sekolah Mitra dan 3 Sekolah Afiliasi (SMA Lazuardi, Kamila Solo, Athaillah Makassar).
+              </span>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-slate-200 text-slate-800">
+            Semua Data Terhitung
+          </span>
+        </div>
+      )}
 
       {/* 2. STICKY QUICK-JUMP ANCHOR & SEARCH FILTER BAR */}
       <div className="sticky top-16 z-20 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-md p-3 sm:p-4 space-y-3">
@@ -444,12 +741,18 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               <select
                 value={filterSekolah}
                 onChange={(e) => setFilterSekolah(e.target.value)}
-                className="w-full sm:w-48 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-56 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="ALL">Semua Sekolah Mitra</option>
-                {sekolahList.map((s) => (
+                <option value="ALL">
+                  {tabKewajiban === 'MITRA'
+                    ? 'Semua Sekolah Mitra'
+                    : tabKewajiban === 'AFILIASI'
+                    ? 'Semua Sekolah Afiliasi (3 Sekolah)'
+                    : 'Semua Sekolah'}
+                </option>
+                {availableSchoolsForFilter.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.namaSekolah}
+                    {s.namaSekolah} {isSekolahAfiliasiTab(s.id || s.namaSekolah) ? '(Afiliasi)' : '(Mitra)'}
                   </option>
                 ))}
               </select>
@@ -497,19 +800,36 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           const roomInvoices = filteredInvoices.filter(i => normalizeRuang(i.kategori) === config.id);
           const roomPayments = filteredPayments.filter(p => normalizeRuang(p.kategori) === config.id);
 
+          const isAfiliasiTabActive = tabKewajiban === 'AFILIASI';
+          const payableRoomInvoices = isAfiliasiTabActive 
+            ? [] 
+            : roomInvoices.filter(i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId, {
+                date: i.tanggalKirim,
+                tahunAjaran: i.tahunAjaran,
+              })));
+
           // Calculate metrics for this room
           const tagihanFull = roomInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
           const tagihanRealisasi = roomInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
-          const totalDibayar = roomPayments
-            .filter(p => p.status === 'Terverifikasi')
-            .reduce((acc, p) => acc + p.jumlah, 0);
-          const sisaPiutang = Math.max(0, tagihanRealisasi - totalDibayar);
-          const persenLunas = tagihanRealisasi > 0 
-            ? Math.min(100, Math.round((totalDibayar / tagihanRealisasi) * 100)) 
-            : 0;
+          const tagihanRealisasiPayable = payableRoomInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
+          const totalDibayar = isAfiliasiTabActive 
+            ? 0 
+            : roomPayments
+                .filter(p => p.status === 'Terverifikasi')
+                .reduce((acc, p) => acc + p.jumlah, 0);
+          const sisaPiutang = isAfiliasiTabActive ? 0 : Math.max(0, tagihanRealisasiPayable - totalDibayar);
+          const persenLunas = isAfiliasiTabActive 
+            ? 100 
+            : (tagihanRealisasiPayable > 0 
+                ? Math.min(100, Math.round((totalDibayar / tagihanRealisasiPayable) * 100)) 
+                : 0);
 
-          const lunasCount = roomInvoices.filter(i => i.status === 'Lunas').length;
-          const unpaidCount = roomInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length;
+          const lunasCount = isAfiliasiTabActive 
+            ? roomInvoices.length 
+            : roomInvoices.filter(i => i.status === 'Lunas').length;
+          const unpaidCount = isAfiliasiTabActive 
+            ? 0 
+            : payableRoomInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length;
           const verifiedPaymentsCount = roomPayments.filter(p => p.status === 'Terverifikasi').length;
           const pendingPaymentsCount = roomPayments.filter(p => p.status === 'Menunggu Verifikasi').length;
 

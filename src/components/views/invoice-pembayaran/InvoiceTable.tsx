@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Invoice, InvoiceStatus, InvoiceOperationalStatus } from '../../../types';
 import { formatRupiah } from './types';
+import { isSchoolPelaporanSaja, getSchoolObligationBadgeInfo } from '../../../lib/invoiceUtils';
 
 interface InvoiceTableProps {
   invoices: Invoice[];
@@ -103,6 +104,15 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
         </thead>
         <tbody className="divide-y divide-slate-100 text-xs">
           {invoices.map((inv) => {
+            const isPelaporan = inv.isPelaporanSaja || isSchoolPelaporanSaja(inv.mitraId, {
+              date: inv.tanggalKirim,
+              tahunAjaran: inv.tahunAjaran,
+            });
+            const obligationInfo = getSchoolObligationBadgeInfo(inv.mitraId, {
+              date: inv.tanggalKirim,
+              tahunAjaran: inv.tahunAjaran,
+            });
+
             const realisasi = inv.tagihanRealisasi || inv.nominal || 0;
             const dibayar = inv.nominalPembayaran || 0;
             const sisa = Math.max(0, realisasi - dibayar);
@@ -122,7 +132,14 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                 {/* Sekolah Mitra */}
                 <td className="py-3.5 px-4">
                   <span className="font-bold text-slate-800 block">{inv.namaSekolah}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">{inv.mitraId}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <span className="text-[10px] text-slate-400 font-mono">{inv.mitraId}</span>
+                    {isPelaporan && (
+                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${obligationInfo.badgeClass}`}>
+                        {obligationInfo.label}
+                      </span>
+                    )}
+                  </div>
                 </td>
 
                 {/* Periode */}
@@ -134,9 +151,9 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                 {/* Status Kirim */}
                 <td className="py-3.5 px-4">
                   {getOperationalBadge(inv.statusInvoice)}
-                  {inv.jatuhTempo && (
+                  {inv.tanggalKirim && (
                     <span className="text-[10px] text-slate-400 block mt-0.5">
-                      Tempo: {inv.jatuhTempo}
+                      Kirim: {inv.tanggalKirim}
                     </span>
                   )}
                 </td>
@@ -153,17 +170,30 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
 
                 {/* Dibayar */}
                 <td className="py-3.5 px-4 text-right font-bold text-emerald-600">
-                  {formatRupiah(dibayar)}
+                  {isPelaporan ? '-' : formatRupiah(dibayar)}
                 </td>
 
                 {/* Sisa Piutang */}
-                <td className="py-3.5 px-4 text-right font-black text-rose-600">
-                  {formatRupiah(sisa)}
+                <td className="py-3.5 px-4 text-right">
+                  {isPelaporan ? (
+                    <div>
+                      <span className="font-bold text-slate-400">Rp 0</span>
+                      <span className="text-[9px] font-semibold text-purple-700 block">Bebas Bayar</span>
+                    </div>
+                  ) : (
+                    <span className="font-black text-rose-600">{formatRupiah(sisa)}</span>
+                  )}
                 </td>
 
                 {/* Status Bayar */}
                 <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                  {getStatusBadge(inv.status)}
+                  {isPelaporan ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                      Pelaporan Saja
+                    </span>
+                  ) : (
+                    getStatusBadge(inv.status)
+                  )}
                 </td>
 
                 {/* Aksi */}
@@ -178,8 +208,8 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                       <Printer size={15} />
                     </button>
 
-                    {/* Quick Pay */}
-                    {inv.status !== 'Lunas' && (
+                    {/* Quick Pay - Only for schools with payment obligation */}
+                    {!isPelaporan && inv.status !== 'Lunas' && (
                       <button
                         onClick={() => onPay(inv)}
                         className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 transition cursor-pointer"
