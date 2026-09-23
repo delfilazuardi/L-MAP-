@@ -320,7 +320,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       statusInvoice: invoiceData.statusInvoice || 'Terkirim',
       status: invoiceData.status || 'Belum Bayar',
       keterangan: invoiceData.keterangan || `Tagihan Invoice ${invoiceData.namaSekolah}`,
+      createdAt: invoiceData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
+
+    // Track recently inputted invoice IDs in session
+    try {
+      const stored = sessionStorage.getItem('recent_invoice_ids');
+      const recentList: string[] = stored ? JSON.parse(stored) : [];
+      if (!recentList.includes(id)) {
+        recentList.unshift(id);
+        sessionStorage.setItem('recent_invoice_ids', JSON.stringify(recentList.slice(0, 30)));
+      }
+    } catch {
+      // ignore in environments where sessionStorage is not available
+    }
 
     setInvoiceList(prev => [newInvoice, ...prev.filter(i => i.id !== id)]);
 
@@ -329,9 +343,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [invoiceList]);
 
   const updateInvoice = useCallback(async (updated: Invoice) => {
-    setInvoiceList(prev => prev.map(inv => inv.id === updated.id ? updated : inv));
+    const withUpdate: Invoice = {
+      ...updated,
+      updatedAt: new Date().toISOString(),
+    };
+    setInvoiceList(prev => prev.map(inv => inv.id === updated.id ? withUpdate : inv));
     const safeId = toFirestoreDocId(updated.id);
-    await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(updated));
+    await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(withUpdate));
   }, []);
 
   const deleteInvoice = useCallback(async (id: string) => {

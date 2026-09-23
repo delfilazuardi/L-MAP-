@@ -866,6 +866,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 <InvoiceTable
                   invoices={roomInvoices}
                   isAdmin={isAdmin}
+                  kategoriTitle={config.title}
                   onDetail={(inv) => setDetailInvoice(inv)}
                   onEdit={handleOpenEditInvoice}
                   onDelete={handleDeleteInvoice}

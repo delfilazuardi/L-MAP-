@@ -113,6 +113,8 @@ export interface Invoice {
   status: InvoiceStatus; // Status pembayaran invoice (Lunas, Belum Bayar, dll)
   isPelaporanSaja?: boolean; // Khusus sekolah tanpa kewajiban pembayaran (hanya pelaporan)
   keterangan?: string;
+  createdAt?: string; // Timestamp ISO pembuatan/input invoice
+  updatedAt?: string; // Timestamp ISO update invoice
 }
 
 export type PembayaranKategori = 'Franchise Fee' | 'Piutang Lampau' | 'Renewal Fee' | 'Piutang' | 'Piutang Mitra' | 'Jenjang Baru' | 'Lainnya';

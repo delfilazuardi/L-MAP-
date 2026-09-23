@@ -117,6 +117,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         statusInvoice,
         status: finalStatus,
         keterangan,
+        createdAt: editingInvoice?.createdAt || new Date().toISOString(),
       });
       onClose();
     } finally {

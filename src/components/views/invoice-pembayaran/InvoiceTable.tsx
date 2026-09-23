@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Receipt, 
   Printer, 
@@ -8,7 +8,10 @@ import {
   CheckCircle2, 
   Clock, 
   AlertCircle,
-  Eye
+  Eye,
+  ChevronDown,
+  Sparkles,
+  ArrowDownUp
 } from 'lucide-react';
 import { Invoice, InvoiceStatus, InvoiceOperationalStatus } from '../../../types';
 import { formatRupiah } from './types';
@@ -21,6 +24,8 @@ interface InvoiceTableProps {
   onEdit: (inv: Invoice) => void;
   onDelete: (id: string, nomor: string) => void;
   onPay: (inv: Invoice) => void;
+  kategoriTitle?: string;
+  defaultSortOrder?: 'terbaru' | 'terlama';
 }
 
 export const InvoiceTable: React.FC<InvoiceTableProps> = ({
@@ -30,7 +35,86 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   onEdit,
   onDelete,
   onPay,
+  kategoriTitle,
+  defaultSortOrder = 'terbaru',
 }) => {
+  // Dropdown Urutan No. Invoice pada matriks: 'terbaru' (baru di-input) vs 'terlama'
+  const [sortOrder, setSortOrder] = useState<'terbaru' | 'terlama'>(defaultSortOrder);
+
+  // Helper untuk mengekstrak nomor urut dari format nomor invoice (mis: /001/ atau -001)
+  const extractInvoiceSequence = (str: string): number => {
+    if (!str) return 0;
+    const m = str.match(/\/(\d{1,4})\//) || str.match(/-(\d{1,4})/);
+    if (m) return parseInt(m[1], 10);
+    const trailingDigits = str.match(/(\d{1,4})$/);
+    if (trailingDigits) return parseInt(trailingDigits[1], 10);
+    return 0;
+  };
+
+  // Helper untuk mendapatkan timestamp estimasi invoice
+  const getInvoiceTimestamp = (inv: Invoice): number => {
+    if (inv.createdAt) {
+      const t = new Date(inv.createdAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    const dateStr = inv.tanggalTerbit || inv.tanggalKirim;
+    if (dateStr) {
+      const t = new Date(dateStr).getTime();
+      if (!isNaN(t)) return t;
+    }
+    const matchYear = (inv.nomorInvoice || inv.id || '').match(/(202[2-9])/);
+    if (matchYear) {
+      return new Date(`${matchYear[1]}-01-01`).getTime();
+    }
+    return 0;
+  };
+
+  // Cek apakah invoice baru saja di-input (dalam sesi ini atau < 48 jam)
+  const isNewlyInputted = (inv: Invoice): boolean => {
+    try {
+      const stored = sessionStorage.getItem('recent_invoice_ids');
+      if (stored) {
+        const ids: string[] = JSON.parse(stored);
+        if (ids.includes(inv.id) || (inv.nomorInvoice && ids.includes(inv.nomorInvoice))) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (inv.createdAt) {
+      const ageMs = Date.now() - new Date(inv.createdAt).getTime();
+      if (ageMs >= 0 && ageMs < 48 * 60 * 60 * 1000) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Invoices yang sudah diurutkan berdasarkan No. Invoice & Tanggal
+  const sortedInvoices = useMemo(() => {
+    return [...invoices].sort((a, b) => {
+      const timeA = getInvoiceTimestamp(a);
+      const timeB = getInvoiceTimestamp(b);
+
+      if (timeA !== timeB) {
+        return sortOrder === 'terbaru' ? timeB - timeA : timeA - timeB;
+      }
+
+      const seqA = extractInvoiceSequence(a.nomorInvoice || a.id);
+      const seqB = extractInvoiceSequence(b.nomorInvoice || b.id);
+      if (seqA !== seqB) {
+        return sortOrder === 'terbaru' ? seqB - seqA : seqA - seqB;
+      }
+
+      return sortOrder === 'terbaru'
+        ? (b.nomorInvoice || b.id).localeCompare(a.nomorInvoice || a.id)
+        : (a.nomorInvoice || a.id).localeCompare(b.nomorInvoice || b.id);
+    });
+  }, [invoices, sortOrder]);
+
   if (invoices.length === 0) {
     return (
       <div className="p-8 text-center bg-white rounded-2xl border border-slate-200/80 my-3">
@@ -90,7 +174,26 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
       <table className="w-full text-left border-collapse min-w-[900px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-            <th className="py-3 px-4">No. Invoice & Tanggal</th>
+            {/* Kolom No. Invoice dengan Dropdown (Terbaru / Terlama) */}
+            <th className="py-3 px-4 min-w-[230px]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-700 font-extrabold">No. Invoice & Tanggal</span>
+                <div className="flex items-center gap-1">
+                  <div className="relative inline-flex items-center">
+                    <select
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value as 'terbaru' | 'terlama')}
+                      className="text-[10px] font-extrabold pl-2 pr-6 py-1 rounded-lg bg-white text-blue-900 border border-blue-300 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs cursor-pointer appearance-none"
+                      title="Urutkan No. Invoice: Terbaru (baru di-input) atau Terlama"
+                    >
+                      <option value="terbaru">Terbaru</option>
+                      <option value="terlama">Terlama</option>
+                    </select>
+                    <ChevronDown size={11} className="absolute right-1.5 pointer-events-none text-blue-700 font-bold" />
+                  </div>
+                </div>
+              </div>
+            </th>
             <th className="py-3 px-4">Sekolah Mitra</th>
             <th className="py-3 px-4">Bulan & TA</th>
             <th className="py-3 px-4">Status Kirim</th>
@@ -103,7 +206,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 text-xs">
-          {invoices.map((inv) => {
+          {sortedInvoices.map((inv, idx) => {
             const isPelaporan = inv.isPelaporanSaja || isSchoolPelaporanSaja(inv.mitraId, {
               date: inv.tanggalKirim,
               tahunAjaran: inv.tahunAjaran,
@@ -116,17 +219,41 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             const realisasi = inv.tagihanRealisasi || inv.nominal || 0;
             const dibayar = inv.nominalPembayaran || 0;
             const sisa = Math.max(0, realisasi - dibayar);
+            const isNew = isNewlyInputted(inv);
 
             return (
-              <tr key={inv.id} className="hover:bg-blue-50/30 transition-colors">
-                {/* No. Invoice & Tanggal */}
+              <tr 
+                key={inv.id} 
+                className={`transition-colors ${
+                  isNew 
+                    ? 'bg-purple-50/40 hover:bg-purple-50/70 border-l-4 border-l-purple-600' 
+                    : 'hover:bg-blue-50/30'
+                }`}
+              >
+                {/* No. Invoice & Tanggal dengan Penanda Baru Di-input */}
                 <td className="py-3.5 px-4">
-                  <span className="font-mono font-bold text-blue-900 text-xs block">
-                    {inv.nomorInvoice || inv.id}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    Kirim: {inv.tanggalKirim || '-'}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono font-bold text-blue-900 text-xs block">
+                      {inv.nomorInvoice || inv.id}
+                    </span>
+                    {isNew && (
+                      <span 
+                        className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs animate-pulse"
+                        title="Invoice ini baru saja di-input"
+                      >
+                        <Sparkles size={10} className="text-purple-600 shrink-0" />
+                        Baru Di-input
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                    <span>Kirim: {inv.tanggalKirim || '-'}</span>
+                    {inv.createdAt && (
+                      <span className="text-[9px] text-purple-700 font-medium">
+                        • Input: {new Date(inv.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
                 </td>
 
                 {/* Sekolah Mitra */}
