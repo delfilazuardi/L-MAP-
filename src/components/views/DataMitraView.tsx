@@ -47,9 +47,10 @@ export const DataMitraView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const mySchoolId = currentUser?.sekolahId || currentUser?.userId;
   const baseList = isAdmin
     ? sekolahList
-    : sekolahList.filter(s => s.id === currentUser?.sekolahId);
+    : sekolahList.filter(s => s.id === mySchoolId || s.kodeMitra === mySchoolId || (currentUser?.nama && s.namaSekolah.toLowerCase().includes(currentUser.nama.toLowerCase())));
 
   const filtered = baseList.filter(s => {
     return s.namaSekolah.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -158,23 +159,38 @@ export const DataMitraView: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <School size={22} className="text-blue-600" />
-            <span>Direktori Data Mitra Sekolah</span>
+            <span>{isAdmin ? 'Direktori Data Mitra Sekolah' : `Profil & Data Sekolah: ${baseList[0]?.namaSekolah || currentUser?.nama}`}</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Database profil resmi sekolah mitra, alamat domisili, pimpinan, dan populasi siswa aktif
+            {isAdmin 
+              ? 'Database profil resmi sekolah mitra, alamat domisili, pimpinan, dan populasi siswa aktif'
+              : 'Data resmi sekolah Anda yang tersinkronisasi langsung dengan tab Administrator Mitra Office. Anda dapat mengedit sekolah Anda di sini.'}
           </p>
         </div>
 
-        {isAdmin && (
-          <button
-            id="btn-tambah-mitra"
-            onClick={handleOpenAdd}
-            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer self-start sm:self-auto"
-          >
-            <Plus size={16} />
-            <span>Tambah Sekolah Mitra</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <button
+              id="btn-tambah-mitra"
+              onClick={handleOpenAdd}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer self-start sm:self-auto"
+            >
+              <Plus size={16} />
+              <span>Tambah Sekolah Mitra</span>
+            </button>
+          ) : (
+            baseList.length > 0 && (
+              <button
+                id="btn-edit-sekolah-mitra-header"
+                onClick={() => handleOpenEdit(baseList[0])}
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer self-start sm:self-auto"
+              >
+                <Edit3 size={16} />
+                <span>Edit Data Sekolah</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Stats row */}
@@ -184,8 +200,12 @@ export const DataMitraView: React.FC = () => {
             <School size={20} />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Sekolah Terdaftar</span>
-            <div className="text-xl font-black text-slate-900">{sekolahList.length} Sekolah</div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">
+              {isAdmin ? 'Sekolah Terdaftar' : 'Sekolah Mitra Anda'}
+            </span>
+            <div className="text-lg sm:text-xl font-black text-slate-900 truncate max-w-[200px]">
+              {isAdmin ? `${sekolahList.length} Sekolah` : (baseList[0]?.namaSekolah || currentUser?.nama)}
+            </div>
           </div>
         </div>
 
@@ -194,8 +214,12 @@ export const DataMitraView: React.FC = () => {
             <Users size={20} />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Total Siswa Binaan</span>
-            <div className="text-xl font-black text-slate-900">{totalSiswa.toLocaleString()} Murid</div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">
+              {isAdmin ? 'Total Siswa Binaan' : 'Jumlah Siswa Binaan'}
+            </span>
+            <div className="text-xl font-black text-slate-900">
+              {isAdmin ? `${totalSiswa.toLocaleString()} Murid` : `${(baseList[0]?.jumlahSiswa || 0).toLocaleString()} Murid`}
+            </div>
           </div>
         </div>
 
@@ -204,8 +228,10 @@ export const DataMitraView: React.FC = () => {
             <GraduationCap size={20} />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Kemitraan Aktif</span>
-            <div className="text-xl font-black text-emerald-700">100% Berlisensi</div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Status Kemitraan</span>
+            <div className="text-xl font-black text-emerald-700">
+              {isAdmin ? '100% Berlisensi' : `${baseList[0]?.statusKerjasama || 'Aktif'} (${baseList[0]?.kategoriSekolah || 'Mitra Reguler'})`}
+            </div>
           </div>
         </div>
       </div>
@@ -296,24 +322,30 @@ export const DataMitraView: React.FC = () => {
               </div>
             </div>
 
-            {isAdmin && (
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-400">
+                {isAdmin ? 'Akses Mitra Office' : 'Data Sekolah Anda'}
+              </span>
+              <div className="flex items-center gap-2">
                 <button
+                  id={`btn-edit-sekolah-${s.id}`}
                   onClick={() => handleOpenEdit(s)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                 >
                   <Edit3 size={13} className="text-blue-600" />
-                  <span>Edit Data</span>
+                  <span>Edit Data Sekolah</span>
                 </button>
-                <button
-                  onClick={() => handleDelete(s.id, s.namaSekolah)}
-                  className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-                  title="Hapus data sekolah mitra"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDelete(s.id, s.namaSekolah)}
+                    className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                    title="Hapus data sekolah mitra"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>
@@ -323,9 +355,16 @@ export const DataMitraView: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">
-                {editingSekolah ? 'Edit Profil Sekolah Mitra' : 'Tambah Sekolah Mitra Baru'}
-              </h3>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {editingSekolah ? (isAdmin ? 'Edit Profil Sekolah Mitra' : `Edit Data: ${editingSekolah.namaSekolah}`) : 'Tambah Sekolah Mitra Baru'}
+                </h3>
+                {!isAdmin && (
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Tersinkronisasi langsung dengan tab Administrator Mitra Office.
+                  </p>
+                )}
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg">
                 <X size={18} />
               </button>
@@ -444,15 +483,27 @@ export const DataMitraView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Status Kerjasama</label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as any)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  >
-                    <option value="Aktif">Aktif</option>
-                    <option value="Masa Perpanjangan">Masa Perpanjangan</option>
-                    <option value="Nonaktif">Nonaktif</option>
-                  </select>
+                  {isAdmin ? (
+                    <select
+                      value={formStatus}
+                      onChange={(e) => setFormStatus(e.target.value as any)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                    >
+                      <option value="Aktif">Aktif</option>
+                      <option value="Masa Perpanjangan">Masa Perpanjangan</option>
+                      <option value="Nonaktif">Nonaktif</option>
+                    </select>
+                  ) : (
+                    <div>
+                      <input
+                        type="text"
+                        disabled
+                        value={`${formStatus} ${editingSekolah?.kategoriSekolah ? `(${editingSekolah.kategoriSekolah})` : ''}`}
+                        className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-600 font-semibold cursor-not-allowed"
+                      />
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">Ditetapkan resmi oleh Mitra Office</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

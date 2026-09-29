@@ -16,7 +16,8 @@ import {
   Calendar,
   Sparkles,
   Building2,
-  BookmarkCheck
+  BookmarkCheck,
+  Eye
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -25,7 +26,8 @@ import {
   isSchoolPelaporanSaja, 
   getSchoolObligationBadgeInfo,
   isSekolahAfiliasiTab,
-  SEKOLAH_AFILIASI_3
+  SEKOLAH_AFILIASI_3,
+  getTahunAjaranFromDate
 } from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
@@ -69,7 +71,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   // Search & Global Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSekolah, setFilterSekolah] = useState<string>('ALL');
-  const [filterTahun, setFilterTahun] = useState<string>('ALL');
+  const [filterTahunAjaran, setFilterTahunAjaran] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   // Tab Pemisahan Status Kewajiban: 'MITRA' (Sekolah Mitra) vs 'AFILIASI' (3 Sekolah Khusus) vs 'ALL' (Semua)
   const [tabKewajiban, setTabKewajiban] = useState<'MITRA' | 'AFILIASI' | 'ALL'>('MITRA');
@@ -127,7 +129,16 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     return sekolahList;
   }, [tabKewajiban, mitraSekolahList, afiliasiSekolahList, sekolahList]);
 
-  // Global filtered invoices: strictly separated by active tab
+  // List of Available Tahun Ajaran options (e.g. 2026/2027, 2025/2026, 2024/2025, 2023/2024, 2022/2023)
+  const availableTahunAjaran = useMemo(() => {
+    const defaults = ['2026/2027', '2025/2026', '2024/2025', '2023/2024', '2022/2023'];
+    const fromInvoices = baseInvoices.map(i => i.tahunAjaran).filter(Boolean);
+    const fromPayments = basePayments.map(p => p.tahunAjaran || getTahunAjaranFromDate(p.tanggalBayar)).filter(Boolean);
+    const set = new Set([...defaults, ...fromInvoices, ...fromPayments]);
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [baseInvoices, basePayments]);
+
+  // Global filtered invoices: strictly separated by active tab and Tahun Ajaran
   const filteredInvoices = useMemo(() => {
     return baseInvoices.filter(inv => {
       const isAfiliasi = isSekolahAfiliasiTab(inv.mitraId || inv.namaSekolah);
@@ -147,18 +158,20 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         (inv.bulan && inv.bulan.toLowerCase().includes(q));
 
       const matchSekolah = filterSekolah === 'ALL' || inv.mitraId === filterSekolah;
-      const matchTahun = filterTahun === 'ALL' || 
-        (inv.tahunAjaran && inv.tahunAjaran.includes(filterTahun)) ||
-        (inv.nomorInvoice && inv.nomorInvoice.includes(filterTahun)) ||
-        (inv.tanggalKirim && inv.tanggalKirim.startsWith(filterTahun));
+
+      const invTA = inv.tahunAjaran || getTahunAjaranFromDate(inv.tanggalKirim || inv.tanggalTerbit || inv.jatuhTempo);
+      const matchTahun = filterTahunAjaran === 'ALL' || 
+        invTA === filterTahunAjaran ||
+        (inv.tahunAjaran && inv.tahunAjaran.includes(filterTahunAjaran)) ||
+        getTahunAjaranFromDate(inv.tanggalKirim) === filterTahunAjaran;
 
       const matchStatus = filterStatus === 'ALL' || inv.status === filterStatus;
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [baseInvoices, searchQuery, filterSekolah, filterTahun, filterStatus, tabKewajiban]);
+  }, [baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban]);
 
-  // Global filtered payments: strictly separated by active tab
+  // Global filtered payments: strictly separated by active tab and Tahun Ajaran
   const filteredPayments = useMemo(() => {
     return basePayments.filter(pay => {
       const isAfiliasi = isSekolahAfiliasiTab(pay.mitraId || pay.namaSekolah);
@@ -178,15 +191,22 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         (pay.invoiceId && pay.invoiceId.toLowerCase().includes(q));
 
       const matchSekolah = filterSekolah === 'ALL' || pay.mitraId === filterSekolah;
-      const matchTahun = filterTahun === 'ALL' || 
-        pay.tanggalBayar.startsWith(filterTahun) ||
-        (pay.invoiceId && pay.invoiceId.includes(filterTahun));
+
+      const payTA = pay.tahunAjaran || getTahunAjaranFromDate(pay.tanggalBayar);
+      const linkedInv = pay.invoiceId ? baseInvoices.find(i => i.id === pay.invoiceId || i.nomorInvoice === pay.invoiceId) : null;
+      const linkedTA = linkedInv?.tahunAjaran;
+
+      const matchTahun = filterTahunAjaran === 'ALL' || 
+        payTA === filterTahunAjaran ||
+        (pay.tahunAjaran && pay.tahunAjaran.includes(filterTahunAjaran)) ||
+        (linkedTA && (linkedTA === filterTahunAjaran || linkedTA.includes(filterTahunAjaran))) ||
+        (pay.catatan && pay.catatan.includes(filterTahunAjaran));
 
       const matchStatus = filterStatus === 'ALL' || pay.status === filterStatus;
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [basePayments, searchQuery, filterSekolah, filterTahun, filterStatus, tabKewajiban]);
+  }, [basePayments, baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban]);
 
   // Grand Totals strictly calculated based on active tab
   const grandTotals = useMemo(() => {
@@ -268,22 +288,26 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const [deletePaymentTarget, setDeletePaymentTarget] = useState<{ id: string; namaSekolah: string; noRef: string } | null>(null);
 
   const handleOpenAddInvoice = (kategori: RuangKategoriId = 'Renewal Fee') => {
+    if (!isAdmin) return;
     setEditingInvoice(null);
     setActiveKategoriForInvoice(kategori);
     setIsInvoiceModalOpen(true);
   };
 
   const handleOpenEditInvoice = (inv: Invoice) => {
+    if (!isAdmin) return;
     setEditingInvoice(inv);
     setActiveKategoriForInvoice(normalizeRuang(inv.kategori));
     setIsInvoiceModalOpen(true);
   };
 
   const handleDeleteInvoice = (id: string, nomor: string) => {
+    if (!isAdmin) return;
     setDeleteInvoiceTarget({ id, nomor });
   };
 
   const handleSaveInvoice = async (data: Partial<Invoice>) => {
+    if (!isAdmin) return;
     if (editingInvoice) {
       await updateInvoice({
         ...editingInvoice,
@@ -296,6 +320,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
   // Handlers for Payment CRUD
   const handleOpenAddPayment = (kategori: RuangKategoriId = 'Renewal Fee', invoiceId?: string) => {
+    if (!isAdmin) return;
     setEditingPembayaran(null);
     setActiveKategoriForPayment(kategori);
     setTargetInvoiceIdForPayment(invoiceId);
@@ -303,20 +328,24 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   };
 
   const handleOpenEditPayment = (pay: Pembayaran) => {
+    if (!isAdmin) return;
     setEditingPembayaran(pay);
     setActiveKategoriForPayment(normalizeRuang(pay.kategori));
     setIsPaymentModalOpen(true);
   };
 
   const handleDeletePayment = (id: string, namaSekolah: string, noRef: string) => {
+    if (!isAdmin) return;
     setDeletePaymentTarget({ id, namaSekolah, noRef });
   };
 
   const handleVerifyPayment = async (id: string, status: PembayaranStatus) => {
+    if (!isAdmin) return;
     await verifyPembayaran(id, status);
   };
 
   const handleSavePayment = async (data: Partial<Pembayaran>) => {
+    if (!isAdmin) return;
     if (editingPembayaran) {
       await updatePembayaran({
         ...editingPembayaran,
@@ -352,105 +381,137 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
             {/* Global Actions */}
             <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto shrink-0">
-              {isAdmin && (
-                <button
-                  id="btn-global-sheet-import"
-                  onClick={() => setIsSheetModalOpen(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs"
-                  title="Impor transaksi sheet sejak 2022"
-                >
-                  <FileSpreadsheet size={16} className="text-emerald-400" />
-                  <span className="hidden sm:inline">Input Sheet Transaksi</span>
-                  <span className="sm:hidden">Sheet</span>
-                </button>
+              {isAdmin ? (
+                <>
+                  <button
+                    id="btn-global-sheet-import"
+                    onClick={() => setIsSheetModalOpen(true)}
+                    className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs"
+                    title="Impor transaksi sheet sejak 2022"
+                  >
+                    <FileSpreadsheet size={16} className="text-emerald-400" />
+                    <span className="hidden sm:inline">Input Sheet Transaksi</span>
+                    <span className="sm:hidden">Sheet</span>
+                  </button>
+
+                  <button
+                    id="btn-global-add-invoice"
+                    onClick={() => handleOpenAddInvoice('Renewal Fee')}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/30 transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    <span>+ Buat Invoice</span>
+                  </button>
+
+                  <button
+                    id="btn-global-add-pembayaran"
+                    onClick={() => handleOpenAddPayment('Renewal Fee')}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <CreditCard size={16} />
+                    <span>+ Catat Pembayaran</span>
+                  </button>
+                </>
+              ) : (
+                <div className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-xs font-semibold backdrop-blur-xs shadow-xs">
+                  <Eye size={15} className="text-blue-300" />
+                  <span>Mode Lihat (Read-Only)</span>
+                </div>
               )}
-
-              <button
-                id="btn-global-add-invoice"
-                onClick={() => handleOpenAddInvoice('Renewal Fee')}
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/30 transition flex items-center gap-2 cursor-pointer"
-              >
-                <Plus size={16} />
-                <span>+ Buat Invoice</span>
-              </button>
-
-              <button
-                id="btn-global-add-pembayaran"
-                onClick={() => handleOpenAddPayment('Renewal Fee')}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition flex items-center gap-2 cursor-pointer"
-              >
-                <CreditCard size={16} />
-                <span>+ Catat Pembayaran</span>
-              </button>
             </div>
           </div>
 
           {/* TAB PEMISAHAN STATUS KEWAJIBAN PEMBAYARAN */}
-          <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-1.5 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Tab 1: Sekolah Mitra */}
-              <button
-                type="button"
-                onClick={() => {
-                  setTabKewajiban('MITRA');
-                  setFilterSekolah('ALL');
-                }}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
-                  tabKewajiban === 'MITRA'
-                    ? 'bg-white text-blue-900 shadow-md shadow-black/10'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <Building2 size={16} className={tabKewajiban === 'MITRA' ? 'text-blue-600' : 'text-blue-200'} />
-                <span>Sekolah Mitra</span>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  tabKewajiban === 'MITRA' ? 'bg-blue-100 text-blue-800' : 'bg-white/20 text-white'
-                }`}>
-                  {mitraSekolahList.length} Sekolah
-                </span>
-              </button>
+          {isAdmin ? (
+            <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-1.5 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Tab 1: Sekolah Mitra */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTabKewajiban('MITRA');
+                    setFilterSekolah('ALL');
+                  }}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+                    tabKewajiban === 'MITRA'
+                      ? 'bg-white text-blue-900 shadow-md shadow-black/10'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Building2 size={16} className={tabKewajiban === 'MITRA' ? 'text-blue-600' : 'text-blue-200'} />
+                  <span>Sekolah Mitra</span>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    tabKewajiban === 'MITRA' ? 'bg-blue-100 text-blue-800' : 'bg-white/20 text-white'
+                  }`}>
+                    {mitraSekolahList.length} Sekolah
+                  </span>
+                </button>
 
-              {/* Tab 2: Sekolah Afiliasi (3 Sekolah Khusus) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setTabKewajiban('AFILIASI');
-                  setFilterSekolah('ALL');
-                }}
-                className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
-                  tabKewajiban === 'AFILIASI'
-                    ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <School size={16} className={tabKewajiban === 'AFILIASI' ? 'text-amber-300' : 'text-purple-200'} />
-                <span>Sekolah Afiliasi</span>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  tabKewajiban === 'AFILIASI' ? 'bg-purple-800 text-amber-300' : 'bg-purple-500/40 text-purple-200'
-                }`}>
-                  3 Sekolah Khusus
-                </span>
-              </button>
-            </div>
+                {/* Tab 2: Sekolah Afiliasi (3 Sekolah Khusus) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTabKewajiban('AFILIASI');
+                    setFilterSekolah('ALL');
+                  }}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer ${
+                    tabKewajiban === 'AFILIASI'
+                      ? 'bg-purple-600 text-white shadow-md shadow-purple-900/30'
+                      : 'text-white/80 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <School size={16} className={tabKewajiban === 'AFILIASI' ? 'text-amber-300' : 'text-purple-200'} />
+                  <span>Sekolah Afiliasi</span>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    tabKewajiban === 'AFILIASI' ? 'bg-purple-800 text-amber-300' : 'bg-purple-500/40 text-purple-200'
+                  }`}>
+                    3 Sekolah Khusus
+                  </span>
+                </button>
+              </div>
 
-            {/* Tab 3: Konsolidasi Semua Sekolah */}
-            <div className="flex items-center justify-end sm:ml-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  setTabKewajiban('ALL');
-                  setFilterSekolah('ALL');
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  tabKewajiban === 'ALL'
-                    ? 'bg-slate-900/80 text-white font-bold border border-white/30'
-                    : 'text-white/70 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                Semua Sekolah (Konsolidasi)
-              </button>
+              {/* Tab 3: Konsolidasi Semua Sekolah */}
+              <div className="flex items-center justify-end sm:ml-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTabKewajiban('ALL');
+                    setFilterSekolah('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    tabKewajiban === 'ALL'
+                      ? 'bg-slate-900/80 text-white font-bold border border-white/30'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  Semua Sekolah (Konsolidasi)
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3.5 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md text-white text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shrink-0">
+                  <Building2 size={16} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-white">{currentUser?.nama || 'Sekolah Mitra'}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-200 border border-blue-400/30 font-bold">
+                      {currentUser?.sekolahId}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-200/80 mt-0.5">
+                    Monitoring data tagihan & status pembayaran resmi sekolah Anda (Mode View Saja).
+                  </p>
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 text-blue-200 text-[11px] font-bold border border-white/15">
+                <Eye size={14} className="text-emerald-400" />
+                <span>Mode View Saja</span>
+              </div>
+            </div>
+          )}
 
           {/* Aggregate Stats Cards: 4 Perincian Nilai Tagihan (Simple & Jelas) */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4">
@@ -625,7 +686,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         </div>
       )}
 
-      {tabKewajiban === 'MITRA' && (
+      {tabKewajiban === 'MITRA' && isAdmin && (
         <div className="p-3.5 rounded-2xl bg-blue-50/90 border border-blue-200 text-blue-950 flex items-center justify-between flex-wrap gap-2 text-xs">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-blue-600 text-white shrink-0">
@@ -759,19 +820,19 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
             </div>
           )}
 
-          {/* Filter Tahun */}
+          {/* Filter Tahun Ajaran */}
           <div className="w-full sm:w-auto shrink-0">
             <select
-              value={filterTahun}
-              onChange={(e) => setFilterTahun(e.target.value)}
-              className="w-full sm:w-36 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filterTahunAjaran}
+              onChange={(e) => setFilterTahunAjaran(e.target.value)}
+              className="w-full sm:w-44 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="ALL">Semua Tahun</option>
-              <option value="2026">Tahun 2026</option>
-              <option value="2025">Tahun 2025</option>
-              <option value="2024">Tahun 2024</option>
-              <option value="2023">Tahun 2023</option>
-              <option value="2022">Tahun 2022</option>
+              <option value="ALL">Semua Tahun Ajaran</option>
+              {availableTahunAjaran.map((ta) => (
+                <option key={ta} value={ta}>
+                  TA {ta}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -844,6 +905,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               {/* Report Card at top of the room */}
               <RuangReportCard
                 config={config}
+                isAdmin={isAdmin}
                 invoicesCount={roomInvoices.length}
                 paymentsCount={roomPayments.length}
                 tagihanFull={tagihanFull}

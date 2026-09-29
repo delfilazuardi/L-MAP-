@@ -10,6 +10,8 @@ import {
   AdminMitraStaff,
   TemplateDokumen, 
   PerformanceMenDAKI,
+  ProgramMitraItem,
+  ProgramMitraTemplate,
   LaporanStatus,
   PembayaranStatus,
   PermintaanStatus,
@@ -27,6 +29,8 @@ import {
   INITIAL_ADMIN_STAFF, 
   INITIAL_TEMPLATES, 
   INITIAL_PERFORMANCE_MENDAKI,
+  INITIAL_PROGRAM_MITRA,
+  INITIAL_PROGRAM_MITRA_TEMPLATES,
 } from '../lib/initialData';
 import { generateNomorInvoiceBaru } from '../lib/invoiceUtils';
 import { db, testConnection, sanitizeForFirestore, toFirestoreDocId } from '../lib/firebase';
@@ -43,6 +47,8 @@ interface DataContextType {
   adminStaffList: AdminMitraStaff[];
   templateList: TemplateDokumen[];
   performanceList: PerformanceMenDAKI[];
+  programMitraList: ProgramMitraItem[];
+  programMitraTemplates: ProgramMitraTemplate[];
   isFirebaseConnected: boolean;
   isSyncing: boolean;
   isLoading: boolean;
@@ -85,6 +91,10 @@ interface DataContextType {
   savePerformance: (perf: PerformanceMenDAKI) => Promise<void>;
   updatePerformance: (perf: PerformanceMenDAKI) => Promise<void>;
   deletePerformance: (id: string) => Promise<void>;
+  addProgramMitra: (item: Omit<ProgramMitraItem, 'id' | 'tanggalPengajuan'> & { id?: string }) => Promise<void>;
+  updateProgramMitra: (item: ProgramMitraItem) => Promise<void>;
+  deleteProgramMitra: (id: string) => Promise<void>;
+  updateProgramMitraTemplate: (template: ProgramMitraTemplate) => Promise<void>;
   syncWithSheetData: (parsedUsers?: UserAccount[]) => Promise<void>;
   bulkImportInvoiceAndPayment: (
     newInvoices: Invoice[],
@@ -109,6 +119,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [adminStaffList, setAdminStaffList] = useState<AdminMitraStaff[]>(INITIAL_ADMIN_STAFF);
   const [templateList, setTemplateList] = useState<TemplateDokumen[]>(INITIAL_TEMPLATES);
   const [performanceList, setPerformanceList] = useState<PerformanceMenDAKI[]>(INITIAL_PERFORMANCE_MENDAKI);
+  const [programMitraList, setProgramMitraList] = useState<ProgramMitraItem[]>(INITIAL_PROGRAM_MITRA);
+  const [programMitraTemplates, setProgramMitraTemplates] = useState<ProgramMitraTemplate[]>(INITIAL_PROGRAM_MITRA_TEMPLATES);
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -197,6 +209,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscribe<AdminMitraStaff>('admin_staff', setAdminStaffList, INITIAL_ADMIN_STAFF);
       subscribe<TemplateDokumen>('templates', setTemplateList, INITIAL_TEMPLATES);
       subscribe<PerformanceMenDAKI>('performance_mendaki', setPerformanceList, INITIAL_PERFORMANCE_MENDAKI);
+      subscribe<ProgramMitraItem>('program_mitra', setProgramMitraList, INITIAL_PROGRAM_MITRA);
+      subscribe<ProgramMitraTemplate>('program_mitra_templates', setProgramMitraTemplates, INITIAL_PROGRAM_MITRA_TEMPLATES);
     } catch (error) {
       console.error('Firebase realtime listener initialization error:', error);
     }
@@ -789,6 +803,64 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // ==========================================
+  // PROGRAM MITRA (VISITASI & MAGANG) CRUD
+  // ==========================================
+  const addProgramMitra = useCallback(async (itemData: Omit<ProgramMitraItem, 'id' | 'tanggalPengajuan'> & { id?: string }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const id = itemData.id || `PRG-${Date.now().toString().slice(-6)}`;
+    const newItem: ProgramMitraItem = {
+      ...itemData,
+      id,
+      tanggalPengajuan: today,
+      updatedAt: today,
+    };
+
+    setProgramMitraList(prev => [newItem, ...prev.filter(p => p.id !== id)]);
+
+    const safeId = toFirestoreDocId(id);
+    await setDoc(doc(db, 'program_mitra', safeId), sanitizeForFirestore(newItem));
+  }, []);
+
+  const updateProgramMitra = useCallback(async (item: ProgramMitraItem) => {
+    const today = new Date().toISOString().split('T')[0];
+    const withUpdate: ProgramMitraItem = {
+      ...item,
+      updatedAt: today,
+    };
+
+    setProgramMitraList(prev => prev.map(p => p.id === item.id ? withUpdate : p));
+
+    const safeId = toFirestoreDocId(item.id);
+    await setDoc(doc(db, 'program_mitra', safeId), sanitizeForFirestore(withUpdate));
+  }, []);
+
+  const deleteProgramMitra = useCallback(async (id: string) => {
+    setProgramMitraList(prev => prev.filter(p => p.id !== id));
+    const safeId = toFirestoreDocId(id);
+    await deleteDoc(doc(db, 'program_mitra', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'program_mitra', id));
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
+  const updateProgramMitraTemplate = useCallback(async (template: ProgramMitraTemplate) => {
+    const today = new Date().toISOString().split('T')[0];
+    const withDate: ProgramMitraTemplate = {
+      ...template,
+      diperbarui: today,
+    };
+
+    setProgramMitraTemplates(prev => prev.map(t => t.id === template.id ? withDate : t));
+
+    const safeId = toFirestoreDocId(template.id);
+    await setDoc(doc(db, 'program_mitra_templates', safeId), sanitizeForFirestore(withDate));
+  }, []);
+
+  // ==========================================
   // GOOGLE SHEET SYNC
   // ==========================================
   const syncWithSheetData = useCallback(async (parsedUsers?: UserAccount[]) => {
@@ -910,6 +982,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       adminStaffList,
       templateList,
       performanceList,
+      programMitraList,
+      programMitraTemplates,
       isFirebaseConnected,
       isSyncing,
       isLoading,
@@ -950,6 +1024,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       savePerformance,
       updatePerformance,
       deletePerformance,
+      addProgramMitra,
+      updateProgramMitra,
+      deleteProgramMitra,
+      updateProgramMitraTemplate,
       syncWithSheetData,
       bulkImportInvoiceAndPayment,
       loadHistoricalTransactionsSince2022,

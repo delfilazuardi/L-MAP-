@@ -126,6 +126,7 @@ export interface Pembayaran {
   mitraId: string;
   namaSekolah: string;
   kategori: PembayaranKategori;
+  tahunAjaran?: string; // e.g. "2026/2027", "2025/2026", "2022/2023"
   jumlah: number;
   tanggalBayar: string;
   metodeBayar: string;
@@ -135,7 +136,7 @@ export interface Pembayaran {
   catatan?: string;
 }
 
-export type EventKategori = 'Workshop Kurikulum' | 'Pelatihan Guru' | 'Koordinasi Pimpinan' | 'Supervisi Mutu' | 'Parenting' | 'Lomba Siswa';
+export type EventKategori = string;
 export type EventStatus = 'Direncanakan' | 'Berjalan' | 'Selesai' | 'Ditunda';
 
 export interface EventItem {
@@ -146,11 +147,14 @@ export interface EventItem {
   waktu: string;
   lokasi: string;
   pic: string;
+  pembicara?: string; // Nama Pembicara / Narasumber
+  flyerUrl?: string; // Foto flyer / banner poster event
+  linkRegistrasi?: string; // Tautan Formulir / Google Form Registrasi
   mitraPeserta: string;
   status: EventStatus;
   deskripsi: string;
-  classroomUrl?: string; // Tautan Google Classroom
-  classCode?: string; // Kode Gabung Kelas Google Classroom
+  classroomUrl?: string; // Tautan Google Classroom (opsional)
+  classCode?: string; // Kode Gabung Kelas Google Classroom (opsional)
 }
 
 export type PermintaanKategori = 'Seragam' | 'Dokumen Cetak' | 'Merchandise & Lainnya';
@@ -268,19 +272,15 @@ export const BULAN_LIST = [
 
 export const TAHUN_AJARAN_LIST = [
   'Semua Tahun Ajaran',
+  '2027/2028',
   '2026/2027',
   '2025/2026',
   '2024/2025',
+  '2023/2024',
+  '2022/2023',
 ] as const;
 
-export type TemplateKategori = 
-  | 'SOP' 
-  | 'Laporan Bulanan' 
-  | 'Video Panduan' 
-  | 'Parent Handbook' 
-  | 'Kurikulum & Modul' 
-  | 'Kurikulum & Silabus'
-  | 'Legal & Kontrak';
+export type TemplateKategori = string;
 
 export interface TemplateDokumen {
   id: string;
@@ -321,6 +321,43 @@ export interface PerformanceMenDAKI {
 
 export type PerformanceMendaki = PerformanceMenDAKI;
 
+export type ProgramMitraJenis = 'Visitasi' | 'Magang';
+export type ProgramMitraStatus = 'Diajukan' | 'Disetujui' | 'Sedang Berjalan' | 'Selesai' | 'Perlu Revisi';
+
+export interface ProgramMitraItem {
+  id: string; // e.g. PRG-2026-001
+  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang'
+  judul: string;
+  mitraId: string;
+  namaSekolah: string;
+  tanggalMulai: string;
+  tanggalSelesai?: string;
+  peserta?: string; // Nama guru / staff peserta
+  jumlahPeserta?: number;
+  deskripsi?: string;
+  // Link & Upload Dokumen (Docs, Sheet, PDF, Canva)
+  linkDocs?: string; // Tautan Google Docs
+  linkSheet?: string; // Tautan Google Sheets
+  linkPdf?: string; // Tautan File / Drive PDF
+  linkCanva?: string; // Tautan Desain / Presentasi Canva
+  fileUploadedName?: string; // Nama file fisik yang diupload
+  fileUploadedData?: string; // Base64 data file lokal
+  fileUploadedType?: string;
+  status: ProgramMitraStatus;
+  catatanAdmin?: string;
+  tanggalPengajuan: string;
+  updatedAt?: string;
+}
+
+export interface ProgramMitraTemplate {
+  id: string;
+  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang'
+  nama: string;
+  deskripsi: string;
+  tipeFormat: 'Docs' | 'Sheet' | 'PDF' | 'Canva';
+  linkTemplate: string;
+  diperbarui: string;
+}
 
 export type ActiveNavTab = 
   | 'dashboard'
@@ -329,8 +366,9 @@ export type ActiveNavTab =
   | 'pembayaran'
   | 'event-tracker'
   | 'permintaan-mitra'
+  | 'program-mitra'
   | 'data-mitra'
   | 'staff-activity'
   | 'template'
   | 'performance-mendaki'
-  | 'sheet-sync';
+  | 'pengaturan';

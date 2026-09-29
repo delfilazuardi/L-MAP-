@@ -121,7 +121,9 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
         <Receipt size={36} className="mx-auto text-slate-300 mb-2" />
         <p className="text-sm font-bold text-slate-700">Belum ada tagihan di kategori ini</p>
         <p className="text-xs text-slate-400 mt-1">
-          Gunakan tombol di report card atas untuk menambahkan tagihan baru.
+          {isAdmin 
+            ? 'Gunakan tombol di report card atas untuk menambahkan tagihan baru.'
+            : 'Belum ada data tagihan yang diterbitkan untuk sekolah Anda.'}
         </p>
       </div>
     );
@@ -326,17 +328,22 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                 {/* Aksi */}
                 <td className="py-3.5 px-4 text-center whitespace-nowrap">
                   <div className="flex items-center justify-center gap-1">
-                    {/* Detail & Print */}
+                    {/* Detail & Print / View */}
                     <button
                       onClick={() => onDetail(inv)}
-                      className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-blue-600 transition cursor-pointer"
+                      className={`p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                        isAdmin
+                          ? 'text-slate-600 hover:bg-slate-100 hover:text-blue-600'
+                          : 'px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold'
+                      }`}
                       title="Lihat Detail & Cetak Invoice"
                     >
-                      <Printer size={15} />
+                      <Eye size={15} className="text-blue-600" />
+                      {!isAdmin && <span className="text-[11px]">Lihat Invoice</span>}
                     </button>
 
-                    {/* Quick Pay - Only for schools with payment obligation */}
-                    {!isPelaporan && inv.status !== 'Lunas' && (
+                    {/* Quick Pay - Admin only, for schools with payment obligation */}
+                    {isAdmin && !isPelaporan && inv.status !== 'Lunas' && (
                       <button
                         onClick={() => onPay(inv)}
                         className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 transition cursor-pointer"

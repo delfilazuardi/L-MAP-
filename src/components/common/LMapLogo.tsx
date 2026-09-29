@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSettings, DEFAULT_SETTINGS } from '../../context/SettingsContext';
 
 interface LMapLogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -17,7 +18,21 @@ export const LMapLogo: React.FC<LMapLogoProps> = ({
   className = '',
   showTagline = false,
 }) => {
+  let settings = DEFAULT_SETTINGS;
+  try {
+    const settingsContext = useSettings();
+    if (settingsContext && settingsContext.settings) {
+      settings = settingsContext.settings;
+    }
+  } catch {
+    // fallback to DEFAULT_SETTINGS
+  }
+
   const isDark = theme === 'dark';
+  const logoSrc = settings.logoUrl || '/lmap-logo.jpg';
+  const appTitle = settings.appTitle || 'L-MAP';
+  const appSubtitle = settings.appSubtitle || 'Lazuardi Mitra Administration Platform';
+  const tagline = settings.tagline || 'Together for Greater Impact';
 
   const imageSizes = {
     xs: 'w-7 h-7',
@@ -43,12 +58,31 @@ export const LMapLogo: React.FC<LMapLogoProps> = ({
     xl: 'text-sm',
   };
 
+  // Render title with stylized dash if it has a hyphen, e.g. L-MAP
+  const renderTitle = (customClass = '') => {
+    if (appTitle.includes('-')) {
+      const parts = appTitle.split('-');
+      return (
+        <span className={`${customClass} ${isDark ? 'text-white' : 'text-blue-900'} tracking-wider flex items-center leading-tight`}>
+          <span>{parts[0]}</span>
+          <span className="text-amber-500 font-black mx-0.5">-</span>
+          <span>{parts.slice(1).join('-')}</span>
+        </span>
+      );
+    }
+    return (
+      <span className={`${customClass} ${isDark ? 'text-white' : 'text-blue-900'} tracking-wider font-black leading-tight`}>
+        {appTitle}
+      </span>
+    );
+  };
+
   if (layout === 'iconOnly') {
     return (
       <div className={`relative inline-flex items-center justify-center shrink-0 ${className}`}>
         <img
-          src="/lmap-logo.jpg"
-          alt="L-MAP Logo"
+          src={logoSrc}
+          alt={`${appTitle} Logo`}
           className={`${imageSizes[size]} object-contain rounded-xl shadow-xs border ${
             isDark ? 'border-white/20 bg-white' : 'border-slate-200/90 bg-white'
           } p-0.5`}
@@ -64,27 +98,23 @@ export const LMapLogo: React.FC<LMapLogoProps> = ({
         <div className="relative mb-3 inline-block">
           <div className="absolute -inset-2 rounded-2xl bg-blue-500/20 blur-md pointer-events-none" />
           <img
-            src="/lmap-logo.jpg"
-            alt="L-MAP Logo"
+            src={logoSrc}
+            alt={`${appTitle} Logo`}
             className={`${imageSizes[size]} object-contain rounded-2xl shadow-lg border ${
               isDark ? 'border-white/25 bg-white' : 'border-slate-200 bg-white'
             } p-1`}
           />
         </div>
 
-        {/* Title: L-MAP with gold dash */}
+        {/* Title */}
         <div className="flex items-center justify-center tracking-tight">
-          <span className={`${titleSizes[size]} ${isDark ? 'text-white' : 'text-blue-900'} tracking-widest flex items-center`}>
-            <span>L</span>
-            <span className="text-amber-500 font-black mx-0.5">-</span>
-            <span>MAP</span>
-          </span>
+          {renderTitle(titleSizes[size])}
         </div>
 
         {/* Subtitle */}
         {showSubtitle && (
           <p className={`${subtitleSizes[size]} ${isDark ? 'text-blue-200/90' : 'text-slate-600 font-semibold'} tracking-wider uppercase mt-0.5`}>
-            Lazuardi Mitra Administration Platform
+            {appSubtitle}
           </p>
         )}
 
@@ -92,7 +122,7 @@ export const LMapLogo: React.FC<LMapLogoProps> = ({
         {showTagline && (
           <div className="flex items-center gap-2 mt-1 text-[10px] text-amber-500 font-medium tracking-wide">
             <span className="w-3 h-0.5 bg-amber-400 rounded-full" />
-            <span className="italic">Together for Greater Impact</span>
+            <span className="italic">{tagline}</span>
             <span className="w-3 h-0.5 bg-amber-400 rounded-full" />
           </div>
         )}
@@ -104,8 +134,8 @@ export const LMapLogo: React.FC<LMapLogoProps> = ({
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <img
-        src="/lmap-logo.jpg"
-        alt="L-MAP Logo"
+        src={logoSrc}
+        alt={`${appTitle} Logo`}
         className={`${imageSizes[size]} object-contain rounded-xl shadow-xs border ${
           isDark ? 'border-white/20 bg-white' : 'border-slate-200/90 bg-white'
         } p-0.5 shrink-0`}
@@ -113,16 +143,12 @@ export const LMapLogo: React.FC<LMapLogoProps> = ({
 
       <div className="flex flex-col">
         <div className="flex items-center gap-1.5">
-          <span className={`${titleSizes[size]} ${isDark ? 'text-white' : 'text-blue-900'} tracking-wider flex items-center leading-tight`}>
-            <span>L</span>
-            <span className="text-amber-500 font-black mx-0.5">-</span>
-            <span>MAP</span>
-          </span>
+          {renderTitle(titleSizes[size])}
         </div>
 
         {showSubtitle && (
           <p className={`${subtitleSizes[size]} ${isDark ? 'text-blue-200/90' : 'text-slate-600 font-semibold'} tracking-tight leading-tight mt-0.5`}>
-            Lazuardi Mitra Administration Platform
+            {appSubtitle}
           </p>
         )}
       </div>

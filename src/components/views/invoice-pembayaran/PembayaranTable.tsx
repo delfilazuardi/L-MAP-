@@ -37,7 +37,9 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
         <CreditCard size={36} className="mx-auto text-slate-300 mb-2" />
         <p className="text-sm font-bold text-slate-700">Belum ada riwayat setoran pembayaran di kategori ini</p>
         <p className="text-xs text-slate-400 mt-1">
-          Gunakan tombol di report card atas untuk mencatat setoran pembayaran baru.
+          {isAdmin
+            ? 'Gunakan tombol di report card atas untuk mencatat setoran pembayaran baru.'
+            : 'Belum ada data pembayaran yang tercatat untuk sekolah Anda.'}
         </p>
       </div>
     );
@@ -170,14 +172,16 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
                     </>
                   )}
 
-                  {/* Edit */}
-                  <button
-                    onClick={() => onEdit(pay)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-amber-600 transition cursor-pointer"
-                    title="Edit Pembayaran"
-                  >
-                    <Edit3 size={15} />
-                  </button>
+                  {/* Edit (Admin only) */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => onEdit(pay)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-amber-600 transition cursor-pointer"
+                      title="Edit Pembayaran"
+                    >
+                      <Edit3 size={15} />
+                    </button>
+                  )}
 
                   {/* Delete (Admin only) */}
                   {isAdmin && (
@@ -188,6 +192,13 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
                     >
                       <Trash2 size={15} />
                     </button>
+                  )}
+
+                  {/* Non-admin read-only indicator */}
+                  {!isAdmin && (
+                    <span className="text-[11px] text-slate-400 font-medium italic">
+                      Mode Lihat
+                    </span>
                   )}
                 </div>
               </td>

@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { ActiveNavTab } from './types';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -19,7 +20,8 @@ import { DataMitraView } from './components/views/DataMitraView';
 import { StaffActivityView } from './components/views/StaffActivityView';
 import { TemplateDokumenView } from './components/views/TemplateDokumenView';
 import { PerformanceMendakiView } from './components/views/PerformanceMendakiView';
-import { SheetSyncView } from './components/views/SheetSyncView';
+import { PengaturanView } from './components/views/PengaturanView';
+import { ProgramMitraView } from './components/views/ProgramMitraView';
 
 function MainApp() {
   const { currentUser, isAdmin } = useAuth();
@@ -29,7 +31,7 @@ function MainApp() {
 
   // If non-admin attempts to view admin-only tabs, redirect to dashboard
   useEffect(() => {
-    const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'performance-mendaki', 'sheet-sync'];
+    const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'performance-mendaki'];
     if (!isAdmin && adminOnlyTabs.includes(activeTab)) {
       setActiveTab('dashboard');
     }
@@ -53,6 +55,8 @@ function MainApp() {
         return 'Event Tracker & Kalender Agenda';
       case 'permintaan-mitra':
         return 'Permintaan Logistik Mitra';
+      case 'program-mitra':
+        return 'Program Mitra: Visitasi & Magang Guru';
       case 'data-mitra':
         return 'Direktori Data Sekolah Mitra';
       case 'staff-activity':
@@ -61,8 +65,8 @@ function MainApp() {
         return 'Template & Berkas Dokumen Resmi';
       case 'performance-mendaki':
         return 'Evaluasi Mutu MenDAKI Lazuardi';
-      case 'sheet-sync':
-        return 'Sinkronisasi Google Sheets & Firebase';
+      case 'pengaturan':
+        return 'Pengaturan Sistem, Bahasa & Logo';
       default:
         return 'L-MAP Platform';
     }
@@ -93,7 +97,7 @@ function MainApp() {
         {/* Top Header */}
         <Header
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          onOpenSyncModal={() => setActiveTab('sheet-sync')}
+          onOpenSettings={() => setActiveTab('pengaturan')}
           activeTitle={getTabTitle(activeTab)}
         />
 
@@ -122,6 +126,10 @@ function MainApp() {
             <PermintaanMitraView />
           )}
 
+          {activeTab === 'program-mitra' && (
+            <ProgramMitraView />
+          )}
+
           {activeTab === 'data-mitra' && (
             <DataMitraView />
           )}
@@ -138,8 +146,8 @@ function MainApp() {
             <PerformanceMendakiView />
           )}
 
-          {activeTab === 'sheet-sync' && (
-            <SheetSyncView />
+          {activeTab === 'pengaturan' && (
+            <PengaturanView />
           )}
         </main>
       </div>
@@ -149,11 +157,13 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
+    <SettingsProvider>
       <DataProvider>
-        <MainApp />
+        <AuthProvider>
+          <MainApp />
+        </AuthProvider>
       </DataProvider>
-    </AuthProvider>
+    </SettingsProvider>
   );
 }
 

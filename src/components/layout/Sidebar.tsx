@@ -16,11 +16,14 @@ import {
   ShieldCheck,
   Building2,
   X,
-  Sparkles
+  Sparkles,
+  Briefcase,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { useSettings } from '../../context/SettingsContext';
 
 interface SidebarProps {
   activeTab: ActiveNavTab;
@@ -36,7 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose 
 }) => {
   const { currentUser, isAdmin, isSekolahMitra, logout } = useAuth();
-  const { laporanList, invoiceList, permintaanList, pembayaranList } = useData();
+  const { laporanList, invoiceList, permintaanList, pembayaranList, programMitraList } = useData();
+  const { settings } = useSettings();
 
   // Filter lists for current school if Sekolah Mitra
   const filteredLaporan = isSekolahMitra && currentUser?.sekolahId
@@ -55,11 +59,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ? pembayaranList.filter(p => p.sekolahId === currentUser.sekolahId)
     : pembayaranList;
 
+  const filteredProgramMitra = isSekolahMitra && currentUser?.sekolahId
+    ? (programMitraList || []).filter(p => p.mitraId === currentUser.sekolahId)
+    : (programMitraList || []);
+
   // Badges for pending items
   const pendingLaporan = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
   const unpaidInvoices = filteredInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length;
   const pendingRequests = filteredPermintaan.filter(p => p.status === 'Diajukan' || p.status === 'Diproses').length;
   const pendingPayments = filteredPembayaran.filter(p => p.status === 'Menunggu Verifikasi').length;
+  const pendingProgram = filteredProgramMitra.filter(p => p.status === 'Diajukan').length;
 
   const allNavItems = [
     {
@@ -101,6 +110,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       desc: 'Seragam & Dokumen Cetak',
     },
     {
+      id: 'program-mitra' as ActiveNavTab,
+      label: 'Program Mitra',
+      icon: Briefcase,
+      badge: pendingProgram > 0 ? pendingProgram : null,
+      badgeColor: 'bg-sky-100 text-sky-800',
+      desc: 'Visitasi & Magang Guru',
+    },
+    {
       id: 'data-mitra' as ActiveNavTab,
       label: 'Data Mitra',
       icon: School,
@@ -129,12 +146,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       desc: 'Evaluasi Mutu Lazuardi',
     },
     {
-      id: 'sheet-sync' as ActiveNavTab,
-      label: 'Sinkronisasi Google Sheet',
-      icon: Table,
-      badge: 'Live',
-      badgeColor: 'bg-indigo-100 text-indigo-700',
-      desc: 'Impor & Ekspor Data Sheet',
+      id: 'pengaturan' as ActiveNavTab,
+      label: 'Pengaturan Sistem',
+      icon: SettingsIcon,
+      badge: null,
+      desc: 'Bahasa, Logo & Konfigurasi',
     },
   ];
 
@@ -145,8 +161,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     'invoice',
     'event-tracker',
     'permintaan-mitra',
+    'program-mitra',
     'data-mitra',
     'template',
+    'pengaturan',
   ];
 
   const navItems = isAdmin 
@@ -174,23 +192,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 border-b border-blue-900/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src="/lmap-logo.jpg"
-              alt="L-MAP Logo"
+              src={settings.logoUrl || '/lmap-logo.jpg'}
+              alt={`${settings.appTitle || 'L-MAP'} Logo`}
               className="w-10 h-10 object-contain rounded-xl shadow-lg border border-white/20 bg-white p-0.5 shrink-0"
             />
 
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-black text-lg text-white tracking-wider flex items-center">
-                  <span>L</span>
-                  <span className="text-amber-400 font-black mx-0.5">-</span>
-                  <span>MAP</span>
+                  {settings.appTitle?.includes('-') ? (
+                    <>
+                      <span>{settings.appTitle.split('-')[0]}</span>
+                      <span className="text-amber-400 font-black mx-0.5">-</span>
+                      <span>{settings.appTitle.split('-').slice(1).join('-')}</span>
+                    </>
+                  ) : (
+                    <span>{settings.appTitle || 'L-MAP'}</span>
+                  )}
                 </span>
                 <span className="text-[9px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                   v2.6
                 </span>
               </div>
-              <p className="text-[10px] text-blue-200/90 font-medium tracking-tight">Lazuardi Mitra Administration Platform</p>
+              <p className="text-[10px] text-blue-200/90 font-medium tracking-tight truncate max-w-[170px]">
+                {settings.appSubtitle || 'Lazuardi Mitra Administration Platform'}
+              </p>
             </div>
           </div>
           <button 

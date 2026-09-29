@@ -250,3 +250,21 @@ export function getSchoolObligationBadgeInfo(
   };
 }
 
+/**
+ * Mendapatkan Tahun Ajaran (misal 2026/2027) dari string tanggal (YYYY-MM-DD atau ISO)
+ * Di Indonesia tahun ajaran baru dimulai bulan Juli (bulan ke-7)
+ */
+export function getTahunAjaranFromDate(dateInput?: string | Date): string {
+  if (!dateInput) return '2026/2027';
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return '2026/2027';
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1; // 1-12
+  if (month >= 7) {
+    return `${year}/${year + 1}`;
+  } else {
+    return `${year - 1}/${year}`;
+  }
+}
+
+

@@ -11,24 +11,27 @@ import {
   KeyRound,
   X,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { useSettings } from '../../context/SettingsContext';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
-  onOpenSyncModal: () => void;
+  onOpenSettings?: () => void;
   activeTitle: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   onToggleSidebar, 
-  onOpenSyncModal, 
+  onOpenSettings, 
   activeTitle 
 }) => {
   const { currentUser, isAdmin, switchUser, allUsers, logout, updatePassword, hasCustomPassword } = useAuth();
   const { isFirebaseConnected, isSyncing, lastSyncTime } = useData();
+  const { settings } = useSettings();
   const [showSwitchDropdown, setShowSwitchDropdown] = useState(false);
 
   // Quick Password Change Modal
@@ -84,20 +87,26 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div className="flex items-center gap-3">
           <img
-            src="/lmap-logo.jpg"
-            alt="L-MAP Logo"
+            src={settings.logoUrl || '/lmap-logo.jpg'}
+            alt={`${settings.appTitle || 'L-MAP'} Logo`}
             className="w-10 h-10 object-contain rounded-xl shadow-xs border border-slate-200/90 bg-white p-0.5 shrink-0"
           />
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black text-blue-900 tracking-wider flex items-center">
-                <span>L</span>
-                <span className="text-amber-500 font-black mx-0.5">-</span>
-                <span>MAP</span>
+                {settings.appTitle?.includes('-') ? (
+                  <>
+                    <span>{settings.appTitle.split('-')[0]}</span>
+                    <span className="text-amber-500 font-black mx-0.5">-</span>
+                    <span>{settings.appTitle.split('-').slice(1).join('-')}</span>
+                  </>
+                ) : (
+                  <span>{settings.appTitle || 'L-MAP'}</span>
+                )}
               </span>
               <span className="text-slate-300 hidden sm:inline">•</span>
-              <span className="text-xs text-slate-600 font-bold hidden sm:inline">
-                Lazuardi Mitra Administration Platform
+              <span className="text-xs text-slate-600 font-bold hidden sm:inline truncate max-w-[240px]">
+                {settings.appSubtitle || 'Lazuardi Mitra Administration Platform'}
               </span>
             </div>
             <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
@@ -107,23 +116,20 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right section: Sync status, Switcher, Profile */}
+      {/* Right section: Settings button, Switcher, Profile */}
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Firebase & Google Sheet Status */}
-        <button
-          id="header-sync-button"
-          onClick={onOpenSyncModal}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50/50 hover:bg-blue-100 text-blue-800 text-xs font-semibold transition cursor-pointer shadow-xs"
-          title="Klik untuk membuka sinkronisasi Google Sheet & Firebase"
-        >
-          <Cloud size={15} className={isFirebaseConnected ? "text-blue-600 animate-pulse" : "text-slate-400"} />
-          <span className="font-bold">Sheet & Cloud</span>
-          {isSyncing ? (
-            <RefreshCw size={12} className="animate-spin text-blue-600" />
-          ) : (
-            <CheckCircle2 size={13} className="text-emerald-600" />
-          )}
-        </button>
+        {/* Tombol Pengaturan Cepat */}
+        {onOpenSettings && (
+          <button
+            id="header-settings-button"
+            onClick={onOpenSettings}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-400 text-slate-700 hover:text-blue-800 text-xs font-semibold transition cursor-pointer shadow-xs"
+            title="Buka Pengaturan Sistem, Bahasa & Logo"
+          >
+            <SettingsIcon size={14} className="text-slate-500" />
+            <span className="font-bold">Pengaturan</span>
+          </button>
+        )}
 
         {/* Quick User Switcher Dropdown (for easy demo testing of MO002 - MO012) */}
         <div className="relative">

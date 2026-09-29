@@ -3,6 +3,7 @@ import { X, CreditCard, Building } from 'lucide-react';
 import { Pembayaran, PembayaranKategori, PembayaranStatus, Invoice, SekolahMitra } from '../../../types';
 import { RuangKategoriId } from './types';
 import { NominalInput } from './NominalInput';
+import { getTahunAjaranFromDate } from '../../../lib/invoiceUtils';
 
 interface PembayaranModalProps {
   isOpen: boolean;
@@ -91,6 +92,8 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
 
     const school = sekolahList.find(s => s.id === mitraId);
     const namaSekolah = school ? school.namaSekolah : 'Sekolah Mitra';
+    const selectedInv = invoiceList.find(i => i.id === invoiceId || i.nomorInvoice === invoiceId);
+    const derivedTA = selectedInv?.tahunAjaran || getTahunAjaranFromDate(tanggalBayar);
 
     try {
       await onSave({
@@ -99,6 +102,7 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
         mitraId,
         namaSekolah,
         kategori,
+        tahunAjaran: derivedTA,
         jumlah: Number(jumlah),
         tanggalBayar,
         metodeBayar,

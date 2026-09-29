@@ -18,14 +18,21 @@ import {
   Search
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
 import { INITIAL_SEKOLAH } from '../../lib/initialData';
 import { LMapLogo } from '../common/LMapLogo';
 
 export const LoginView: React.FC = () => {
   const { login, allUsers, updatePassword, resetPassword, hasCustomPassword } = useAuth();
+  const { sekolahList } = useData();
   
   // Tab: 'admin' or 'sekolah'
   const [activeTab, setActiveTab] = useState<'admin' | 'sekolah'>('admin');
+  
+  // Available schools from live state (matching tab administrator)
+  const availableSchools = useMemo(() => {
+    return (sekolahList && sekolahList.length > 0) ? sekolahList : INITIAL_SEKOLAH;
+  }, [sekolahList]);
   
   // Admin form state
   const [adminIdentifier, setAdminIdentifier] = useState('admin');
@@ -64,17 +71,17 @@ export const LoginView: React.FC = () => {
 
   // Currently selected school
   const currentSchool = useMemo(() => {
-    return INITIAL_SEKOLAH.find(s => s.id === selectedSchoolId) || INITIAL_SEKOLAH[0];
-  }, [selectedSchoolId]);
+    return availableSchools.find(s => s.id === selectedSchoolId) || availableSchools[0];
+  }, [availableSchools, selectedSchoolId]);
 
   // Filtered schools for list
   const filteredSchools = useMemo(() => {
-    return INITIAL_SEKOLAH.filter(s => 
+    return availableSchools.filter(s => 
       s.namaSekolah.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
       (s.kota && s.kota.toLowerCase().includes(schoolSearchQuery.toLowerCase())) ||
       (s.kodeMitra && s.kodeMitra.toLowerCase().includes(schoolSearchQuery.toLowerCase()))
     );
-  }, [schoolSearchQuery]);
+  }, [availableSchools, schoolSearchQuery]);
 
   const handleTabChange = (tab: 'admin' | 'sekolah') => {
     setActiveTab(tab);
@@ -363,7 +370,7 @@ export const LoginView: React.FC = () => {
                         }}
                         className="w-full bg-transparent py-2.5 text-xs sm:text-sm text-white font-semibold focus:outline-none cursor-pointer pr-6"
                       >
-                        {INITIAL_SEKOLAH.map((school) => (
+                        {availableSchools.map((school) => (
                           <option key={school.id} value={school.id} className="bg-[#0b1329] text-slate-100 py-2">
                             {school.namaSekolah}
                           </option>

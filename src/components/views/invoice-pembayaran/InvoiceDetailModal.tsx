@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Printer, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Invoice } from '../../../types';
 import { formatRupiah } from './types';
+import { useSettings } from '../../../context/SettingsContext';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice | null;
@@ -12,6 +13,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   invoice,
   onClose,
 }) => {
+  const { settings } = useSettings();
   if (!invoice) return null;
 
   const tagihanFull = invoice.tagihanFull || invoice.nominal || 0;
@@ -58,19 +60,19 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5">
             <div className="flex items-center gap-3">
               <img
-                src="/lmap-logo.jpg"
-                alt="L-MAP Logo"
+                src={settings.logoUrl || '/lmap-logo.jpg'}
+                alt={`${settings.appTitle || 'L-MAP'} Logo`}
                 className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-0.5"
               />
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-wider">
-                  L<span className="text-amber-500">-</span>MAP
+                  {settings.appTitle || 'L-MAP'}
                 </h2>
                 <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                  Lazuardi Mitra Administration Platform
+                  {settings.appSubtitle || 'Lazuardi Mitra Administration Platform'}
                 </p>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Mitra Office Yayasan Perguruan Lazuardi Hayati
+                  {settings.namaLembaga || 'Mitra Office Yayasan Perguruan Lazuardi Hayati'}
                 </p>
               </div>
             </div>

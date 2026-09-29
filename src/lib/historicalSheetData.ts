@@ -758,6 +758,7 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
         mitraId: row.kodeMitra,
         namaSekolah: row.namaSekolah,
         kategori: kategoriNorm,
+        tahunAjaran: row.tahunAjaran,
         jumlah: row.nominalPembayaran,
         tanggalBayar: row.tanggalDibayar || row.tanggalKirim,
         metodeBayar: row.metodeBayar || 'Bank Mandiri Transfer',

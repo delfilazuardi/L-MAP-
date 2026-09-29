@@ -13,6 +13,7 @@ import { RuangConfig, formatRupiah } from './types';
 
 interface RuangReportCardProps {
   config: RuangConfig;
+  isAdmin?: boolean;
   invoicesCount: number;
   paymentsCount: number;
   tagihanFull: number;
@@ -32,6 +33,7 @@ interface RuangReportCardProps {
 
 export const RuangReportCard: React.FC<RuangReportCardProps> = ({
   config,
+  isAdmin = true,
   invoicesCount,
   paymentsCount,
   tagihanFull,
@@ -76,25 +78,27 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
             </div>
           </div>
 
-          {/* Action buttons on report */}
-          <div className="flex items-center gap-2 self-start md:self-center shrink-0">
-            <button
-              onClick={onAddInvoice}
-              className="px-3.5 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
-              title={`Tambah Tagihan ${config.id}`}
-            >
-              <Plus size={14} className="text-blue-600 font-bold" />
-              <span>+ Tagihan</span>
-            </button>
-            <button
-              onClick={onAddPembayaran}
-              className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-              title={`Catat Pembayaran ${config.id}`}
-            >
-              <CreditCard size={14} className="text-amber-400 font-bold" />
-              <span>+ Pembayaran</span>
-            </button>
-          </div>
+          {/* Action buttons on report (Admin only) */}
+          {isAdmin && (
+            <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+              <button
+                onClick={onAddInvoice}
+                className="px-3.5 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                title={`Tambah Tagihan ${config.id}`}
+              >
+                <Plus size={14} className="text-blue-600 font-bold" />
+                <span>+ Tagihan</span>
+              </button>
+              <button
+                onClick={onAddPembayaran}
+                className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                title={`Catat Pembayaran ${config.id}`}
+              >
+                <CreditCard size={14} className="text-amber-400 font-bold" />
+                <span>+ Pembayaran</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

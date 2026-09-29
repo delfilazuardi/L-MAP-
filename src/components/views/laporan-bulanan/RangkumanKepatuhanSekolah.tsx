@@ -410,8 +410,8 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
               </div>
               <p className="text-xs text-slate-500 mt-1">
                 {isAdmin 
-                  ? `Peringkat Top 1, 2, dan 3 dinilai berdasarkan ketepatan waktu pengiriman dalam rentang Tahun Ajaran ${selectedTahunAjaran}: target s/d tgl 25 bulan berjalan (Sangat Cepat) dan batas akhir tgl 25 bulan berikutnya (Tepat Waktu).`
-                  : `Menampilkan status pelaporan bulanan khusus ${displayedSchools[0]?.sekolah.namaSekolah || 'sekolah Anda'} untuk Tahun Ajaran ${selectedTahunAjaran}. Di bagian atas ditampilkan Top 1 sekolah mitra pada tahun ajaran tersebut.`}
+                  ? `Matriks pemantauan status pengiriman dan ketepatan waktu laporan bulanan seluruh sekolah mitra untuk Tahun Ajaran ${selectedTahunAjaran}.`
+                  : `Menampilkan matriks status pengiriman dan ketepatan waktu pelaporan bulanan untuk Tahun Ajaran ${selectedTahunAjaran}.`}
               </p>
             </div>
             
@@ -427,111 +427,9 @@ export const RangkumanKepatuhanSekolah: React.FC<RangkumanKepatuhanSekolahProps>
             )}
           </div>
 
-          {/* Podium: Hanya Top 1 TA untuk Sekolah Mitra, atau Top 1, 2, 3 untuk Admin */}
-          {!isAdmin ? (
-            <div className="mt-4">
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/5 border-2 border-amber-400/60 flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
-                    🥇
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase font-black tracking-wider text-amber-800 bg-amber-200/60 px-1.5 py-0.2 rounded">
-                        Top 1 TA {selectedTahunAjaran}
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded-full border border-amber-300">
-                        Sekolah Terdisiplin Konsorsium
-                      </span>
-                    </div>
-                    <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
-                      {top1Standing ? top1Standing.sekolah.namaSekolah : 'Belum Ada'}
-                    </h5>
-                    <p className="text-[11px] text-slate-600">
-                      {top1Standing 
-                        ? `${top1Standing.totalPoin} Poin Ketepatan • ${top1Standing.kepatuhanRate}% Kepatuhan (${top1Standing.top1Count}x Juara Bulan Tercepat)` 
-                        : 'Menunggu penilaian'}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-amber-100/90 text-amber-900 border border-amber-300">
-                  {top1Standing?.kepatuhanRate || 0}% Kepatuhan TA
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Top 1 TA */}
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 to-yellow-500/10 border-2 border-amber-400/60 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
-                  🥇
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] uppercase font-black tracking-wider text-amber-800 bg-amber-200/60 px-1.5 py-0.2 rounded">
-                      Top 1 TA {selectedTahunAjaran}
-                    </span>
-                  </div>
-                  <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
-                    {top1Standing ? top1Standing.sekolah.namaSekolah : 'Belum Ada'}
-                  </h5>
-                  <p className="text-[11px] text-slate-600">
-                    {top1Standing 
-                      ? `${top1Standing.totalPoin} Poin • ${top1Standing.kepatuhanRate}% Kepatuhan (${top1Standing.top1Count}x Juara Bulan)` 
-                      : 'Menunggu penilaian'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Top 2 TA */}
-              <div className="p-3.5 rounded-2xl bg-slate-100/90 border-2 border-slate-300/80 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-800 font-bold text-xl flex items-center justify-center shrink-0 shadow-xs border border-slate-300">
-                  🥈
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-700 bg-slate-200/80 px-1.5 py-0.2 rounded">
-                      Top 2 TA {selectedTahunAjaran}
-                    </span>
-                  </div>
-                  <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
-                    {top2Standing ? top2Standing.sekolah.namaSekolah : 'Belum Ada'}
-                  </h5>
-                  <p className="text-[11px] text-slate-600">
-                    {top2Standing 
-                      ? `${top2Standing.totalPoin} Poin • ${top2Standing.kepatuhanRate}% Kepatuhan (${top2Standing.top2Count}x Runner-up)` 
-                      : 'Menunggu penilaian'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Top 3 TA */}
-              <div className="p-3.5 rounded-2xl bg-amber-900/5 border-2 border-amber-700/30 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-700 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-xs">
-                  🥉
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-amber-900 bg-amber-100 px-1.5 py-0.2 rounded">
-                      Top 3 TA {selectedTahunAjaran}
-                    </span>
-                  </div>
-                  <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate mt-0.5">
-                    {top3Standing ? top3Standing.sekolah.namaSekolah : 'Belum Ada'}
-                  </h5>
-                  <p className="text-[11px] text-slate-600">
-                    {top3Standing 
-                      ? `${top3Standing.totalPoin} Poin • ${top3Standing.kepatuhanRate}% Kepatuhan (${top3Standing.top3Count}x Top 3)` 
-                      : 'Menunggu penilaian'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Matrix Search & Filter Bar */}
           {isAdmin ? (
-            <div className="mt-4 pt-3 border-t border-slate-200 flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col md:flex-row gap-3 items-center justify-between">
               <div className="flex flex-1 items-center gap-3 w-full">
                 <div className="relative flex-1">
                   <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />

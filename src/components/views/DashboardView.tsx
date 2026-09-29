@@ -15,7 +15,8 @@ import {
   Building2,
   Users,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Briefcase
 } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -106,24 +107,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               <span>{isAdmin ? 'Mitra Office Administrator Hub' : 'Sekolah Mitra Portal'}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Selamat Datang, {currentUser?.nama}
+              Selamat Datang, {currentSchoolData?.namaSekolah || currentUser?.nama}
             </h2>
-            <p className="text-blue-100/90 text-sm max-w-2xl leading-relaxed">
-              {isAdmin 
-                ? 'Kelola seluruh koordinasi, administrasi, validasi pembayaran, dan evaluasi MenDAKI 9 sekolah mitra aktif Lazuardi secara terpusat.'
-                : `Akses status administrasi, laporan bulanan, invoice resmi, dan pengajuan seragam/dokumen untuk ${currentUser?.nama}.`}
-            </p>
+            {isAdmin && (
+              <p className="text-blue-100/90 text-sm max-w-2xl leading-relaxed">
+                Kelola seluruh koordinasi, administrasi, validasi pembayaran, dan evaluasi MenDAKI 9 sekolah mitra aktif Lazuardi secara terpusat.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2.5">
-            <button
-              id="dash-btn-laporan"
-              onClick={() => onNavigate('laporan-bulanan')}
-              className="px-4 py-2.5 rounded-xl bg-white text-blue-900 hover:bg-blue-50 text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <FileText size={15} />
-              <span>{isAdmin ? 'Review Laporan' : 'Submit Laporan'}</span>
-            </button>
+            {isAdmin && (
+              <button
+                id="dash-btn-laporan"
+                onClick={() => onNavigate('laporan-bulanan')}
+                className="px-4 py-2.5 rounded-xl bg-white text-blue-900 hover:bg-blue-50 text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileText size={15} />
+                <span>Review Laporan</span>
+              </button>
+            )}
             <button
               id="dash-btn-invoice"
               onClick={() => onNavigate('invoice')}
@@ -132,9 +135,100 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               <Receipt size={15} />
               <span>{isAdmin ? 'Kelola Invoice' : 'Cek Tagihan'}</span>
             </button>
+            {!isAdmin && (
+              <button
+                id="dash-btn-data-sekolah"
+                onClick={() => onNavigate('data-mitra')}
+                className="px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <School size={15} />
+                <span>Data & Profil Sekolah</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Sekolah Mitra Profile Summary Banner (Tersinkronisasi dengan Tab Administrator) */}
+      {!isAdmin && currentSchoolData && (
+        <div className="bg-white rounded-2xl p-5 border border-blue-100 shadow-xs relative overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                <School size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                    {currentSchoolData.id}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    {currentSchoolData.statusKerjasama}
+                  </span>
+                  {currentSchoolData.kategoriSekolah && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                      {currentSchoolData.kategoriSekolah}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400">
+                    Bergabung: {currentSchoolData.tahunBergabung}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+                  {currentSchoolData.namaSekolah}
+                </h3>
+              </div>
+            </div>
+
+            <button
+              id="dash-edit-profile-btn"
+              onClick={() => onNavigate('data-mitra')}
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer self-start md:self-auto"
+            >
+              <School size={15} />
+              <span>Kelola & Edit Data Sekolah</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Pimpinan Sekolah
+              </span>
+              <p className="font-bold text-slate-800 truncate" title={currentSchoolData.pimpinan}>
+                {currentSchoolData.pimpinan || '-'}
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Jenjang & Murid
+              </span>
+              <p className="font-bold text-slate-800 truncate">
+                {currentSchoolData.jenjang} • {currentSchoolData.jumlahSiswa} Murid
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Alamat & Wilayah
+              </span>
+              <p className="font-bold text-slate-800 truncate" title={`${currentSchoolData.alamat}, ${currentSchoolData.kota}`}>
+                {currentSchoolData.kota || currentSchoolData.alamat || '-'}
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Kontak Operasional
+              </span>
+              <p className="font-bold text-slate-800 truncate" title={`${currentSchoolData.kontakTelepon || currentSchoolData.kontak} • ${currentSchoolData.kontakEmail || currentSchoolData.email}`}>
+                {currentSchoolData.kontakTelepon || currentSchoolData.kontak || currentSchoolData.kontakEmail || currentSchoolData.email || '-'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
@@ -153,15 +247,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-slate-900">
-              {isAdmin ? sekolahList.length : '1 Sekolah'}
+              {isAdmin ? sekolahList.length : `${(currentSchoolData?.jumlahSiswa || 0).toLocaleString()} Siswa`}
             </span>
             <span className="text-xs text-slate-500 font-medium">
-              {isAdmin ? `(${totalSiswa.toLocaleString()} Siswa)` : 'Aktif'}
+              {isAdmin ? `(${totalSiswa.toLocaleString()} Siswa)` : (currentSchoolData?.jenjang || 'Aktif')}
             </span>
           </div>
-          <p className="text-[11px] text-blue-600 font-semibold mt-2 flex items-center gap-1">
-            <span>Buka direktori mitra</span>
-            <ArrowUpRight size={12} />
+          <p className="text-[11px] text-blue-600 font-semibold mt-2 flex items-center justify-between">
+            <span className="truncate">{isAdmin ? 'Buka direktori mitra' : `Pimpinan: ${currentSchoolData?.pimpinan || '-'}`}</span>
+            <ArrowUpRight size={12} className="shrink-0 ml-1" />
           </p>
         </div>
 
@@ -272,7 +366,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Box 1: Invoice & Pembayaran */}
               <button
                 id="dash-quick-pembayaran"
@@ -309,7 +403,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 <p className="text-[11px] text-slate-500 mt-0.5">Agenda terdekat</p>
               </button>
 
-              {/* Box 3: Permintaan Mitra */}
+              {/* Box 3: Program Mitra (Visitasi & Magang) */}
+              <button
+                id="dash-quick-program-mitra"
+                onClick={() => onNavigate('program-mitra')}
+                className="p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200/80 hover:border-blue-300 text-left transition cursor-pointer"
+              >
+                <div className="flex items-center justify-between text-sky-600 mb-2">
+                  <Briefcase size={18} />
+                  <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded-full">
+                    Baru
+                  </span>
+                </div>
+                <div className="text-xs font-bold text-slate-800">Program Mitra</div>
+                <p className="text-[11px] text-slate-500 mt-0.5">Visitasi & Magang</p>
+              </button>
+
+              {/* Box 4: Permintaan Mitra */}
               <button
                 id="dash-quick-permintaan"
                 onClick={() => onNavigate('permintaan-mitra')}
@@ -325,7 +435,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 <p className="text-[11px] text-slate-500 mt-0.5">Seragam & Berkas</p>
               </button>
 
-              {/* Box 4: Staff Activity (Admin) or Template & Berkas (Mitra) */}
+              {/* Box 5: Staff Activity (Admin) or Template & Berkas (Mitra) */}
               {isAdmin ? (
                 <button
                   id="dash-quick-staff"

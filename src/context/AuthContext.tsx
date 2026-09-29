@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { UserAccount } from '../types';
-import { INITIAL_USERS } from '../lib/initialData';
+import { INITIAL_USERS, INITIAL_SEKOLAH } from '../lib/initialData';
+import { useData } from './DataContext';
 
 interface AuthContextType {
   currentUser: UserAccount | null;
@@ -21,6 +22,8 @@ const AUTH_STORAGE_KEY = 'lmap_current_user_id';
 const PASSWORDS_STORAGE_KEY = 'lmap_custom_passwords';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { sekolahList } = useData();
+
   // Load custom passwords created by schools or admin
   const [customPasswords, setCustomPasswords] = useState<Record<string, string>>(() => {
     try {
@@ -31,24 +34,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    const savedId = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (savedId) {
-      const found = INITIAL_USERS.find(u => u.userId === savedId);
-      if (found) return found;
-    }
-    // Default to Anita Sulastri (Admin) for immediate rich view
-    return INITIAL_USERS[0];
-  });
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, currentUser.userId);
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  }, [currentUser]);
-
   const saveCustomPasswords = (updated: Record<string, string>) => {
     setCustomPasswords(updated);
     try {
@@ -58,12 +43,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Dynamically build allUsers from admin users + live sekolahList (or fallback to INITIAL_SEKOLAH)
   const allUsers = useMemo(() => {
-    return INITIAL_USERS.map(u => ({
+    const admins = INITIAL_USERS.filter(u => u.akses === 'Full Akses').map(u => ({
       ...u,
-      password: customPasswords[u.userId] || customPasswords[u.sekolahId || ''] || u.password || 'admin123',
+      password: customPasswords[u.userId] || u.password || 'admin123',
     }));
-  }, [customPasswords]);
+
+    const activeSchools = (sekolahList && sekolahList.length > 0) ? sekolahList : INITIAL_SEKOLAH;
+    const schoolUsers: UserAccount[] = activeSchools.map(s => {
+      const existingUser = INITIAL_USERS.find(u => u.sekolahId === s.id || u.userId === s.id);
+      return {
+        userId: s.id,
+        nama: s.namaSekolah,
+        email: s.kontakEmail || s.email || existingUser?.email || `${s.id.toLowerCase()}@lazuardi.sch.id`,
+        password: customPasswords[s.id] || existingUser?.password || 'admin123',
+        role: (s.statusKerjasama === 'Afiliasi' || s.kategoriSekolah === 'Sekolah Afiliasi' || s.kategoriSekolah === 'Khusus Pelaporan')
+          ? 'Sekolah Afiliasi'
+          : 'Sekolah Mitra',
+        akses: 'Akses Terbatas',
+        status: s.statusKerjasama === 'Nonaktif' ? 'Nonaktif' : 'Aktif',
+        sekolahId: s.id,
+      };
+    });
+
+    return [...admins, ...schoolUsers];
+  }, [sekolahList, customPasswords]);
+
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    // Selalu tampilkan halaman login saat pertama kali membuka link aplikasi
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  // Sync currentUser with up-to-date data from allUsers/sekolahList
+  useEffect(() => {
+    if (currentUser?.sekolahId && sekolahList && sekolahList.length > 0) {
+      const matchedSchool = sekolahList.find(s => s.id === currentUser.sekolahId);
+      if (matchedSchool && matchedSchool.namaSekolah !== currentUser.nama) {
+        setCurrentUser(prev => prev ? { ...prev, nama: matchedSchool.namaSekolah } : null);
+      }
+    }
+  }, [sekolahList, currentUser?.sekolahId, currentUser?.nama]);
+
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        sessionStorage.setItem(AUTH_STORAGE_KEY, currentUser.userId);
+      } else {
+        sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [currentUser]);
 
   const isAdmin = currentUser?.akses === 'Full Akses' || 
     currentUser?.role === 'Kepala Bagian Mitra Office' || 
@@ -201,6 +240,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    try {
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     setCurrentUser(null);
   };
 
