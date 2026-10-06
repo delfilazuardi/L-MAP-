@@ -32,6 +32,18 @@ import {
   INITIAL_PROGRAM_MITRA,
   INITIAL_PROGRAM_MITRA_TEMPLATES,
 } from '../lib/initialData';
+import { 
+  DEMO_SEKOLAH, 
+  DEMO_LAPORAN, 
+  DEMO_INVOICES, 
+  DEMO_PEMBAYARAN, 
+  DEMO_EVENTS, 
+  DEMO_PERMINTAAN, 
+  DEMO_PERFORMANCE, 
+  DEMO_PROGRAM_MITRA,
+  isDemoEntity,
+  DEMO_SEKOLAH_ID
+} from '../lib/demoData';
 import { generateNomorInvoiceBaru } from '../lib/invoiceUtils';
 import { db, testConnection, sanitizeForFirestore, toFirestoreDocId } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -109,17 +121,18 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Single Source of Truth: In-memory React state synced via Firestore onSnapshot
-  const [sekolahList, setSekolahList] = useState<SekolahMitra[]>(INITIAL_SEKOLAH);
-  const [laporanList, setLaporanList] = useState<LaporanBulanan[]>(INITIAL_LAPORAN);
-  const [invoiceList, setInvoiceList] = useState<Invoice[]>(INITIAL_INVOICES);
-  const [pembayaranList, setPembayaranList] = useState<Pembayaran[]>(INITIAL_PEMBAYARAN);
-  const [eventList, setEventList] = useState<EventItem[]>(INITIAL_EVENTS);
-  const [permintaanList, setPermintaanList] = useState<PermintaanMitra[]>(INITIAL_PERMINTAAN);
+  // Catatan: Entitas Demo Sekolah Mitra diisolasi di memori dan tidak disimpan di Firestore produksi
+  const [sekolahList, setSekolahList] = useState<SekolahMitra[]>([...INITIAL_SEKOLAH, DEMO_SEKOLAH]);
+  const [laporanList, setLaporanList] = useState<LaporanBulanan[]>([...INITIAL_LAPORAN, ...DEMO_LAPORAN]);
+  const [invoiceList, setInvoiceList] = useState<Invoice[]>([...INITIAL_INVOICES, ...DEMO_INVOICES]);
+  const [pembayaranList, setPembayaranList] = useState<Pembayaran[]>([...INITIAL_PEMBAYARAN, ...DEMO_PEMBAYARAN]);
+  const [eventList, setEventList] = useState<EventItem[]>([...INITIAL_EVENTS, ...DEMO_EVENTS]);
+  const [permintaanList, setPermintaanList] = useState<PermintaanMitra[]>([...INITIAL_PERMINTAAN, ...DEMO_PERMINTAAN]);
   const [staffActivityList, setStaffActivityList] = useState<StaffActivity[]>(INITIAL_STAFF_ACTIVITY);
   const [adminStaffList, setAdminStaffList] = useState<AdminMitraStaff[]>(INITIAL_ADMIN_STAFF);
   const [templateList, setTemplateList] = useState<TemplateDokumen[]>(INITIAL_TEMPLATES);
-  const [performanceList, setPerformanceList] = useState<PerformanceMenDAKI[]>(INITIAL_PERFORMANCE_MENDAKI);
-  const [programMitraList, setProgramMitraList] = useState<ProgramMitraItem[]>(INITIAL_PROGRAM_MITRA);
+  const [performanceList, setPerformanceList] = useState<PerformanceMenDAKI[]>([...INITIAL_PERFORMANCE_MENDAKI, ...DEMO_PERFORMANCE]);
+  const [programMitraList, setProgramMitraList] = useState<ProgramMitraItem[]>([...INITIAL_PROGRAM_MITRA, ...DEMO_PROGRAM_MITRA]);
   const [programMitraTemplates, setProgramMitraTemplates] = useState<ProgramMitraTemplate[]>(INITIAL_PROGRAM_MITRA_TEMPLATES);
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
@@ -177,7 +190,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: (data as any).id || d.id,
               };
             });
-            setter(docs);
+            setter(prev => {
+              const prevDemo = prev.filter(isDemoEntity);
+              let demoFallback: T[] = [];
+              if (collectionName === 'mitra') demoFallback = [DEMO_SEKOLAH as unknown as T];
+              else if (collectionName === 'laporan_bulanan') demoFallback = DEMO_LAPORAN as unknown as T[];
+              else if (collectionName === 'invoices') demoFallback = DEMO_INVOICES as unknown as T[];
+              else if (collectionName === 'pembayaran') demoFallback = DEMO_PEMBAYARAN as unknown as T[];
+              else if (collectionName === 'events') demoFallback = DEMO_EVENTS as unknown as T[];
+              else if (collectionName === 'permintaan_mitra') demoFallback = DEMO_PERMINTAAN as unknown as T[];
+              else if (collectionName === 'performance_mendaki') demoFallback = DEMO_PERFORMANCE as unknown as T[];
+              else if (collectionName === 'program_mitra') demoFallback = DEMO_PROGRAM_MITRA as unknown as T[];
+
+              const demoItemsToKeep = prevDemo.length > 0 ? prevDemo : demoFallback;
+              return [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+            });
           }
 
           if (isMounted) {
@@ -226,7 +253,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ==========================================
   const addLaporan = useCallback(async (laporanData: Omit<LaporanBulanan, 'id' | 'tanggalDiajukan'> & { id?: string }) => {
     const today = new Date().toISOString().split('T')[0];
-    const id = laporanData.id || `LAP-${Date.now().toString().slice(-6)}`;
+    const isDemo = isDemoEntity(laporanData.mitraId || (laporanData as any).sekolahId) || isDemoEntity(laporanData.id);
+    const id = laporanData.id || (isDemo ? `LAP-DEMO-${Date.now().toString().slice(-4)}` : `LAP-${Date.now().toString().slice(-6)}`);
     const newLaporan: LaporanBulanan = {
       ...laporanData,
       id,
@@ -234,10 +262,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tanggalKirim: laporanData.tanggalKirim || today,
       tahunAjaran: laporanData.tahunAjaran || '2026/2027',
       updatedAt: today,
+      isDemo: isDemo || undefined,
     };
 
     // Optimistic state update
     setLaporanList(prev => [newLaporan, ...prev.filter(l => l.id !== id)]);
+
+    if (isDemo) return;
 
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(newLaporan));
@@ -254,12 +285,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setLaporanList(prev => prev.map(item => item.id === updated.id ? withUpdate : item));
 
+    if (isDemoEntity(updated)) return;
+
     const safeId = toFirestoreDocId(updated.id);
     await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(withUpdate));
   }, []);
 
   const deleteLaporan = useCallback(async (id: string) => {
     setLaporanList(prev => prev.filter(item => item.id !== id));
+    if (isDemoEntity(id)) return;
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'laporan_bulanan', safeId));
     if (safeId !== id) {
@@ -285,6 +319,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setLaporanList(prev => prev.map(item => item.id === id ? updated : item));
 
+    if (isDemoEntity(target)) return;
+
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(updated));
   }, [laporanList]);
@@ -302,6 +338,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setLaporanList(prev => prev.map(item => item.id === id ? updated : item));
 
+    if (isDemoEntity(target)) return;
+
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(updated));
   }, [laporanList]);
@@ -310,9 +348,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // INVOICE CRUD
   // ==========================================
   const addInvoice = useCallback(async (invoiceData: Omit<Invoice, 'id'> & { id?: string }) => {
+    const isDemo = isDemoEntity(invoiceData.mitraId) || isDemoEntity(invoiceData.id);
     const id = invoiceData.id && invoiceData.id.trim().length > 0 
       ? invoiceData.id.trim()
-      : generateNomorInvoiceBaru(invoiceList).nomorInvoice;
+      : (isDemo ? `INV-DEMO-${Date.now().toString().slice(-4)}` : generateNomorInvoiceBaru(invoiceList).nomorInvoice);
 
     const fullNominal = typeof invoiceData.tagihanFull === 'number' ? invoiceData.tagihanFull : (invoiceData.nominal || 0);
     const realNominal = typeof invoiceData.tagihanRealisasi === 'number' ? invoiceData.tagihanRealisasi : (invoiceData.nominal || fullNominal);
@@ -336,6 +375,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       keterangan: invoiceData.keterangan || `Tagihan Invoice ${invoiceData.namaSekolah}`,
       createdAt: invoiceData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      isDemo: isDemo || undefined,
     };
 
     // Track recently inputted invoice IDs in session
@@ -352,6 +392,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setInvoiceList(prev => [newInvoice, ...prev.filter(i => i.id !== id)]);
 
+    if (isDemo) return;
+
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(newInvoice));
   }, [invoiceList]);
@@ -362,12 +404,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
     setInvoiceList(prev => prev.map(inv => inv.id === updated.id ? withUpdate : inv));
+
+    if (isDemoEntity(updated)) return;
+
     const safeId = toFirestoreDocId(updated.id);
     await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(withUpdate));
   }, []);
 
   const deleteInvoice = useCallback(async (id: string) => {
     setInvoiceList(prev => prev.filter(inv => inv.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'invoices', safeId));
     if (safeId !== id) {
@@ -392,6 +439,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setInvoiceList(prev => prev.map(inv => inv.id === id ? updated : inv));
 
+    if (isDemoEntity(target)) return;
+
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'invoices', safeId), sanitizeForFirestore(updated));
   }, [invoiceList]);
@@ -400,37 +449,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // PEMBAYARAN CRUD
   // ==========================================
   const addPembayaran = useCallback(async (pembayaranData: Omit<Pembayaran, 'id'> & { id?: string }) => {
-    const id = pembayaranData.id || `PAY-${Date.now().toString().slice(-6)}`;
+    const isDemo = isDemoEntity(pembayaranData.mitraId) || isDemoEntity(pembayaranData.id);
+    const id = pembayaranData.id || (isDemo ? `BYR-DEMO-${Date.now().toString().slice(-4)}` : `PAY-${Date.now().toString().slice(-6)}`);
     const newPay: Pembayaran = {
       ...pembayaranData,
       id,
+      isDemo: isDemo || undefined,
     };
 
     setPembayaranList(prev => [newPay, ...prev.filter(p => p.id !== id)]);
-
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'pembayaran', safeId), sanitizeForFirestore(newPay));
 
     // If linked to an invoice, update invoice status
     if (newPay.invoiceId) {
       const updatedInvoice = invoiceList.find(inv => inv.id === newPay.invoiceId);
       if (updatedInvoice) {
-        const safeInvId = toFirestoreDocId(updatedInvoice.id);
         const invUpdate = { ...updatedInvoice, status: 'Menunggu Konfirmasi' as const };
         setInvoiceList(prev => prev.map(i => i.id === newPay.invoiceId ? invUpdate : i));
-        await setDoc(doc(db, 'invoices', safeInvId), sanitizeForFirestore(invUpdate));
+        if (!isDemo && !isDemoEntity(updatedInvoice)) {
+          const safeInvId = toFirestoreDocId(updatedInvoice.id);
+          await setDoc(doc(db, 'invoices', safeInvId), sanitizeForFirestore(invUpdate));
+        }
       }
     }
+
+    if (isDemo) return;
+
+    const safeId = toFirestoreDocId(id);
+    await setDoc(doc(db, 'pembayaran', safeId), sanitizeForFirestore(newPay));
   }, [invoiceList]);
 
   const updatePembayaran = useCallback(async (pembayaran: Pembayaran) => {
     setPembayaranList(prev => prev.map(p => p.id === pembayaran.id ? pembayaran : p));
+    if (isDemoEntity(pembayaran)) return;
+
     const safeId = toFirestoreDocId(pembayaran.id);
     await setDoc(doc(db, 'pembayaran', safeId), sanitizeForFirestore(pembayaran));
   }, []);
 
   const deletePembayaran = useCallback(async (id: string) => {
     setPembayaranList(prev => prev.filter(p => p.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'pembayaran', safeId));
     if (safeId !== id) {
@@ -471,10 +530,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         setInvoiceList(prev => prev.map(i => i.id === targetInvoice.id ? invUpdate : i));
-        const safeInvId = toFirestoreDocId(targetInvoice.id);
-        await setDoc(doc(db, 'invoices', safeInvId), sanitizeForFirestore(invUpdate));
+        if (!isDemoEntity(targetInvoice)) {
+          const safeInvId = toFirestoreDocId(targetInvoice.id);
+          await setDoc(doc(db, 'invoices', safeInvId), sanitizeForFirestore(invUpdate));
+        }
       }
     }
+
+    if (isDemoEntity(target)) return;
 
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'pembayaran', safeId), sanitizeForFirestore(updatedPay));
@@ -525,10 +588,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // EVENT TRACKER CRUD
   // ==========================================
   const addEvent = useCallback(async (eventData: Omit<EventItem, 'id'> & { id?: string }) => {
-    const id = eventData.id || `EVT-${Date.now().toString().slice(-5)}`;
-    const newEvent: EventItem = { ...eventData, id };
+    const isDemo = isDemoEntity(eventData) || isDemoEntity(eventData.sekolahId);
+    const id = eventData.id || (isDemo ? `EVT-DEMO-${Date.now().toString().slice(-4)}` : `EVT-${Date.now().toString().slice(-5)}`);
+    const newEvent: EventItem = { ...eventData, id, isDemo: isDemo || undefined };
 
     setEventList(prev => [newEvent, ...prev.filter(e => e.id !== id)]);
+
+    if (isDemo) return;
 
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'events', safeId), sanitizeForFirestore(newEvent));
@@ -536,12 +602,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateEvent = useCallback(async (event: EventItem) => {
     setEventList(prev => prev.map(e => e.id === event.id ? event : e));
+    if (isDemoEntity(event)) return;
+
     const safeId = toFirestoreDocId(event.id);
     await setDoc(doc(db, 'events', safeId), sanitizeForFirestore(event));
   }, []);
 
   const deleteEvent = useCallback(async (id: string) => {
     setEventList(prev => prev.filter(e => e.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'events', safeId));
     if (safeId !== id) {
@@ -558,14 +628,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ==========================================
   const addPermintaan = useCallback(async (reqData: Omit<PermintaanMitra, 'id' | 'tanggalPengajuan'> & { id?: string }) => {
     const today = new Date().toISOString().split('T')[0];
-    const id = reqData.id || `REQ-${Date.now().toString().slice(-6)}`;
+    const isDemo = isDemoEntity(reqData.mitraId) || isDemoEntity(reqData.id);
+    const id = reqData.id || (isDemo ? `REQ-DEMO-${Date.now().toString().slice(-4)}` : `REQ-${Date.now().toString().slice(-6)}`);
     const newReq: PermintaanMitra = {
       ...reqData,
       id,
       tanggalPengajuan: today,
+      isDemo: isDemo || undefined,
     };
 
     setPermintaanList(prev => [newReq, ...prev.filter(p => p.id !== id)]);
+
+    if (isDemo) return;
 
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'permintaan_mitra', safeId), sanitizeForFirestore(newReq));
@@ -573,12 +647,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updatePermintaan = useCallback(async (permintaan: PermintaanMitra) => {
     setPermintaanList(prev => prev.map(p => p.id === permintaan.id ? permintaan : p));
+    if (isDemoEntity(permintaan)) return;
+
     const safeId = toFirestoreDocId(permintaan.id);
     await setDoc(doc(db, 'permintaan_mitra', safeId), sanitizeForFirestore(permintaan));
   }, []);
 
   const deletePermintaan = useCallback(async (id: string) => {
     setPermintaanList(prev => prev.filter(p => p.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'permintaan_mitra', safeId));
     if (safeId !== id) {
@@ -603,6 +681,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setPermintaanList(prev => prev.map(p => p.id === id ? updated : p));
 
+    if (isDemoEntity(target)) return;
+
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'permintaan_mitra', safeId), sanitizeForFirestore(updated));
   }, [permintaanList]);
@@ -613,6 +693,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addSekolah = useCallback(async (sekolah: SekolahMitra) => {
     const cleanSekolah = sanitizeForFirestore(sekolah);
     setSekolahList(prev => [...prev.filter(s => s.id !== sekolah.id), cleanSekolah]);
+
+    if (isDemoEntity(sekolah)) return;
 
     const safeId = toFirestoreDocId(sekolah.id);
     await setDoc(doc(db, 'mitra', safeId), cleanSekolah);
@@ -656,12 +738,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLaporanList(prev => prev.map(lap => lap.mitraId === targetId ? { ...lap, namaSekolah: cleanObj.namaSekolah } : lap));
     }
 
+    if (isDemoEntity(targetId) || isDemoEntity(cleanObj)) return;
+
     const safeId = toFirestoreDocId(targetId);
     await setDoc(doc(db, 'mitra', safeId), cleanObj);
   }, [sekolahList]);
 
   const deleteSekolah = useCallback(async (id: string) => {
     setSekolahList(prev => prev.filter(s => s.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'mitra', safeId));
     if (safeId !== id) {
@@ -783,6 +869,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return [perf, ...prev];
     });
 
+    if (isDemoEntity(perf)) return;
+
     const safeId = toFirestoreDocId(perf.id);
     await setDoc(doc(db, 'performance_mendaki', safeId), sanitizeForFirestore(perf));
   }, []);
@@ -791,6 +879,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deletePerformance = useCallback(async (id: string) => {
     setPerformanceList(prev => prev.filter(p => p.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'performance_mendaki', safeId));
     if (safeId !== id) {
@@ -807,15 +897,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ==========================================
   const addProgramMitra = useCallback(async (itemData: Omit<ProgramMitraItem, 'id' | 'tanggalPengajuan'> & { id?: string }) => {
     const today = new Date().toISOString().split('T')[0];
-    const id = itemData.id || `PRG-${Date.now().toString().slice(-6)}`;
+    const isDemo = isDemoEntity(itemData.mitraId) || isDemoEntity(itemData.id);
+    const id = itemData.id || (isDemo ? `PRG-DEMO-${Date.now().toString().slice(-4)}` : `PRG-${Date.now().toString().slice(-6)}`);
     const newItem: ProgramMitraItem = {
       ...itemData,
       id,
       tanggalPengajuan: today,
       updatedAt: today,
+      isDemo: isDemo || undefined,
     };
 
     setProgramMitraList(prev => [newItem, ...prev.filter(p => p.id !== id)]);
+
+    if (isDemo) return;
 
     const safeId = toFirestoreDocId(id);
     await setDoc(doc(db, 'program_mitra', safeId), sanitizeForFirestore(newItem));
@@ -830,12 +924,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setProgramMitraList(prev => prev.map(p => p.id === item.id ? withUpdate : p));
 
+    if (isDemoEntity(item)) return;
+
     const safeId = toFirestoreDocId(item.id);
     await setDoc(doc(db, 'program_mitra', safeId), sanitizeForFirestore(withUpdate));
   }, []);
 
   const deleteProgramMitra = useCallback(async (id: string) => {
     setProgramMitraList(prev => prev.filter(p => p.id !== id));
+    if (isDemoEntity(id)) return;
+
     const safeId = toFirestoreDocId(id);
     await deleteDoc(doc(db, 'program_mitra', safeId));
     if (safeId !== id) {

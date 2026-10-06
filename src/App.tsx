@@ -24,18 +24,32 @@ import { PengaturanView } from './components/views/PengaturanView';
 import { ProgramMitraView } from './components/views/ProgramMitraView';
 
 function MainApp() {
-  const { currentUser, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<ActiveNavTab>('dashboard');
+  const { currentUser, isAdmin, isGuruMitra, isDemoMitra, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<ActiveNavTab>(() => {
+    // If user is already authenticated as Guru Mitra, default to event-tracker
+    return 'dashboard';
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | undefined>(undefined);
 
-  // If non-admin attempts to view admin-only tabs, redirect to dashboard
+  // Guard access based on specific role requirements
   useEffect(() => {
-    const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'performance-mendaki'];
-    if (!isAdmin && adminOnlyTabs.includes(activeTab)) {
-      setActiveTab('dashboard');
+    if (!currentUser) return;
+
+    if (isGuruMitra) {
+      // Guru Mitra: strictly limited to event tracker, program mitra, data mitra, and template
+      const allowedGuruTabs: ActiveNavTab[] = ['event-tracker', 'program-mitra', 'data-mitra', 'template'];
+      if (!allowedGuruTabs.includes(activeTab)) {
+        setActiveTab('event-tracker');
+      }
+    } else if (!isAdmin) {
+      // Admin only tabs: staff-activity, performance-mendaki, and pengaturan
+      const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'performance-mendaki', 'pengaturan'];
+      if (adminOnlyTabs.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
     }
-  }, [isAdmin, activeTab]);
+  }, [isAdmin, isGuruMitra, currentUser, activeTab]);
 
   // If user is not authenticated, display login view
   if (!currentUser) {

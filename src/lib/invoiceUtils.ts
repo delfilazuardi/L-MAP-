@@ -267,4 +267,13 @@ export function getTahunAjaranFromDate(dateInput?: string | Date): string {
   }
 }
 
+/**
+ * Memeriksa apakah suatu ID atau nama entitas merupakan Akun Khusus Demo Simulasi (Terisolasi)
+ */
+export function isDemoSchool(sekolahIdOrName?: string | null): boolean {
+  if (!sekolahIdOrName) return false;
+  const s = sekolahIdOrName.toLowerCase();
+  return s === 'mo-demo' || s === 'demo-mitra' || s.includes('demo');
+}
+
 

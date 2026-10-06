@@ -3,7 +3,8 @@ export type UserRole =
   | 'Kepala Bagian Mitra Office' 
   | 'Officer' 
   | 'Sekolah Mitra' 
-  | 'Sekolah Afiliasi';
+  | 'Sekolah Afiliasi'
+  | 'Guru Mitra';
 
 export type UserAccess = 'Full Akses' | 'Akses Terbatas';
 
@@ -15,7 +16,10 @@ export interface UserAccount {
   role: UserRole;
   akses: UserAccess;
   status: 'Aktif' | 'Nonaktif';
-  sekolahId?: string; // Tautan ke ID mitra jika role Sekolah Mitra / Afiliasi
+  sekolahId?: string; // Tautan ke ID mitra jika role Sekolah Mitra / Afiliasi / Guru Mitra
+  mapel?: string; // Mata pelajaran / Bidang keahlian (khusus Guru Mitra)
+  nip?: string; // Nomor Induk Pegawai / Guru
+  isDemo?: boolean; // Khusus akun demo terisolasi
 }
 
 export interface SekolahMitra {
@@ -35,6 +39,7 @@ export interface SekolahMitra {
   kategoriSekolah?: 'Mitra Reguler' | 'Sekolah Afiliasi' | 'Khusus Pelaporan';
   tahunBergabung: number;
   keteranganKhusus?: string;
+  isDemo?: boolean; // Khusus sekolah mitra demo simulasi (terisolasi)
 }
 
 
@@ -87,6 +92,7 @@ export interface LaporanBulanan {
   tanggalDiajukan: string;
   updatedAt?: string;
   sheetPerhitungan?: SheetPerhitunganData;
+  isDemo?: boolean;
 }
 
 export type InvoiceKategori = 'Franchise Fee' | 'Piutang Lampau' | 'Piutang Mitra' | 'Renewal Fee' | 'Jenjang Baru' | 'Lainnya';
@@ -115,6 +121,7 @@ export interface Invoice {
   keterangan?: string;
   createdAt?: string; // Timestamp ISO pembuatan/input invoice
   updatedAt?: string; // Timestamp ISO update invoice
+  isDemo?: boolean;
 }
 
 export type PembayaranKategori = 'Franchise Fee' | 'Piutang Lampau' | 'Renewal Fee' | 'Piutang' | 'Piutang Mitra' | 'Jenjang Baru' | 'Lainnya';
@@ -134,6 +141,7 @@ export interface Pembayaran {
   buktiUrl: string;
   status: PembayaranStatus;
   catatan?: string;
+  isDemo?: boolean;
 }
 
 export type EventKategori = string;
@@ -151,10 +159,12 @@ export interface EventItem {
   flyerUrl?: string; // Foto flyer / banner poster event
   linkRegistrasi?: string; // Tautan Formulir / Google Form Registrasi
   mitraPeserta: string;
+  sekolahId?: string;
   status: EventStatus;
   deskripsi: string;
   classroomUrl?: string; // Tautan Google Classroom (opsional)
   classCode?: string; // Kode Gabung Kelas Google Classroom (opsional)
+  isDemo?: boolean;
 }
 
 export type PermintaanKategori = 'Seragam' | 'Dokumen Cetak' | 'Merchandise & Lainnya';
@@ -175,6 +185,7 @@ export interface PermintaanMitra {
   noResi?: string;
   estimasiSelesai?: string;
   catatanAdmin?: string;
+  isDemo?: boolean;
 }
 
 export type ActivityKategori = 'Kunjungan Lapangan' | 'Supervisi Akademik' | 'Audit Keuangan' | 'Pendampingan Online' | 'Koordinasi Internal' | 'Administrasi & Laporan' | string;
@@ -316,6 +327,7 @@ export interface PerformanceMenDAKI {
   catatanRekomendasi?: string;
   tanggalEvaluasi?: string;
   tanggalPenilaian?: string;
+  isDemo?: boolean;
 }
 
 
@@ -347,6 +359,7 @@ export interface ProgramMitraItem {
   catatanAdmin?: string;
   tanggalPengajuan: string;
   updatedAt?: string;
+  isDemo?: boolean;
 }
 
 export interface ProgramMitraTemplate {

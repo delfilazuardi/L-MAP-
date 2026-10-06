@@ -9,7 +9,8 @@ import {
   BarChart3, 
   Plus, 
   X,
-  Target
+  Target,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -26,12 +27,14 @@ export const PerformanceMendakiView: React.FC = () => {
   const [editingItem, setEditingItem] = useState<PerformanceMendaki | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; nama: string } | null>(null);
 
+  const realSchools = sekolahList.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA');
+
   const handleDelete = (id: string, nama: string) => {
     setDeleteTarget({ id, nama });
   };
 
   // Form State
-  const [formMitraId, setFormMitraId] = useState(sekolahList[0]?.id || 'MO004');
+  const [formMitraId, setFormMitraId] = useState(realSchools[0]?.id || sekolahList[0]?.id || 'MO004');
   const [formSkorM, setFormSkorM] = useState<number>(88);
   const [formSkorD, setFormSkorD] = useState<number>(90);
   const [formSkorA, setFormSkorA] = useState<number>(92);
@@ -40,8 +43,10 @@ export const PerformanceMendakiView: React.FC = () => {
   const [formKekuatan, setFormKekuatan] = useState('');
   const [formRekomendasi, setFormRekomendasi] = useState('');
 
+  const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
+
   const baseList = isAdmin 
-    ? performanceList 
+    ? performanceList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA') 
     : performanceList.filter(p => p.mitraId === currentUser?.sekolahId);
 
   const filtered = baseList.filter(p => {
@@ -192,7 +197,7 @@ export const PerformanceMendakiView: React.FC = () => {
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
           >
             <option value="ALL">Semua Sekolah Mitra</option>
-            {sekolahList.map(s => (
+            {realSchools.map(s => (
               <option key={s.id} value={s.id}>{s.namaSekolah}</option>
             ))}
           </select>
@@ -315,7 +320,7 @@ export const PerformanceMendakiView: React.FC = () => {
                   onChange={(e) => setFormMitraId(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                 >
-                  {sekolahList.map(s => (
+                  {realSchools.map(s => (
                     <option key={s.id} value={s.id}>{s.namaSekolah}</option>
                   ))}
                 </select>

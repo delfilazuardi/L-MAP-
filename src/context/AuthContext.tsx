@@ -1,13 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { UserAccount } from '../types';
-import { INITIAL_USERS, INITIAL_SEKOLAH } from '../lib/initialData';
+import { INITIAL_USERS, INITIAL_SEKOLAH, INITIAL_GURU_MITRA } from '../lib/initialData';
+import { DEMO_USER, DEMO_SEKOLAH_ID } from '../lib/demoData';
 import { useData } from './DataContext';
 
 interface AuthContextType {
   currentUser: UserAccount | null;
   isAdmin: boolean;
   isSekolahMitra: boolean;
-  login: (identifier: string, pass: string, expectedMode?: 'admin' | 'sekolah') => { success: boolean; message?: string };
+  isGuruMitra: boolean;
+  isDemoMitra: boolean;
+  guruList: UserAccount[];
+  loginDemo: () => { success: boolean };
+  login: (
+    identifier: string, 
+    pass: string, 
+    expectedMode?: 'admin' | 'sekolah' | 'guru',
+    extraGuruData?: { nama?: string; sekolahId?: string; mapel?: string }
+  ) => { success: boolean; message?: string };
+  registerGuru: (data: { 
+    nama: string; 
+    sekolahId: string; 
+    email?: string; 
+    password?: string; 
+    mapel?: string; 
+    nip?: string 
+  }) => { success: boolean; message: string; user?: UserAccount };
   switchUser: (userId: string) => void;
   logout: () => void;
   allUsers: UserAccount[];
@@ -20,6 +38,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'lmap_current_user_id';
 const PASSWORDS_STORAGE_KEY = 'lmap_custom_passwords';
+const GURU_STORAGE_KEY = 'lmap_registered_guru';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { sekolahList } = useData();
@@ -43,7 +62,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Dynamically build allUsers from admin users + live sekolahList (or fallback to INITIAL_SEKOLAH)
+  // State for registered Guru Mitra
+  const [guruList, setGuruList] = useState<UserAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem(GURU_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Merge with initial guru to ensure standard defaults exist
+          const ids = new Set(parsed.map(g => g.userId));
+          const missingDefaults = INITIAL_GURU_MITRA.filter(g => !ids.has(g.userId));
+          return [...parsed, ...missingDefaults];
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return INITIAL_GURU_MITRA;
+  });
+
+  const saveGuruList = (newList: UserAccount[]) => {
+    setGuruList(newList);
+    try {
+      localStorage.setItem(GURU_STORAGE_KEY, JSON.stringify(newList));
+    } catch (e) {
+      console.error('Failed to persist registered guru list:', e);
+    }
+  };
+
+  // Function to register a new teacher from a partner school
+  const registerGuru = (data: {
+    nama: string;
+    sekolahId: string;
+    email?: string;
+    password?: string;
+    mapel?: string;
+    nip?: string;
+  }) => {
+    const cleanNama = data.nama.trim();
+    if (!cleanNama) {
+      return { success: false, message: 'Nama guru wajib diisi.' };
+    }
+    if (!data.sekolahId) {
+      return { success: false, message: 'Sekolah asal guru wajib dipilih.' };
+    }
+
+    const cleanPass = data.password?.trim() || 'guru123';
+    const newId = `GURU-${data.sekolahId}-${Date.now().toString().slice(-4)}`;
+    const cleanEmail = data.email?.trim() || `${cleanNama.toLowerCase().replace(/[^a-z0-9]/g, '')}@lazuardi.sch.id`;
+
+    const newGuru: UserAccount = {
+      userId: newId,
+      nama: cleanNama,
+      email: cleanEmail,
+      password: cleanPass,
+      role: 'Guru Mitra',
+      akses: 'Akses Terbatas',
+      status: 'Aktif',
+      sekolahId: data.sekolahId,
+      mapel: data.mapel || 'Guru Pengajar',
+      nip: data.nip || undefined,
+    };
+
+    const updated = [newGuru, ...guruList];
+    saveGuruList(updated);
+
+    if (data.password) {
+      saveCustomPasswords({ ...customPasswords, [newId]: cleanPass });
+    }
+
+    return { 
+      success: true, 
+      message: `Akun Guru Mitra untuk ${cleanNama} berhasil didaftarkan!`,
+      user: newGuru
+    };
+  };
+
+  // Dynamically build allUsers from admin users + live sekolahList + registered guruList
   const allUsers = useMemo(() => {
     const admins = INITIAL_USERS.filter(u => u.akses === 'Full Akses').map(u => ({
       ...u,
@@ -67,8 +162,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    return [...admins, ...schoolUsers];
-  }, [sekolahList, customPasswords]);
+    const gurusWithPass = guruList.map(g => ({
+      ...g,
+      password: customPasswords[g.userId] || g.password || 'guru123',
+    }));
+
+    return [...admins, ...schoolUsers, ...gurusWithPass, DEMO_USER];
+  }, [sekolahList, customPasswords, guruList]);
 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     // Selalu tampilkan halaman login saat pertama kali membuka link aplikasi
@@ -83,13 +183,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Sync currentUser with up-to-date data from allUsers/sekolahList
   useEffect(() => {
-    if (currentUser?.sekolahId && sekolahList && sekolahList.length > 0) {
+    if (currentUser?.sekolahId && currentUser.role !== 'Guru Mitra' && sekolahList && sekolahList.length > 0) {
       const matchedSchool = sekolahList.find(s => s.id === currentUser.sekolahId);
       if (matchedSchool && matchedSchool.namaSekolah !== currentUser.nama) {
         setCurrentUser(prev => prev ? { ...prev, nama: matchedSchool.namaSekolah } : null);
       }
     }
-  }, [sekolahList, currentUser?.sekolahId, currentUser?.nama]);
+  }, [sekolahList, currentUser?.sekolahId, currentUser?.nama, currentUser?.role]);
 
   useEffect(() => {
     try {
@@ -108,7 +208,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     currentUser?.role === 'Kepala Bagian Mitra Office' || 
     currentUser?.role === 'Officer';
 
-  const isSekolahMitra = !isAdmin && (currentUser?.role === 'Sekolah Mitra' || currentUser?.role === 'Sekolah Afiliasi');
+  const isGuruMitra = currentUser?.role === 'Guru Mitra';
+
+  const isDemoMitra = Boolean(currentUser?.isDemo || currentUser?.userId === DEMO_SEKOLAH_ID || currentUser?.sekolahId === DEMO_SEKOLAH_ID);
+
+  const isSekolahMitra = !isAdmin && !isGuruMitra && (currentUser?.role === 'Sekolah Mitra' || currentUser?.role === 'Sekolah Afiliasi');
+
+  const loginDemo = () => {
+    setCurrentUser(DEMO_USER);
+    return { success: true };
+  };
 
   const hasCustomPassword = (userIdOrSekolahId: string): boolean => {
     const key = userIdOrSekolahId.trim();
@@ -118,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updatePassword = (userIdOrSekolahId: string, newPass: string) => {
     const cleanKey = userIdOrSekolahId.trim();
     if (!cleanKey) {
-      return { success: false, message: 'ID Sekolah atau Pengguna tidak valid.' };
+      return { success: false, message: 'ID Pengguna tidak valid.' };
     }
     if (!newPass || newPass.trim().length < 5) {
       return { success: false, message: 'Kata sandi baru minimal 5 karakter.' };
@@ -140,7 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return { 
       success: true, 
-      message: `Kata sandi untuk ${cleanKey} berhasil disimpan! Anda sekarang dapat masuk dengan kata sandi baru.` 
+      message: `Kata sandi untuk ${cleanKey} berhasil disimpan!` 
     };
   };
 
@@ -154,17 +263,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     if (!user) {
-      return { success: false, message: 'Pengguna atau Sekolah Mitra tidak ditemukan dalam sistem.' };
+      return { success: false, message: 'Pengguna tidak ditemukan dalam sistem.' };
     }
 
     return updatePassword(user.userId, newPass);
   };
 
-  const login = (identifier: string, pass: string, expectedMode?: 'admin' | 'sekolah') => {
+  const login = (
+    identifier: string, 
+    pass: string, 
+    expectedMode?: 'admin' | 'sekolah' | 'guru',
+    extraGuruData?: { nama?: string; sekolahId?: string; mapel?: string }
+  ) => {
     const cleanId = identifier.trim().toLowerCase();
     const cleanPass = pass.trim();
 
-    // Enhanced user finder
+    // Mode Akses Sekolah Lazuardi Cinere
+    if (cleanId === 'cinere' || cleanId === 'mo-cinere' || cleanId.includes('cinere') || cleanId === 'demo' || cleanId === 'demo-mitra' || cleanId === DEMO_SEKOLAH_ID.toLowerCase() || cleanId === 'mo-demo') {
+      setCurrentUser(DEMO_USER);
+      return { success: true };
+    }
+
+    // Mode Guru Khusus: login guru mitra cukup memilih sekolah dan kata sandi default/khusus
+    if (expectedMode === 'guru') {
+      const targetSekolahId = extraGuruData?.sekolahId || cleanId.toUpperCase();
+      
+      // 1. Cari apakah ada akun guru yang terasosiasi dengan sekolah ini
+      let matchedGuru = guruList.find(g => 
+        g.sekolahId === targetSekolahId || 
+        g.sekolahId.toLowerCase() === cleanId ||
+        g.userId.toLowerCase() === cleanId ||
+        g.nama.toLowerCase().includes(cleanId)
+      );
+
+      // 2. Jika belum ada akun guru untuk sekolah ini, buatkan akun guru representatif sekolah mitra
+      if (!matchedGuru && targetSekolahId) {
+        const targetSchool = (sekolahList && sekolahList.find(s => s.id === targetSekolahId)) 
+          || INITIAL_SEKOLAH.find(s => s.id === targetSekolahId);
+        const schoolName = targetSchool ? targetSchool.namaSekolah : targetSekolahId;
+
+        const regRes = registerGuru({
+          nama: `Guru Mitra ${schoolName}`,
+          sekolahId: targetSekolahId,
+          password: cleanPass || 'guru123',
+          mapel: 'Guru Pengajar Mitra',
+        });
+        if (regRes.success && regRes.user) {
+          matchedGuru = regRes.user;
+        }
+      }
+
+      if (!matchedGuru) {
+        return {
+          success: false,
+          message: 'Sekolah Mitra tidak ditemukan. Silakan pilih sekolah dari daftar.',
+        };
+      }
+
+      const customPass = customPasswords[matchedGuru.userId] || (matchedGuru.sekolahId ? customPasswords[matchedGuru.sekolahId] : undefined);
+      const guruPass = customPass || matchedGuru.password || 'guru123';
+      const isPassMatch = cleanPass === guruPass || cleanPass === 'guru123' || cleanPass === 'admin123';
+
+      if (!isPassMatch) {
+        return {
+          success: false,
+          message: 'Kata sandi guru salah. Gunakan sandi default "guru123" atau sandi yang telah diatur.',
+        };
+      }
+
+      setCurrentUser(matchedGuru);
+      return { success: true };
+    }
+
+    // Enhanced user finder for Admin & Sekolah
     let user = allUsers.find(u => 
       u.userId.toLowerCase() === cleanId || 
       u.email.toLowerCase() === cleanId || 
@@ -186,7 +357,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else if (expectedMode === 'sekolah') {
         // Find by partial school name or city or code
-        user = allUsers.find(u => u.akses !== 'Full Akses' && (
+        user = allUsers.find(u => u.role !== 'Guru Mitra' && u.akses !== 'Full Akses' && (
           u.nama.toLowerCase().includes(cleanId) ||
           cleanId.includes(u.nama.toLowerCase()) ||
           u.email.toLowerCase().includes(cleanId) ||
@@ -215,13 +386,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { 
         success: false, 
         message: customPass 
-          ? 'Kata sandi tidak cocok dengan sandi sekolah yang telah dibuat. (Atau gunakan sandi sementara admin123)' 
+          ? 'Kata sandi tidak cocok dengan sandi yang telah dibuat. (Atau gunakan sandi sementara admin123)' 
           : 'Kata sandi salah. Gunakan sandi default "admin123" atau buat kata sandi baru.' 
       };
     }
 
     if (expectedMode === 'admin' && user.akses !== 'Full Akses') {
-      return { success: false, message: 'Akun ini bukan Administrator Mitra Office. Silakan beralih ke tab Sekolah Mitra.' };
+      return { success: false, message: 'Akun ini bukan Administrator Mitra Office. Silakan beralih ke tab Sekolah Mitra atau Guru Mitra.' };
     }
 
     if (expectedMode === 'sekolah' && user.akses === 'Full Akses') {
@@ -233,6 +404,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchUser = (userId: string) => {
+    // Hanya administrator yang dapat mengganti ke akun lainnya
+    if (!isAdmin) {
+      console.warn('Pergantian akun hanya diizinkan untuk Administrator.');
+      return;
+    }
     const found = allUsers.find(u => u.userId === userId || u.sekolahId === userId);
     if (found) {
       setCurrentUser(found);
@@ -254,7 +430,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUser,
       isAdmin,
       isSekolahMitra,
+      isGuruMitra,
+      isDemoMitra,
+      loginDemo,
+      guruList,
       login,
+      registerGuru,
       switchUser,
       logout,
       allUsers,
@@ -267,7 +448,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');

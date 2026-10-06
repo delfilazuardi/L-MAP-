@@ -42,29 +42,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
   // Filter if logged in as school mitra
   const mySchoolId = currentUser?.sekolahId;
+  const isDemoUser = Boolean(currentUser?.isDemo || mySchoolId === 'DEMO-MITRA');
   const currentSchoolData = sekolahList.find(s => s.id === mySchoolId);
   const isPelaporanSchool = !isAdmin && mySchoolId ? isSchoolPelaporanSaja(mySchoolId) : false;
   const obligationInfo = mySchoolId ? getSchoolObligationBadgeInfo(mySchoolId) : null;
 
+  // Real schools list (strictly excluding demo dummy school from admin metrics)
+  const realSchools = sekolahList.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA');
+
   const filteredLaporan = isAdmin 
-    ? laporanList 
+    ? laporanList.filter(l => !l.isDemo && l.sekolahId !== 'DEMO-MITRA' && (l as any).mitraId !== 'DEMO-MITRA')
     : laporanList.filter(l => l.sekolahId === mySchoolId || (l as any).mitraId === mySchoolId);
   const filteredInvoices = isAdmin 
-    ? invoiceList 
+    ? invoiceList.filter(i => !i.isDemo && i.mitraId !== 'DEMO-MITRA' && (i as any).sekolahId !== 'DEMO-MITRA')
     : invoiceList.filter(i => i.mitraId === mySchoolId || (i as any).sekolahId === mySchoolId);
   const filteredPembayaran = isAdmin 
-    ? pembayaranList 
+    ? pembayaranList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA' && (p as any).sekolahId !== 'DEMO-MITRA')
     : pembayaranList.filter(p => p.mitraId === mySchoolId || (p as any).sekolahId === mySchoolId);
   const filteredPermintaan = isAdmin 
-    ? permintaanList 
+    ? permintaanList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA' && (p as any).sekolahId !== 'DEMO-MITRA')
     : permintaanList.filter(p => p.mitraId === mySchoolId || (p as any).sekolahId === mySchoolId);
   const filteredPerf = isAdmin 
-    ? performanceList 
+    ? performanceList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA')
     : performanceList.filter(p => p.mitraId === mySchoolId || (p as any).sekolahId === mySchoolId);
 
-  // Statistics
+  // Statistics (strictly isolated so demo never affects real totals)
   const totalSiswa = isAdmin 
-    ? sekolahList.reduce((acc, s) => acc + s.jumlahSiswa, 0)
+    ? realSchools.reduce((acc, s) => acc + s.jumlahSiswa, 0)
     : (currentSchoolData?.jumlahSiswa || 0);
 
   const totalUnpaidNominal = isPelaporanSchool
@@ -75,13 +79,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         .reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
 
   const pendingLaporanCount = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
-  const approvedLaporanCount = filteredLaporan.filter(l => l.status === 'Disetujui').length;
+  const approvedLaporanCount = filteredLaporan.filter(l => l.status === 'Disetujui' || l.status === 'Diterima').length;
   const pendingPaymentCount = filteredPembayaran.filter(p => p.status === 'Menunggu Verifikasi').length;
-  const upcomingEventsCount = eventList.filter(e => e.status === 'Direncanakan' || e.status === 'Berjalan').length;
+  
+  const effectiveEvents = isAdmin 
+    ? eventList.filter(e => !e.isDemo)
+    : eventList.filter(e => e.isDemo || e.sekolahId === mySchoolId || e.mitra === 'Semua Sekolah Mitra');
+  const upcomingEventsCount = effectiveEvents.filter(e => e.status === 'Direncanakan' || e.status === 'Berjalan').length;
   const activeRequestsCount = filteredPermintaan.filter(r => r.status === 'Diajukan' || r.status === 'Diproses' || r.status === 'Dikirim').length;
 
-  const avgMenDaki = performanceList.length > 0 
-    ? (performanceList.reduce((acc, p) => acc + p.totalSkor, 0) / performanceList.length).toFixed(1)
+  const realPerformanceList = performanceList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA');
+  const avgMenDaki = realPerformanceList.length > 0 
+    ? (realPerformanceList.reduce((acc, p) => acc + p.totalSkor, 0) / realPerformanceList.length).toFixed(1)
     : '0.0';
 
   const myMenDaki = filteredPerf.length > 0

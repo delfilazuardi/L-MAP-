@@ -88,6 +88,9 @@ export const PengaturanView: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      return;
+    }
     setIsSubmitting(true);
     
     // Save to SettingsContext
@@ -101,6 +104,7 @@ export const PengaturanView: React.FC = () => {
   };
 
   const handleResetAll = () => {
+    if (!isAdmin) return;
     if (window.confirm('Apakah Anda yakin ingin mengembalikan seluruh pengaturan ke konfigurasi default pabrik?')) {
       resetSettings();
       setSaveSuccessMsg('Pengaturan sistem berhasil dikembalikan ke standar awal.');
@@ -109,6 +113,25 @@ export const PengaturanView: React.FC = () => {
       }, 3500);
     }
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-xl mx-auto py-12 px-4">
+        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto shadow-inner">
+            <ShieldCheck size={32} />
+          </div>
+          <h2 className="text-xl font-black text-slate-900">Akses Pengaturan Dibatasi</h2>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Pengaturan sistem, logo lembaga, bahasa antarmuka, dan konfigurasi platform <strong>hanya dapat diubah oleh Administrator L-MAP</strong>.
+          </p>
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-medium">
+            Akun Anda saat ini masuk sebagai <strong className="text-slate-800">{currentUser?.nama || 'Pengguna Mitra'}</strong> ({currentUser?.role || 'Akses Terbatas'}).
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-16">

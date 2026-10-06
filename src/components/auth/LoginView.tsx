@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { 
   ShieldCheck, 
-  Building2, 
+  Building2,
+  GraduationCap, 
   Lock, 
   User, 
   CheckCircle2, 
@@ -20,18 +21,23 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { INITIAL_SEKOLAH } from '../../lib/initialData';
+import { DEMO_SEKOLAH, DEMO_SEKOLAH_ID } from '../../lib/demoData';
 import { LMapLogo } from '../common/LMapLogo';
 
 export const LoginView: React.FC = () => {
-  const { login, allUsers, updatePassword, resetPassword, hasCustomPassword } = useAuth();
+  const { login, loginDemo, allUsers, updatePassword, resetPassword, hasCustomPassword, guruList } = useAuth();
   const { sekolahList } = useData();
   
-  // Tab: 'admin' or 'sekolah'
-  const [activeTab, setActiveTab] = useState<'admin' | 'sekolah'>('admin');
+  // Tab: 'admin' | 'sekolah' | 'guru'
+  const [activeTab, setActiveTab] = useState<'admin' | 'sekolah' | 'guru'>('admin');
   
-  // Available schools from live state (matching tab administrator)
+  // Available schools from live state (including demo school for sandbox preview)
   const availableSchools = useMemo(() => {
-    return (sekolahList && sekolahList.length > 0) ? sekolahList : INITIAL_SEKOLAH;
+    const list = (sekolahList && sekolahList.length > 0) ? sekolahList : INITIAL_SEKOLAH;
+    if (!list.some(s => s.id === DEMO_SEKOLAH_ID)) {
+      return [...list, DEMO_SEKOLAH];
+    }
+    return list;
   }, [sekolahList]);
   
   // Admin form state
@@ -45,6 +51,11 @@ export const LoginView: React.FC = () => {
   const [showSchoolPass, setShowSchoolPass] = useState(false);
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
   const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
+
+  // Guru form state (Hanya Sekolah dan Kata Sandi Default)
+  const [selectedGuruSchoolId, setSelectedGuruSchoolId] = useState<string>('MO004'); // default Al-Falah Depok
+  const [guruPassword, setGuruPassword] = useState<string>('guru123');
+  const [showGuruPass, setShowGuruPass] = useState<boolean>(false);
 
   // Messages
   const [errorMsg, setErrorMsg] = useState('');
@@ -74,6 +85,11 @@ export const LoginView: React.FC = () => {
     return availableSchools.find(s => s.id === selectedSchoolId) || availableSchools[0];
   }, [availableSchools, selectedSchoolId]);
 
+  // Selected school object for Guru tab
+  const currentGuruSchool = useMemo(() => {
+    return availableSchools.find(s => s.id === selectedGuruSchoolId) || availableSchools[0];
+  }, [availableSchools, selectedGuruSchoolId]);
+
   // Filtered schools for list
   const filteredSchools = useMemo(() => {
     return availableSchools.filter(s => 
@@ -83,7 +99,7 @@ export const LoginView: React.FC = () => {
     );
   }, [availableSchools, schoolSearchQuery]);
 
-  const handleTabChange = (tab: 'admin' | 'sekolah') => {
+  const handleTabChange = (tab: 'admin' | 'sekolah' | 'guru') => {
     setActiveTab(tab);
     setErrorMsg('');
     setSuccessMsg('');
@@ -121,6 +137,25 @@ export const LoginView: React.FC = () => {
       setErrorMsg(res.message || 'Login Sekolah Mitra gagal.');
     } else {
       setSuccessMsg(`Login berhasil sebagai ${currentSchool.namaSekolah}!`);
+    }
+  };
+
+  const handleGuruLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!selectedGuruSchoolId) {
+      setErrorMsg('Silakan pilih salah satu sekolah mitra.');
+      return;
+    }
+
+    const passToUse = guruPassword.trim() || 'guru123';
+    const res = login(selectedGuruSchoolId, passToUse, 'guru', { sekolahId: selectedGuruSchoolId });
+    if (!res.success) {
+      setErrorMsg(res.message || 'Login Guru Mitra gagal.');
+    } else {
+      setSuccessMsg(`Login berhasil sebagai Guru ${currentGuruSchool.namaSekolah}!`);
     }
   };
 
@@ -224,34 +259,48 @@ export const LoginView: React.FC = () => {
 
           <div className="p-6 sm:p-7 space-y-6">
 
-            {/* Segmented Switcher (Administrator vs Sekolah Mitra) */}
-            <div className="p-1 bg-[#060c1c] rounded-2xl border border-slate-800/80 grid grid-cols-2 gap-1">
+            {/* Segmented Switcher (Administrator vs Sekolah Mitra vs Guru Mitra) */}
+            <div className="p-1 bg-[#060c1c] rounded-2xl border border-slate-800/80 grid grid-cols-3 gap-1">
               <button
                 id="login-tab-admin"
                 type="button"
                 onClick={() => handleTabChange('admin')}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'admin'
                     ? 'bg-[#0f1b38] border border-amber-500/70 text-amber-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                <ShieldCheck size={16} className={activeTab === 'admin' ? 'text-amber-400' : 'text-slate-400'} />
-                <span>Administrator</span>
+                <ShieldCheck size={15} className={activeTab === 'admin' ? 'text-amber-400' : 'text-slate-400'} />
+                <span className="truncate">Admin</span>
               </button>
 
               <button
                 id="login-tab-sekolah"
                 type="button"
                 onClick={() => handleTabChange('sekolah')}
-                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'sekolah'
                     ? 'bg-[#0f1b38] border border-amber-500/70 text-amber-400 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                <Building2 size={16} className={activeTab === 'sekolah' ? 'text-amber-400' : 'text-slate-400'} />
-                <span>Sekolah Mitra</span>
+                <Building2 size={15} className={activeTab === 'sekolah' ? 'text-amber-400' : 'text-slate-400'} />
+                <span className="truncate">Sekolah</span>
+              </button>
+
+              <button
+                id="login-tab-guru"
+                type="button"
+                onClick={() => handleTabChange('guru')}
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'guru'
+                    ? 'bg-[#0f1b38] border border-purple-500/70 text-purple-300 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                <GraduationCap size={15} className={activeTab === 'guru' ? 'text-purple-300' : 'text-slate-400'} />
+                <span className="truncate">Guru Mitra</span>
               </button>
             </div>
 
@@ -428,6 +477,84 @@ export const LoginView: React.FC = () => {
               </form>
             )}
 
+            {/* TAB: GURU MITRA FORM (HANYA SEKOLAH DAN KATA SANDI DEFAULT) */}
+            {activeTab === 'guru' && (
+              <form onSubmit={handleGuruLogin} className="space-y-4">
+                {/* Access scope banner */}
+                <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-800/40 text-xs text-purple-200/90 leading-relaxed flex items-start gap-2.5">
+                  <GraduationCap size={16} className="text-purple-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-purple-300">Login Guru Mitra</p>
+                    <p className="text-[11px] text-purple-200/75 mt-0.5">
+                      Pilih sekolah mitra asal Anda dan gunakan kata sandi default untuk langsung masuk ke portal.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 1. Pilih Sekolah Asal Guru */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Sekolah Mitra
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="guru-school-select"
+                      value={selectedGuruSchoolId}
+                      onChange={(e) => setSelectedGuruSchoolId(e.target.value)}
+                      className="w-full bg-[#060c1c] border border-slate-800/90 rounded-xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-purple-400 transition cursor-pointer font-medium appearance-none"
+                    >
+                      {availableSchools.map((s) => (
+                        <option key={s.id} value={s.id} className="bg-[#0b1329] text-white">
+                          {s.namaSekolah} ({s.id})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={16} className="text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* 2. Kata Sandi Default */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Kata Sandi Default
+                    </label>
+                    <span className="text-[10px] text-purple-300/80 font-mono">
+                      Default: guru123
+                    </span>
+                  </div>
+                  <div className="bg-[#060c1c] border border-slate-800/90 rounded-xl px-3.5 py-3 flex items-center gap-3 focus-within:border-purple-400/80 transition">
+                    <KeyRound size={18} className="text-slate-500 shrink-0" />
+                    <input
+                      id="guru-password-input"
+                      type={showGuruPass ? 'text' : 'password'}
+                      value={guruPassword}
+                      onChange={(e) => setGuruPassword(e.target.value)}
+                      placeholder="guru123"
+                      className="bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none w-full font-medium"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGuruPass(!showGuruPass)}
+                      className="text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                      title={showGuruPass ? "Sembunyikan sandi" : "Lihat sandi"}
+                    >
+                      {showGuruPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Tombol MASUK */}
+                <button
+                  id="guru-submit-btn"
+                  type="submit"
+                  className="w-full py-3.5 rounded-xl font-black text-white text-sm uppercase tracking-widest bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:brightness-105 active:scale-[0.99] transition shadow-lg shadow-purple-600/30 cursor-pointer mt-2"
+                >
+                  MASUK
+                </button>
+              </form>
+            )}
+
           </div>
         </div>
 
@@ -487,8 +614,13 @@ export const LoginView: React.FC = () => {
                     <option value="anita@lazuardi.sch.id">Anita Rahayu (Ka. Mitra Office)</option>
                   </optgroup>
                   <optgroup label="Sekolah Mitra">
-                    {INITIAL_SEKOLAH.map(s => (
+                    {availableSchools.map(s => (
                       <option key={s.id} value={s.id}>{s.namaSekolah}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Guru Sekolah Mitra">
+                    {(guruList || []).map(g => (
+                      <option key={g.userId} value={g.userId}>{g.nama} ({g.sekolahId})</option>
                     ))}
                   </optgroup>
                 </select>

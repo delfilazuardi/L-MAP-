@@ -7,12 +7,16 @@ import {
   ChevronDown, 
   ShieldCheck, 
   Building,
+  GraduationCap,
   CheckCircle2,
   KeyRound,
   X,
   AlertCircle,
   Sparkles,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Lock,
+  LogOut,
+  Mail
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -118,8 +122,8 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right section: Settings button, Switcher, Profile */}
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Tombol Pengaturan Cepat */}
-        {onOpenSettings && (
+        {/* Tombol Pengaturan Cepat (Hanya Administrator) */}
+        {isAdmin && onOpenSettings && (
           <button
             id="header-settings-button"
             onClick={onOpenSettings}
@@ -137,9 +141,14 @@ export const Header: React.FC<HeaderProps> = ({
             id="user-switch-toggle"
             onClick={() => setShowSwitchDropdown(!showSwitchDropdown)}
             className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 text-left transition bg-white shadow-xs cursor-pointer"
+            title={isAdmin ? "Ganti Akun Pengguna (Khusus Administrator)" : `Profil Akun ${currentUser?.nama || ''}`}
           >
             <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black text-white shadow-xs ${
-              isAdmin ? 'bg-gradient-to-tr from-amber-500 to-orange-600' : 'bg-gradient-to-tr from-sky-500 to-blue-600'
+              isAdmin 
+                ? 'bg-gradient-to-tr from-amber-500 to-orange-600' 
+                : currentUser?.role === 'Guru Mitra'
+                ? 'bg-gradient-to-tr from-purple-500 to-indigo-600'
+                : 'bg-gradient-to-tr from-sky-500 to-blue-600'
             }`}>
               {currentUser?.nama.charAt(0) || 'U'}
             </div>
@@ -164,88 +173,194 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Dropdown Menu */}
           {showSwitchDropdown && (
             <div 
-              className="absolute right-0 mt-2 w-80 bg-white rounded-3xl shadow-2xl border border-slate-200 py-2.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+              className={`absolute right-0 mt-2 bg-white rounded-3xl shadow-2xl border border-slate-200 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ${
+                isAdmin ? 'w-84' : 'w-80 sm:w-88'
+              }`}
             >
-              <div className="px-4 py-2 border-b border-slate-100">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    Sesi Akun Aktif
-                  </p>
+              {/* Header: Sesi Akun Aktif */}
+              <div className="px-4 pb-3 border-b border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
+                    {isAdmin ? (
+                      <>
+                        <ShieldCheck size={13} className="text-amber-500" />
+                        <span>Sesi Administrator</span>
+                      </>
+                    ) : (
+                      <>
+                        <Building size={13} className="text-sky-600" />
+                        <span>Akun Sekolah Aktif</span>
+                      </>
+                    )}
+                  </span>
                   <button
                     onClick={() => {
                       setShowSwitchDropdown(false);
                       setIsChangePassOpen(true);
                     }}
-                    className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <KeyRound size={11} />
                     <span>Ganti Sandi</span>
                   </button>
                 </div>
-                <p className="text-xs font-bold text-slate-800 mt-1">
-                  {currentUser?.nama}
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {currentUser?.email} • {hasCustomPassword(currentUser?.userId || '') ? '✨ Sandi Khusus Aktif' : '🔑 Sandi Default'}
-                </p>
+
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-black text-white shrink-0 shadow-md ${
+                    isAdmin 
+                      ? 'bg-gradient-to-tr from-amber-500 to-orange-600' 
+                      : currentUser?.role === 'Guru Mitra'
+                      ? 'bg-gradient-to-tr from-purple-500 to-indigo-600'
+                      : 'bg-gradient-to-tr from-sky-500 to-blue-600'
+                  }`}>
+                    {isAdmin ? <ShieldCheck size={20} /> : currentUser?.role === 'Guru Mitra' ? <GraduationCap size={20} /> : <Building size={20} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-black text-slate-900 leading-snug truncate">
+                      {currentUser?.nama}
+                    </h4>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-mono font-bold">
+                        {currentUser?.userId}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        isAdmin
+                          ? 'bg-amber-100 text-amber-800'
+                          : currentUser?.role === 'Guru Mitra'
+                          ? 'bg-purple-100 text-purple-800'
+                          : currentUser?.role === 'Sekolah Afiliasi'
+                          ? 'bg-sky-100 text-sky-800'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {currentUser?.role}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-slate-100 text-[11px] space-y-1 text-slate-500">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Mail size={12} className="text-slate-400 shrink-0" />
+                    <span className="truncate">{currentUser?.email || '-'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400">Status Kredensial:</span>
+                    <span className="font-semibold text-slate-700">
+                      {hasCustomPassword(currentUser?.userId || '') ? '✨ Sandi Khusus Aktif' : '🔑 Sandi Bawaan'}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="max-h-64 overflow-y-auto py-1 scrollbar-thin">
-                <div className="px-3 py-1 text-[10px] font-bold text-blue-900 bg-blue-50/70">
-                  Administrator Mitra Office (Full Akses)
-                </div>
-                {allUsers.filter(u => u.akses === 'Full Akses').map(user => (
-                  <button
-                    key={user.userId}
-                    onClick={() => {
-                      switchUser(user.userId);
-                      setShowSwitchDropdown(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-blue-50 text-xs transition cursor-pointer ${
-                      currentUser?.userId === user.userId ? 'bg-blue-100/60 font-bold text-blue-900' : 'text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck size={14} className="text-blue-600" />
-                      <div>
-                        <span className="font-semibold">{user.nama}</span>
-                        <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({user.userId})</span>
-                      </div>
+              {/* JIKA BUKAN ADMINISTRATOR: Hanya melihat akun milik sekolah masing-masing */}
+              {!isAdmin ? (
+                <div className="px-4 py-3 bg-slate-50/70 border-b border-slate-100">
+                  <div className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <Lock size={13} className="text-slate-500" />
+                      <span>Hak Akses Khusus Sekolah</span>
                     </div>
-                    <span className="text-[10px] text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-bold">
-                      {user.role === 'Officer' ? 'Officer' : 'Ka. Mitra'}
-                    </span>
-                  </button>
-                ))}
-
-                <div className="px-3 py-1 text-[10px] font-bold text-sky-900 bg-sky-50/70 mt-1">
-                  Sekolah Mitra & Afiliasi (Akses Terbatas)
-                </div>
-                {allUsers.filter(u => u.akses !== 'Full Akses').map(user => (
-                  <button
-                    key={user.userId}
-                    onClick={() => {
-                      switchUser(user.userId);
-                      setShowSwitchDropdown(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-sky-50 text-xs transition cursor-pointer ${
-                      currentUser?.userId === user.userId ? 'bg-sky-100/60 font-bold text-sky-900' : 'text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Building size={14} className="text-sky-600" />
-                      <div>
-                        <span className="font-medium">{user.nama}</span>
-                        <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({user.userId})</span>
-                      </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Sesi ini terikat khusus untuk <strong>{currentUser?.nama}</strong>. Akses dibatasi pada data dan berkas sekolah mitra Anda.
+                    </p>
+                    <div className="p-2 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[10px] text-blue-900 flex items-start gap-1.5 leading-tight">
+                      <ShieldCheck size={13} className="text-blue-600 shrink-0 mt-0.5" />
+                      <span>Pergantian akun hanya dapat dilakukan oleh Administrator Mitra Office.</span>
                     </div>
-                    <span className="text-[10px] text-slate-500">
-                      {user.role === 'Sekolah Afiliasi' ? 'Afiliasi' : 'Mitra'}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                </div>
+              ) : (
+                /* JIKA ADMINISTRATOR: Tampilkan daftar switcher akun */
+                <div className="max-h-64 overflow-y-auto py-1 scrollbar-thin">
+                  <div className="px-3 py-1 text-[10px] font-bold text-blue-900 bg-blue-50/70 flex items-center justify-between">
+                    <span>Ganti Akun Pengguna (Khusus Admin)</span>
+                    <span className="text-[9px] font-mono text-blue-600 font-bold">Admin Only</span>
+                  </div>
+                  
+                  <div className="px-3 pt-1 text-[9px] uppercase font-bold text-slate-400">
+                    Administrator Mitra Office
+                  </div>
+                  {allUsers.filter(u => u.akses === 'Full Akses').map(user => (
+                    <button
+                      key={user.userId}
+                      onClick={() => {
+                        switchUser(user.userId);
+                        setShowSwitchDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-blue-50 text-xs transition cursor-pointer ${
+                        currentUser?.userId === user.userId ? 'bg-blue-100/60 font-bold text-blue-900' : 'text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck size={14} className="text-blue-600" />
+                        <div>
+                          <span className="font-semibold">{user.nama}</span>
+                          <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({user.userId})</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded font-bold">
+                        {user.role === 'Officer' ? 'Officer' : 'Ka. Mitra'}
+                      </span>
+                    </button>
+                  ))}
 
+                  <div className="px-3 pt-2 text-[9px] uppercase font-bold text-slate-400">
+                    Sekolah Mitra & Afiliasi
+                  </div>
+                  {allUsers.filter(u => u.role === 'Sekolah Mitra' || u.role === 'Sekolah Afiliasi').map(user => (
+                    <button
+                      key={user.userId}
+                      onClick={() => {
+                        switchUser(user.userId);
+                        setShowSwitchDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-sky-50 text-xs transition cursor-pointer ${
+                        currentUser?.userId === user.userId ? 'bg-sky-100/60 font-bold text-sky-900' : 'text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building size={14} className="text-sky-600" />
+                        <div>
+                          <span className="font-medium">{user.nama}</span>
+                          <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({user.userId})</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-500">
+                        {user.role === 'Sekolah Afiliasi' ? 'Afiliasi' : 'Mitra'}
+                      </span>
+                    </button>
+                  ))}
+
+                  <div className="px-3 pt-2 text-[9px] uppercase font-bold text-slate-400">
+                    Guru Sekolah Mitra
+                  </div>
+                  {allUsers.filter(u => u.role === 'Guru Mitra').map(user => (
+                    <button
+                      key={user.userId}
+                      onClick={() => {
+                        switchUser(user.userId);
+                        setShowSwitchDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-purple-50 text-xs transition cursor-pointer ${
+                        currentUser?.userId === user.userId ? 'bg-purple-100/60 font-bold text-purple-900' : 'text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <GraduationCap size={14} className="text-purple-600" />
+                        <div>
+                          <span className="font-medium">{user.nama}</span>
+                          <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({user.sekolahId})</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded font-bold">
+                        {user.mapel || 'Guru Mitra'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Bottom Footer Actions */}
               <div className="px-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
                 <button
                   onClick={() => {
@@ -255,13 +370,14 @@ export const Header: React.FC<HeaderProps> = ({
                   className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <KeyRound size={13} />
-                  <span>Ubah Sandi Akun</span>
+                  <span>Ubah Sandi</span>
                 </button>
                 <button
                   onClick={logout}
-                  className="text-xs text-rose-600 font-bold hover:underline cursor-pointer"
+                  className="text-xs text-rose-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  Keluar / Logout
+                  <LogOut size={13} />
+                  <span>Keluar / Logout</span>
                 </button>
               </div>
             </div>

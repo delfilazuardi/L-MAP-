@@ -90,13 +90,23 @@ export const ProgramMitraView: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Filtered program items
-  const filteredItems = programMitraList.filter(item => {
-    // If Sekolah Mitra, only show their school's submissions
-    if (isSekolahMitra && currentUser?.sekolahId && item.mitraId !== currentUser.sekolahId) {
-      return false;
-    }
+  const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
 
+  const baseProgramList = programMitraList.filter(item => {
+    if (isAdmin) {
+      return !item.isDemo && item.mitraId !== 'DEMO-MITRA';
+    }
+    if (isDemoUser) {
+      return item.isDemo || item.mitraId === 'DEMO-MITRA';
+    }
+    if (isSekolahMitra && currentUser?.sekolahId) {
+      return !item.isDemo && item.mitraId === currentUser.sekolahId;
+    }
+    return true;
+  });
+
+  // Filtered program items
+  const filteredItems = baseProgramList.filter(item => {
     // Filter by subtab
     if (activeSubTab === 'visitasi' && item.jenis !== 'Visitasi') return false;
     if (activeSubTab === 'magang' && item.jenis !== 'Magang') return false;
@@ -342,9 +352,9 @@ export const ProgramMitraView: React.FC = () => {
   };
 
   // Stats calculation
-  const totalVisitasi = programMitraList.filter(p => p.jenis === 'Visitasi').length;
-  const totalMagang = programMitraList.filter(p => p.jenis === 'Magang').length;
-  const activeCount = programMitraList.filter(p => p.status === 'Sedang Berjalan' || p.status === 'Disetujui').length;
+  const totalVisitasi = baseProgramList.filter(p => p.jenis === 'Visitasi').length;
+  const totalMagang = baseProgramList.filter(p => p.jenis === 'Magang').length;
+  const activeCount = baseProgramList.filter(p => p.status === 'Sedang Berjalan' || p.status === 'Disetujui').length;
 
   return (
     <div className="space-y-6">

@@ -9,6 +9,7 @@ import {
   X, 
   FileSpreadsheet,
   CalendarDays,
+  Sparkles,
   Eye
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -129,6 +130,23 @@ export const LaporanBulananView: React.FC = () => {
     }
   };
 
+  const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
+
+  // Strictly isolate schools and reports for RangkumanKepatuhanSekolah
+  const effectiveSekolahList = useMemo(() => {
+    if (isDemoUser) {
+      return sekolahList.filter(s => s.id === 'DEMO-MITRA');
+    }
+    return sekolahList.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA');
+  }, [sekolahList, isDemoUser]);
+
+  const effectiveLaporanList = useMemo(() => {
+    if (isDemoUser) {
+      return laporanList.filter(l => l.isDemo || l.mitraId === 'DEMO-MITRA' || (l as any).sekolahId === 'DEMO-MITRA');
+    }
+    return laporanList.filter(l => !l.isDemo && l.mitraId !== 'DEMO-MITRA' && (l as any).sekolahId !== 'DEMO-MITRA');
+  }, [laporanList, isDemoUser]);
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -189,8 +207,8 @@ export const LaporanBulananView: React.FC = () => {
 
       {/* Rangkuman & Matriks Kepatuhan (Peringkat Top TA & Matriks 12 Bulan) */}
       <RangkumanKepatuhanSekolah
-        sekolahList={sekolahList}
-        laporanList={laporanList}
+        sekolahList={effectiveSekolahList}
+        laporanList={effectiveLaporanList}
         selectedTahunAjaran={selectedTahunAjaran}
         onChangeTahunAjaran={setSelectedTahunAjaran}
         onOpenCreateModal={(sekolahId, bulan) => handleOpenCreateModal(sekolahId, bulan)}

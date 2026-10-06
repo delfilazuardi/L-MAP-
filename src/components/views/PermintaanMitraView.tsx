@@ -12,7 +12,8 @@ import {
   FileSpreadsheet,
   Send,
   Edit3,
-  Trash2
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -44,8 +45,10 @@ export const PermintaanMitraView: React.FC = () => {
   const [newResi, setNewResi] = useState('');
   const [newCatatan, setNewCatatan] = useState('');
 
+  const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
+
   const baseList = isAdmin 
-    ? permintaanList 
+    ? permintaanList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA') 
     : permintaanList.filter(p => p.mitraId === currentUser?.sekolahId);
 
   const filtered = baseList.filter(p => {
@@ -329,7 +332,7 @@ export const PermintaanMitraView: React.FC = () => {
                     onChange={(e) => setFormMitraId(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   >
-                    {sekolahList.map(s => (
+                    {sekolahList.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA').map(s => (
                       <option key={s.id} value={s.id}>{s.namaSekolah}</option>
                     ))}
                   </select>

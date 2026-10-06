@@ -18,7 +18,8 @@ import {
   X,
   Sparkles,
   Briefcase,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  GraduationCap
 } from 'lucide-react';
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -38,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen, 
   onClose 
 }) => {
-  const { currentUser, isAdmin, isSekolahMitra, logout } = useAuth();
+  const { currentUser, isAdmin, isSekolahMitra, isGuruMitra, logout } = useAuth();
   const { laporanList, invoiceList, permintaanList, pembayaranList, programMitraList } = useData();
   const { settings } = useSettings();
 
@@ -164,11 +165,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     'program-mitra',
     'data-mitra',
     'template',
-    'pengaturan',
+  ];
+
+  // Specific tabs allowed for Guru Mitra per requirement:
+  // "tetapi aksesnya sangat terbatas hanya event tracker, program mitra, data mitra dan tempate & berkas saja"
+  const allowedTabsForGuru: ActiveNavTab[] = [
+    'event-tracker',
+    'program-mitra',
+    'data-mitra',
+    'template',
   ];
 
   const navItems = isAdmin 
     ? allNavItems 
+    : isGuruMitra
+    ? allNavItems.filter(item => allowedTabsForGuru.includes(item.id))
     : allNavItems.filter(item => allowedTabsForSchool.includes(item.id));
 
   return (
@@ -235,9 +246,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shadow-md shrink-0 ${
               isAdmin 
                 ? 'bg-gradient-to-tr from-amber-500 to-orange-500 text-slate-950 shadow-amber-500/20' 
+                : isGuruMitra
+                ? 'bg-gradient-to-tr from-purple-500 to-indigo-600 text-white shadow-purple-500/20'
                 : 'bg-gradient-to-tr from-sky-400 to-blue-600 text-white shadow-blue-500/20'
             }`}>
-              {isAdmin ? <ShieldCheck size={18} /> : <Building2 size={18} />}
+              {isAdmin ? <ShieldCheck size={18} /> : isGuruMitra ? <GraduationCap size={18} /> : <Building2 size={18} />}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate tracking-tight">
@@ -249,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <p className="text-[10px] text-blue-200/80 truncate font-medium">
-                  {currentUser?.role || 'Guest'}
+                  {isGuruMitra ? (currentUser?.mapel ? `Guru • ${currentUser.mapel}` : 'Guru Sekolah Mitra') : (currentUser?.role || 'Guest')}
                 </p>
               </div>
             </div>
@@ -259,9 +272,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className={`font-bold px-2 py-0.5 rounded-md text-[10px] tracking-wide ${
               isAdmin 
                 ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' 
+                : isGuruMitra
+                ? 'bg-purple-400/20 text-purple-300 border border-purple-400/30'
                 : 'bg-sky-400/20 text-sky-300 border border-sky-400/30'
             }`}>
-              {currentUser?.akses || 'Akses Terbatas'}
+              {isGuruMitra ? 'Akses Terbatas Guru' : (currentUser?.akses || 'Akses Terbatas')}
             </span>
           </div>
         </div>

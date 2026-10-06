@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   CalendarDays, 
   Plus, 
@@ -38,8 +38,17 @@ export const DEFAULT_EVENT_CATEGORIES: string[] = [
 const CATEGORIES_STORAGE_KEY = 'lmap_event_categories';
 
 export const EventTrackerView: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, currentUser } = useAuth();
   const { eventList, addEvent, updateEvent, deleteEvent } = useData();
+
+  const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
+
+  const baseEventList = useMemo(() => {
+    if (isDemoUser) {
+      return eventList.filter(evt => evt.isDemo || evt.sekolahId === 'DEMO-MITRA' || evt.mitra === 'Semua Sekolah Mitra');
+    }
+    return eventList.filter(evt => !evt.isDemo && evt.sekolahId !== 'DEMO-MITRA');
+  }, [eventList, isDemoUser]);
 
   // Dynamic Categories State
   const [categories, setCategories] = useState<string[]>(() => {
@@ -110,7 +119,7 @@ export const EventTrackerView: React.FC = () => {
   const [flyerInputMode, setFlyerInputMode] = useState<'upload' | 'url'>('upload');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const filtered = eventList.filter(evt => {
+  const filtered = baseEventList.filter(evt => {
     const matchSearch = evt.judul.toLowerCase().includes(searchQuery.toLowerCase()) ||
       evt.lokasi.toLowerCase().includes(searchQuery.toLowerCase()) ||
       evt.pic.toLowerCase().includes(searchQuery.toLowerCase()) ||

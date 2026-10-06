@@ -102,25 +102,27 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const [activeAnchor, setActiveAnchor] = useState<string>('all');
 
   // Base list filtered by current user school if not admin
+  const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
+
   const baseInvoices = useMemo(() => {
     return isAdmin 
-      ? invoiceList 
+      ? invoiceList.filter(i => !i.isDemo && i.mitraId !== 'DEMO-MITRA') 
       : invoiceList.filter(i => i.mitraId === currentUser?.sekolahId);
   }, [isAdmin, invoiceList, currentUser]);
 
   const basePayments = useMemo(() => {
     return isAdmin 
-      ? pembayaranList 
+      ? pembayaranList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA') 
       : pembayaranList.filter(p => p.mitraId === currentUser?.sekolahId);
   }, [isAdmin, pembayaranList, currentUser]);
 
-  // List of Sekolah Mitra vs Sekolah Afiliasi (3 Sekolah Khusus)
+  // List of Sekolah Mitra vs Sekolah Afiliasi (3 Sekolah Khusus) - strictly exclude demo school from production billing list
   const mitraSekolahList = useMemo(() => {
-    return sekolahList.filter(s => !isSekolahAfiliasiTab(s.id || s.namaSekolah));
+    return sekolahList.filter(s => !isSekolahAfiliasiTab(s.id || s.namaSekolah) && !s.isDemo && s.id !== 'DEMO-MITRA');
   }, [sekolahList]);
 
   const afiliasiSekolahList = useMemo(() => {
-    return sekolahList.filter(s => isSekolahAfiliasiTab(s.id || s.namaSekolah));
+    return sekolahList.filter(s => isSekolahAfiliasiTab(s.id || s.namaSekolah) && !s.isDemo && s.id !== 'DEMO-MITRA');
   }, [sekolahList]);
 
   const availableSchoolsForFilter = useMemo(() => {

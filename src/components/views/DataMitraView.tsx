@@ -49,7 +49,7 @@ export const DataMitraView: React.FC = () => {
 
   const mySchoolId = currentUser?.sekolahId || currentUser?.userId;
   const baseList = isAdmin
-    ? sekolahList
+    ? sekolahList.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA')
     : sekolahList.filter(s => s.id === mySchoolId || s.kodeMitra === mySchoolId || (currentUser?.nama && s.namaSekolah.toLowerCase().includes(currentUser.nama.toLowerCase())));
 
   const filtered = baseList.filter(s => {
