@@ -41,7 +41,9 @@ export const ProgramMitraView: React.FC = () => {
     addProgramMitra, 
     updateProgramMitra, 
     deleteProgramMitra,
-    updateProgramMitraTemplate 
+    addProgramMitraTemplate,
+    updateProgramMitraTemplate,
+    deleteProgramMitraTemplate
   } = useData();
 
   // Navigation Subtabs
@@ -56,6 +58,7 @@ export const ProgramMitraView: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<ProgramMitraItem | null>(null);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ProgramMitraTemplate | null>(null);
+  const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<ProgramMitraTemplate | null>(null);
   const [reviewTarget, setReviewTarget] = useState<ProgramMitraItem | null>(null);
 
   // Form State
@@ -80,6 +83,8 @@ export const ProgramMitraView: React.FC = () => {
   const [formFileType, setFormFileType] = useState('');
 
   // Template Form State
+  const [templateJenis, setTemplateJenis] = useState<ProgramMitraJenis>('Visitasi');
+  const [templateTipeFormat, setTemplateTipeFormat] = useState<'Docs' | 'Sheet' | 'PDF' | 'Canva'>('Docs');
   const [templateNama, setTemplateNama] = useState('');
   const [templateDeskripsi, setTemplateDeskripsi] = useState('');
   const [templateLink, setTemplateLink] = useState('');
@@ -276,8 +281,20 @@ export const ProgramMitraView: React.FC = () => {
     setReviewTarget(null);
   };
 
+  const handleOpenAddTemplate = (defaultJenis?: ProgramMitraJenis) => {
+    setEditingTemplate(null);
+    setTemplateJenis(defaultJenis || (activeSubTab === 'magang' ? 'Magang' : 'Visitasi'));
+    setTemplateTipeFormat('Docs');
+    setTemplateNama('');
+    setTemplateDeskripsi('');
+    setTemplateLink('');
+    setIsTemplateModalOpen(true);
+  };
+
   const handleOpenEditTemplate = (tmpl: ProgramMitraTemplate) => {
     setEditingTemplate(tmpl);
+    setTemplateJenis(tmpl.jenis);
+    setTemplateTipeFormat(tmpl.tipeFormat);
     setTemplateNama(tmpl.nama);
     setTemplateDeskripsi(tmpl.deskripsi);
     setTemplateLink(tmpl.linkTemplate);
@@ -286,14 +303,26 @@ export const ProgramMitraView: React.FC = () => {
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTemplate) return;
+    if (!templateNama.trim() || !templateLink.trim()) return;
 
-    await updateProgramMitraTemplate({
-      ...editingTemplate,
-      nama: templateNama,
-      deskripsi: templateDeskripsi,
-      linkTemplate: templateLink,
-    });
+    if (editingTemplate) {
+      await updateProgramMitraTemplate({
+        ...editingTemplate,
+        jenis: templateJenis,
+        tipeFormat: templateTipeFormat,
+        nama: templateNama.trim(),
+        deskripsi: templateDeskripsi.trim(),
+        linkTemplate: templateLink.trim(),
+      });
+    } else {
+      await addProgramMitraTemplate({
+        jenis: templateJenis,
+        tipeFormat: templateTipeFormat,
+        nama: templateNama.trim(),
+        deskripsi: templateDeskripsi.trim(),
+        linkTemplate: templateLink.trim(),
+      });
+    }
 
     setIsTemplateModalOpen(false);
     setEditingTemplate(null);
@@ -510,18 +539,31 @@ export const ProgramMitraView: React.FC = () => {
             </h3>
           </div>
 
-          <button
-            onClick={() => setActiveSubTab('template')}
-            className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-xs transition flex items-center gap-1.5 cursor-pointer self-start md:self-auto border border-white/10"
-          >
-            <span>Lihat Semua Template</span>
-            <ArrowRight size={13} />
-          </button>
+          <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleOpenAddTemplate()}
+                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Tambah Template</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('template')}
+              className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-xs transition flex items-center gap-1.5 cursor-pointer border border-white/10"
+            >
+              <span>Lihat Semua Template ({filteredTemplates.length})</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
         </div>
 
         {/* Template Grid Preview */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          {filteredTemplates.slice(0, 4).map(tmpl => (
+          {filteredTemplates.map(tmpl => (
             <div 
               key={tmpl.id} 
               className="bg-white/10 hover:bg-white/15 p-3.5 rounded-2xl border border-white/10 transition flex flex-col justify-between group"
@@ -555,13 +597,24 @@ export const ProgramMitraView: React.FC = () => {
                 </a>
 
                 {isAdmin && (
-                  <button
-                    onClick={() => handleOpenEditTemplate(tmpl)}
-                    className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/10 transition cursor-pointer"
-                    title="Ubah Link Template"
-                  >
-                    <Edit3 size={13} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditTemplate(tmpl)}
+                      className="p-1 text-slate-400 hover:text-white rounded hover:bg-white/10 transition cursor-pointer"
+                      title="Edit Template"
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTemplateTarget(tmpl)}
+                      className="p-1 text-slate-400 hover:text-rose-400 rounded hover:bg-white/10 transition cursor-pointer"
+                      title="Hapus Template"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -572,14 +625,26 @@ export const ProgramMitraView: React.FC = () => {
       {/* VIEW: TEMPLATE CATALOG ONLY */}
       {activeSubTab === 'template' ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-800">
-              Daftar Lengkap Template Resmi ({filteredTemplates.length})
-            </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">
+                Daftar Lengkap Template Resmi ({filteredTemplates.length})
+              </h3>
+              {isAdmin && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Administrator dapat menambahkan template pengajuan baru, mengubah tautan, atau menghapus template
+                </p>
+              )}
+            </div>
             {isAdmin && (
-              <span className="text-xs text-slate-500">
-                Administrator dapat mengubah tautan dan rincian template resmi
-              </span>
+              <button
+                type="button"
+                onClick={() => handleOpenAddTemplate()}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <Plus size={15} />
+                <span>Tambah Template Pengajuan</span>
+              </button>
             )}
           </div>
 
@@ -629,13 +694,24 @@ export const ProgramMitraView: React.FC = () => {
                     </a>
 
                     {isAdmin && (
-                      <button
-                        onClick={() => handleOpenEditTemplate(tmpl)}
-                        className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-                        title="Edit Tautan Template"
-                      >
-                        <Edit3 size={14} />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditTemplate(tmpl)}
+                          className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+                          title="Edit Template"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTemplateTarget(tmpl)}
+                          className="p-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 transition cursor-pointer"
+                          title="Hapus Template"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1300,33 +1376,72 @@ export const ProgramMitraView: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: EDIT LINK TEMPLATE DOKUMEN */}
-      {isTemplateModalOpen && editingTemplate && (
+      {/* MODAL: TAMBAH / EDIT TEMPLATE DOKUMEN */}
+      {isTemplateModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Layers size={18} className="text-purple-600" />
-                <span>Ubah Tautan Template Resmi</span>
+                <span>{editingTemplate ? 'Ubah Template Pengajuan & Laporan' : 'Tambah Template Pengajuan Baru'}</span>
               </h3>
               <button 
                 type="button"
-                onClick={() => setIsTemplateModalOpen(false)} 
+                onClick={() => {
+                  setIsTemplateModalOpen(false);
+                  setEditingTemplate(null);
+                }} 
                 className="p-1 text-slate-400 hover:bg-slate-100 rounded-lg cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveTemplate} className="space-y-3 mt-4 text-xs">
+            <form onSubmit={handleSaveTemplate} className="space-y-3.5 mt-4 text-xs">
+              {/* Jenis Program & Format Dokumen */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Kategori Program <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={templateJenis}
+                    onChange={(e) => setTemplateJenis(e.target.value as ProgramMitraJenis)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  >
+                    <option value="Visitasi">Program Visitasi</option>
+                    <option value="Magang">Program Magang Guru</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tipe Format <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={templateTipeFormat}
+                    onChange={(e) => setTemplateTipeFormat(e.target.value as 'Docs' | 'Sheet' | 'PDF' | 'Canva')}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  >
+                    <option value="Docs">Google Docs</option>
+                    <option value="Sheet">Google Sheet</option>
+                    <option value="PDF">Dokumen PDF</option>
+                    <option value="Canva">Canva Slide</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Nama Template</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Nama Template <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   value={templateNama}
                   onChange={(e) => setTemplateNama(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                  placeholder="Nama template pengajuan atau laporan"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600"
                 />
               </div>
 
@@ -1336,28 +1451,32 @@ export const ProgramMitraView: React.FC = () => {
                   rows={2}
                   value={templateDeskripsi}
                   onChange={(e) => setTemplateDeskripsi(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  placeholder="Penjelasan kegunaan template bagi sekolah mitra"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Tautan Template ({editingTemplate.tipeFormat})
+                  Tautan Template ({templateTipeFormat}) <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="url"
                   required
                   value={templateLink}
                   onChange={(e) => setTemplateLink(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-blue-600 font-mono"
+                  placeholder="https://docs.google.com/... atau tautan dokumen"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-blue-600 font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
                 />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsTemplateModalOpen(false)}
+                  onClick={() => {
+                    setIsTemplateModalOpen(false);
+                    setEditingTemplate(null);
+                  }}
                   className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 cursor-pointer"
                 >
                   Batal
@@ -1366,13 +1485,28 @@ export const ProgramMitraView: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer shadow-md"
                 >
-                  Simpan Tautan
+                  {editingTemplate ? 'Simpan Perubahan' : 'Tambah Template'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Delete Template Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTemplateTarget}
+        onClose={() => setDeleteTemplateTarget(null)}
+        onConfirm={async () => {
+          if (deleteTemplateTarget) {
+            await deleteProgramMitraTemplate(deleteTemplateTarget.id);
+          }
+        }}
+        title="Hapus Template Program Mitra"
+        message="Apakah Anda yakin ingin menghapus template pengajuan ini dari daftar template resmi?"
+        itemName={deleteTemplateTarget ? `${deleteTemplateTarget.nama} (${deleteTemplateTarget.jenis})` : ''}
+        confirmLabel="Hapus Template"
+      />
 
       {/* Delete Confirmation Modal */}
       <ConfirmDeleteModal

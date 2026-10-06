@@ -17,8 +17,13 @@ export interface UserAccount {
   akses: UserAccess;
   status: 'Aktif' | 'Nonaktif';
   sekolahId?: string; // Tautan ke ID mitra jika role Sekolah Mitra / Afiliasi / Guru Mitra
+  namaSekolah?: string; // Nama Sekolah Mitra asal
   mapel?: string; // Mata pelajaran / Bidang keahlian (khusus Guru Mitra)
   nip?: string; // Nomor Induk Pegawai / Guru
+  photoUrl?: string; // Foto profil akun Google
+  googleUid?: string; // UID akun Google
+  lastLoginAt?: string; // Waktu login terakhir
+  loginCount?: number; // Jumlah frekuensi login
   isDemo?: boolean; // Khusus akun demo terisolasi
 }
 
@@ -332,6 +337,53 @@ export interface PerformanceMenDAKI {
 
 
 export type PerformanceMendaki = PerformanceMenDAKI;
+
+export interface MendakiFormDefinition {
+  id: string; // e.g. 'FORM-MENDAKI-01'
+  judulForm: string;
+  deskripsiForm: string;
+  kategoriEvent: string; // 'Semua Kategori' atau kategori spesifik
+  eventKegiatanDefault?: string;
+  temaTopikDefault?: string;
+  daftarKategoriEvent: string[];
+  labelEmail: string;
+  labelNama: string;
+  labelNamaSekolah: string;
+  labelEventKegiatan: string;
+  labelTemaTopik: string;
+  labelDrop: string;
+  labelAdd: string;
+  labelKeep: string;
+  labelImprove: string;
+  labelHalDisukai: string;
+  labelRating: string;
+  status: 'Aktif' | 'Ditutup';
+  createdAt: string;
+  updatedAt?: string;
+  isDemo?: boolean;
+}
+
+export interface MendakiFormSubmission {
+  id: string; // e.g. 'SUB-MENDAKI-001'
+  formId: string;
+  judulForm?: string;
+  email: string;
+  nama: string;
+  mitraId: string;
+  namaSekolah: string;
+  kategoriEvent: string;
+  eventKegiatan: string;
+  temaTopik: string;
+  drop: string;
+  add: string;
+  keep: string;
+  improve: string;
+  halDisukai: string;
+  rating: number; // 1 - 5
+  pengisiRole?: 'Administrator' | 'Sekolah Mitra' | 'Guru Mitra';
+  tanggalIsi: string;
+  isDemo?: boolean;
+}
 
 export type ProgramMitraJenis = 'Visitasi' | 'Magang';
 export type ProgramMitraStatus = 'Diajukan' | 'Disetujui' | 'Sedang Berjalan' | 'Selesai' | 'Perlu Revisi';

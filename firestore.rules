@@ -56,6 +56,36 @@ service cloud.firestore {
     match /performance_mendaki/{evalId} {
       allow read, write: if true;
     }
+
+    // Collection: master_kpi_standar
+    match /master_kpi_standar/{kpiId} {
+      allow read, write: if true;
+    }
+
+    // Collection: mendaki_forms
+    match /mendaki_forms/{formId} {
+      allow read, write: if true;
+    }
+
+    // Collection: mendaki_submissions
+    match /mendaki_submissions/{subId} {
+      allow read, write: if true;
+    }
+
+    // Collection: program_mitra
+    match /program_mitra/{programId} {
+      allow read, write: if true;
+    }
+
+    // Collection: program_mitra_templates
+    match /program_mitra_templates/{tplId} {
+      allow read, write: if true;
+    }
+
+    // Collection: guru_mitra (Log & data akun Google Guru Mitra yang login)
+    match /guru_mitra/{guruId} {
+      allow read, write: if true;
+    }
   }
 }
 

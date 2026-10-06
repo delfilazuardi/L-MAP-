@@ -21,10 +21,12 @@ import { SekolahMitra } from '../../types';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const DataMitraView: React.FC = () => {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, guruList, deleteGuruAccount } = useAuth();
   const { sekolahList, addSekolah, updateSekolah, deleteSekolah } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [guruSearchQuery, setGuruSearchQuery] = useState('');
+  const [guruSchoolFilter, setGuruSchoolFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSekolah, setEditingSekolah] = useState<SekolahMitra | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -348,6 +350,172 @@ export const DataMitraView: React.FC = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* SECTION: DATA AKUN GOOGLE GURU MITRA YANG LOGIN */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mt-6">
+        <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
+              <GraduationCap size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-white">
+                  Data Akun Google Guru Mitra yang Login
+                </h3>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                  {(isAdmin
+                    ? guruList
+                    : guruList.filter(g => g.sekolahId === mySchoolId)
+                  ).length} Akun Terdata
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Rekapitulasi akun Google dan asal sekolah guru mitra yang masuk ke portal L-MAP
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={guruSearchQuery}
+                onChange={(e) => setGuruSearchQuery(e.target.value)}
+                placeholder="Cari nama / email Google..."
+                className="pl-8 pr-3 py-1.5 rounded-xl bg-white/10 border border-white/15 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-purple-400"
+              />
+            </div>
+
+            {isAdmin && (
+              <select
+                value={guruSchoolFilter}
+                onChange={(e) => setGuruSchoolFilter(e.target.value)}
+                className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 text-xs text-white focus:outline-none focus:border-purple-400"
+              >
+                <option value="ALL" className="bg-slate-900 text-white">Semua Sekolah</option>
+                {sekolahList.map(s => (
+                  <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                    {s.namaSekolah}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                <th className="py-3 px-4 w-12 text-center">No</th>
+                <th className="py-3 px-4">Nama Akun Google</th>
+                <th className="py-3 px-4">Email Google</th>
+                <th className="py-3 px-4">Nama Sekolah Mitra</th>
+                <th className="py-3 px-4">Login Terakhir</th>
+                <th className="py-3 px-4 text-center">Frekuensi Login</th>
+                {isAdmin && <th className="py-3 px-4 text-center w-20">Aksi</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(() => {
+                const visibleGurus = (isAdmin
+                  ? guruList.filter(g => guruSchoolFilter === 'ALL' || g.sekolahId === guruSchoolFilter)
+                  : guruList.filter(g => g.sekolahId === mySchoolId)
+                ).filter(g => {
+                  const q = guruSearchQuery.toLowerCase();
+                  if (!q) return true;
+                  const schoolObj = sekolahList.find(s => s.id === g.sekolahId);
+                  const schoolName = g.namaSekolah || schoolObj?.namaSekolah || '';
+                  return (
+                    g.nama.toLowerCase().includes(q) ||
+                    g.email.toLowerCase().includes(q) ||
+                    schoolName.toLowerCase().includes(q)
+                  );
+                });
+
+                if (visibleGurus.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={isAdmin ? 7 : 6} className="py-8 text-center text-slate-400">
+                        Belum ada data akun Google Guru Mitra yang tercatat sesuai filter.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return visibleGurus.map((guru, idx) => {
+                  const schoolObj = sekolahList.find(s => s.id === guru.sekolahId);
+                  const schoolName = guru.namaSekolah || schoolObj?.namaSekolah || guru.sekolahId || '-';
+                  return (
+                    <tr key={guru.userId} className="hover:bg-purple-50/30 transition">
+                      <td className="py-3 px-4 text-center font-mono text-slate-400">{idx + 1}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          {guru.photoUrl ? (
+                            <img
+                              src={guru.photoUrl}
+                              alt={guru.nama}
+                              className="w-7 h-7 rounded-full object-cover border border-purple-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0">
+                              {guru.nama.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-bold text-slate-900">{guru.nama}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{guru.userId}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center gap-1.5 font-medium text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                          <Mail size={12} className="text-blue-600 shrink-0" />
+                          <span>{guru.email}</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-semibold text-slate-800">{schoolName}</span>
+                        {guru.sekolahId && (
+                          <span className="ml-1.5 text-[10px] font-mono text-slate-400">({guru.sekolahId})</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {guru.lastLoginAt ? (
+                          <span className="font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            {guru.lastLoginAt}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">Terdaftar</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="inline-block font-bold text-purple-800 bg-purple-100 px-2.5 py-0.5 rounded-full">
+                          {guru.loginCount || 1}x Login
+                        </span>
+                      </td>
+                      {isAdmin && (
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => deleteGuruAccount(guru.userId)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="Hapus data login guru"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* MODAL: Tambah/Edit Sekolah Mitra */}

@@ -10,14 +10,18 @@ import {
   AdminMitraStaff,
   TemplateDokumen, 
   PerformanceMenDAKI,
+  MendakiFormDefinition,
+  MendakiFormSubmission,
   ProgramMitraItem,
   ProgramMitraTemplate,
+  MasterKpiStandar,
   LaporanStatus,
   PembayaranStatus,
   PermintaanStatus,
   UserAccount,
   SheetPerhitunganData,
 } from '../types';
+import { DAFTAR_15_STANDAR_KPI } from '../data/masterKpiStandar';
 import { 
   INITIAL_SEKOLAH, 
   INITIAL_LAPORAN, 
@@ -29,6 +33,8 @@ import {
   INITIAL_ADMIN_STAFF, 
   INITIAL_TEMPLATES, 
   INITIAL_PERFORMANCE_MENDAKI,
+  INITIAL_MENDAKI_FORMS,
+  INITIAL_MENDAKI_SUBMISSIONS,
   INITIAL_PROGRAM_MITRA,
   INITIAL_PROGRAM_MITRA_TEMPLATES,
 } from '../lib/initialData';
@@ -40,6 +46,7 @@ import {
   DEMO_EVENTS, 
   DEMO_PERMINTAAN, 
   DEMO_PERFORMANCE, 
+  DEMO_MENDAKI_SUBMISSIONS,
   DEMO_PROGRAM_MITRA,
   isDemoEntity,
   DEMO_SEKOLAH_ID
@@ -59,8 +66,11 @@ interface DataContextType {
   adminStaffList: AdminMitraStaff[];
   templateList: TemplateDokumen[];
   performanceList: PerformanceMenDAKI[];
+  mendakiFormList: MendakiFormDefinition[];
+  mendakiSubmissionList: MendakiFormSubmission[];
   programMitraList: ProgramMitraItem[];
   programMitraTemplates: ProgramMitraTemplate[];
+  masterKpiList: MasterKpiStandar[];
   isFirebaseConnected: boolean;
   isSyncing: boolean;
   isLoading: boolean;
@@ -68,6 +78,7 @@ interface DataContextType {
   syncStatusMessage: string;
   
   // Actions
+  saveMasterKpiList: (newList: MasterKpiStandar[]) => Promise<void>;
   addLaporan: (laporan: Omit<LaporanBulanan, 'id' | 'tanggalDiajukan'> & { id?: string }) => Promise<void>;
   updateLaporan: (laporan: LaporanBulanan) => Promise<void>;
   deleteLaporan: (id: string) => Promise<void>;
@@ -103,10 +114,18 @@ interface DataContextType {
   savePerformance: (perf: PerformanceMenDAKI) => Promise<void>;
   updatePerformance: (perf: PerformanceMenDAKI) => Promise<void>;
   deletePerformance: (id: string) => Promise<void>;
+  addMendakiForm: (form: Omit<MendakiFormDefinition, 'id' | 'createdAt'> & { id?: string }) => Promise<void>;
+  updateMendakiForm: (form: MendakiFormDefinition) => Promise<void>;
+  deleteMendakiForm: (id: string) => Promise<void>;
+  addMendakiSubmission: (sub: Omit<MendakiFormSubmission, 'id' | 'tanggalIsi'> & { id?: string }) => Promise<void>;
+  updateMendakiSubmission: (sub: MendakiFormSubmission) => Promise<void>;
+  deleteMendakiSubmission: (id: string) => Promise<void>;
   addProgramMitra: (item: Omit<ProgramMitraItem, 'id' | 'tanggalPengajuan'> & { id?: string }) => Promise<void>;
   updateProgramMitra: (item: ProgramMitraItem) => Promise<void>;
   deleteProgramMitra: (id: string) => Promise<void>;
+  addProgramMitraTemplate: (template: Omit<ProgramMitraTemplate, 'id' | 'diperbarui'> & { id?: string }) => Promise<void>;
   updateProgramMitraTemplate: (template: ProgramMitraTemplate) => Promise<void>;
+  deleteProgramMitraTemplate: (id: string) => Promise<void>;
   syncWithSheetData: (parsedUsers?: UserAccount[]) => Promise<void>;
   bulkImportInvoiceAndPayment: (
     newInvoices: Invoice[],
@@ -132,8 +151,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [adminStaffList, setAdminStaffList] = useState<AdminMitraStaff[]>(INITIAL_ADMIN_STAFF);
   const [templateList, setTemplateList] = useState<TemplateDokumen[]>(INITIAL_TEMPLATES);
   const [performanceList, setPerformanceList] = useState<PerformanceMenDAKI[]>([...INITIAL_PERFORMANCE_MENDAKI, ...DEMO_PERFORMANCE]);
+  const [mendakiFormList, setMendakiFormList] = useState<MendakiFormDefinition[]>(INITIAL_MENDAKI_FORMS);
+  const [mendakiSubmissionList, setMendakiSubmissionList] = useState<MendakiFormSubmission[]>([...INITIAL_MENDAKI_SUBMISSIONS, ...DEMO_MENDAKI_SUBMISSIONS]);
   const [programMitraList, setProgramMitraList] = useState<ProgramMitraItem[]>([...INITIAL_PROGRAM_MITRA, ...DEMO_PROGRAM_MITRA]);
   const [programMitraTemplates, setProgramMitraTemplates] = useState<ProgramMitraTemplate[]>(INITIAL_PROGRAM_MITRA_TEMPLATES);
+  const [masterKpiList, setMasterKpiList] = useState<MasterKpiStandar[]>(DAFTAR_15_STANDAR_KPI);
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -200,6 +222,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               else if (collectionName === 'events') demoFallback = DEMO_EVENTS as unknown as T[];
               else if (collectionName === 'permintaan_mitra') demoFallback = DEMO_PERMINTAAN as unknown as T[];
               else if (collectionName === 'performance_mendaki') demoFallback = DEMO_PERFORMANCE as unknown as T[];
+              else if (collectionName === 'mendaki_submissions') demoFallback = DEMO_MENDAKI_SUBMISSIONS as unknown as T[];
               else if (collectionName === 'program_mitra') demoFallback = DEMO_PROGRAM_MITRA as unknown as T[];
 
               const demoItemsToKeep = prevDemo.length > 0 ? prevDemo : demoFallback;
@@ -236,8 +259,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscribe<AdminMitraStaff>('admin_staff', setAdminStaffList, INITIAL_ADMIN_STAFF);
       subscribe<TemplateDokumen>('templates', setTemplateList, INITIAL_TEMPLATES);
       subscribe<PerformanceMenDAKI>('performance_mendaki', setPerformanceList, INITIAL_PERFORMANCE_MENDAKI);
+      subscribe<MendakiFormDefinition>('mendaki_forms', setMendakiFormList, INITIAL_MENDAKI_FORMS);
+      subscribe<MendakiFormSubmission>('mendaki_submissions', setMendakiSubmissionList, INITIAL_MENDAKI_SUBMISSIONS);
       subscribe<ProgramMitraItem>('program_mitra', setProgramMitraList, INITIAL_PROGRAM_MITRA);
       subscribe<ProgramMitraTemplate>('program_mitra_templates', setProgramMitraTemplates, INITIAL_PROGRAM_MITRA_TEMPLATES);
+      subscribe<MasterKpiStandar>('master_kpi_standar', setMasterKpiList, DAFTAR_15_STANDAR_KPI);
     } catch (error) {
       console.error('Firebase realtime listener initialization error:', error);
     }
@@ -762,6 +788,60 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ==========================================
   // STAFF ACTIVITY & GOOGLE SHEET CRUD
   // ==========================================
+  const saveMasterKpiList = useCallback(async (newList: MasterKpiStandar[]) => {
+    const sorted = [...newList].sort((a, b) => (a.nomor || 0) - (b.nomor || 0));
+    const oldIds = new Set<string>(masterKpiList.map(k => k.id));
+    const newIds = new Set<string>(sorted.map(k => k.id));
+
+    setMasterKpiList(sorted);
+
+    // Delete removed KPI standards from Firestore
+    for (const oldId of oldIds) {
+      if (!newIds.has(oldId)) {
+        const safeOldId = toFirestoreDocId(oldId);
+        await deleteDoc(doc(db, 'master_kpi_standar', safeOldId)).catch(() => {});
+      }
+    }
+
+    // Upsert all current KPI standards to Firestore
+    await Promise.all(
+      sorted.map((item) => {
+        const safeId = toFirestoreDocId(item.id);
+        return setDoc(doc(db, 'master_kpi_standar', safeId), sanitizeForFirestore(item));
+      })
+    );
+
+    // Sync any updated KPI names/programs/descriptions to existing staff activities with matching noKpi
+    const updatedActivities: StaffActivity[] = [];
+    setStaffActivityList(prev =>
+      prev.map(act => {
+        const matchedKpi = sorted.find(k => k.noKpi === act.noKpi);
+        if (matchedKpi && (
+          act.standarKpi !== matchedKpi.namaStandar ||
+          act.programKpi !== matchedKpi.programKpi
+        )) {
+          const syncedAct: StaffActivity = {
+            ...act,
+            standarKpi: matchedKpi.namaStandar,
+            programKpi: matchedKpi.programKpi,
+            penjelasanKpi: matchedKpi.penjelasanKpi,
+          };
+          updatedActivities.push(syncedAct);
+          return syncedAct;
+        }
+        return act;
+      })
+    );
+
+    if (updatedActivities.length > 0) {
+      await Promise.all(
+        updatedActivities.map(act =>
+          setDoc(doc(db, 'staff_activities', toFirestoreDocId(act.id)), sanitizeForFirestore(act))
+        )
+      );
+    }
+  }, [masterKpiList]);
+
   const addStaffActivity = useCallback(async (activityData: Omit<StaffActivity, 'id'> & { id?: string }) => {
     const id = activityData.id || `ACT-${Date.now().toString().slice(-4)}`;
     const newAct: StaffActivity = { ...activityData, id };
@@ -893,6 +973,85 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // ==========================================
+  // MENDAKI FORM & SUBMISSIONS CRUD
+  // ==========================================
+  const addMendakiForm = useCallback(async (formData: Omit<MendakiFormDefinition, 'id' | 'createdAt'> & { id?: string }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const id = formData.id || `FORM-MENDAKI-${Date.now().toString().slice(-4)}`;
+    const newForm: MendakiFormDefinition = {
+      ...formData,
+      id,
+      createdAt: today,
+      updatedAt: today,
+    };
+
+    setMendakiFormList(prev => [newForm, ...prev.filter(f => f.id !== id)]);
+    if (isDemoEntity(newForm)) return;
+
+    const safeId = toFirestoreDocId(id);
+    await setDoc(doc(db, 'mendaki_forms', safeId), sanitizeForFirestore(newForm));
+  }, []);
+
+  const updateMendakiForm = useCallback(async (form: MendakiFormDefinition) => {
+    const today = new Date().toISOString().split('T')[0];
+    const updated: MendakiFormDefinition = {
+      ...form,
+      updatedAt: today,
+    };
+
+    setMendakiFormList(prev => {
+      const exists = prev.some(f => f.id === form.id);
+      return exists ? prev.map(f => f.id === form.id ? updated : f) : [updated, ...prev];
+    });
+    if (isDemoEntity(updated)) return;
+
+    const safeId = toFirestoreDocId(form.id);
+    await setDoc(doc(db, 'mendaki_forms', safeId), sanitizeForFirestore(updated));
+  }, []);
+
+  const deleteMendakiForm = useCallback(async (id: string) => {
+    setMendakiFormList(prev => prev.filter(f => f.id !== id));
+    if (isDemoEntity(id)) return;
+
+    const safeId = toFirestoreDocId(id);
+    await deleteDoc(doc(db, 'mendaki_forms', safeId));
+  }, []);
+
+  const addMendakiSubmission = useCallback(async (subData: Omit<MendakiFormSubmission, 'id' | 'tanggalIsi'> & { id?: string }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const isDemo = Boolean(subData.isDemo || isDemoEntity(subData.mitraId) || isDemoEntity(subData.id));
+    const id = subData.id || (isDemo ? `SUB-DEMO-${Date.now().toString().slice(-4)}` : `SUB-MENDAKI-${Date.now().toString().slice(-5)}`);
+    const newSub: MendakiFormSubmission = {
+      ...subData,
+      id,
+      tanggalIsi: today,
+      isDemo: isDemo || undefined,
+    };
+
+    setMendakiSubmissionList(prev => [newSub, ...prev.filter(s => s.id !== id)]);
+    if (isDemo) return;
+
+    const safeId = toFirestoreDocId(id);
+    await setDoc(doc(db, 'mendaki_submissions', safeId), sanitizeForFirestore(newSub));
+  }, []);
+
+  const updateMendakiSubmission = useCallback(async (sub: MendakiFormSubmission) => {
+    setMendakiSubmissionList(prev => prev.map(s => s.id === sub.id ? sub : s));
+    if (isDemoEntity(sub)) return;
+
+    const safeId = toFirestoreDocId(sub.id);
+    await setDoc(doc(db, 'mendaki_submissions', safeId), sanitizeForFirestore(sub));
+  }, []);
+
+  const deleteMendakiSubmission = useCallback(async (id: string) => {
+    setMendakiSubmissionList(prev => prev.filter(s => s.id !== id));
+    if (isDemoEntity(id)) return;
+
+    const safeId = toFirestoreDocId(id);
+    await deleteDoc(doc(db, 'mendaki_submissions', safeId));
+  }, []);
+
+  // ==========================================
   // PROGRAM MITRA (VISITASI & MAGANG) CRUD
   // ==========================================
   const addProgramMitra = useCallback(async (itemData: Omit<ProgramMitraItem, 'id' | 'tanggalPengajuan'> & { id?: string }) => {
@@ -945,6 +1104,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const addProgramMitraTemplate = useCallback(async (templateData: Omit<ProgramMitraTemplate, 'id' | 'diperbarui'> & { id?: string }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const prefix = templateData.jenis === 'Magang' ? 'TMPL-MG' : 'TMPL-VS';
+    const id = templateData.id || `${prefix}-${Date.now().toString().slice(-4)}`;
+    const newTemplate: ProgramMitraTemplate = {
+      ...templateData,
+      id,
+      diperbarui: today,
+    };
+
+    setProgramMitraTemplates(prev => [...prev.filter(t => t.id !== id), newTemplate]);
+
+    const safeId = toFirestoreDocId(id);
+    await setDoc(doc(db, 'program_mitra_templates', safeId), sanitizeForFirestore(newTemplate));
+  }, []);
+
   const updateProgramMitraTemplate = useCallback(async (template: ProgramMitraTemplate) => {
     const today = new Date().toISOString().split('T')[0];
     const withDate: ProgramMitraTemplate = {
@@ -952,10 +1127,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       diperbarui: today,
     };
 
-    setProgramMitraTemplates(prev => prev.map(t => t.id === template.id ? withDate : t));
+    setProgramMitraTemplates(prev => {
+      const exists = prev.some(t => t.id === template.id);
+      return exists ? prev.map(t => t.id === template.id ? withDate : t) : [...prev, withDate];
+    });
 
     const safeId = toFirestoreDocId(template.id);
     await setDoc(doc(db, 'program_mitra_templates', safeId), sanitizeForFirestore(withDate));
+  }, []);
+
+  const deleteProgramMitraTemplate = useCallback(async (id: string) => {
+    setProgramMitraTemplates(prev => prev.filter(t => t.id !== id));
+
+    const safeId = toFirestoreDocId(id);
+    await deleteDoc(doc(db, 'program_mitra_templates', safeId));
+    if (safeId !== id) {
+      try {
+        await deleteDoc(doc(db, 'program_mitra_templates', id));
+      } catch {
+        // ignore
+      }
+    }
   }, []);
 
   // ==========================================
@@ -1080,13 +1272,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       adminStaffList,
       templateList,
       performanceList,
+      mendakiFormList,
+      mendakiSubmissionList,
       programMitraList,
       programMitraTemplates,
+      masterKpiList: [...masterKpiList].sort((a, b) => (a.nomor || 0) - (b.nomor || 0)),
       isFirebaseConnected,
       isSyncing,
       isLoading,
       lastSyncTime,
       syncStatusMessage,
+      saveMasterKpiList,
       addLaporan,
       updateLaporan,
       deleteLaporan,
@@ -1122,10 +1318,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       savePerformance,
       updatePerformance,
       deletePerformance,
+      addMendakiForm,
+      updateMendakiForm,
+      deleteMendakiForm,
+      addMendakiSubmission,
+      updateMendakiSubmission,
+      deleteMendakiSubmission,
       addProgramMitra,
       updateProgramMitra,
       deleteProgramMitra,
+      addProgramMitraTemplate,
       updateProgramMitraTemplate,
+      deleteProgramMitraTemplate,
       syncWithSheetData,
       bulkImportInvoiceAndPayment,
       loadHistoricalTransactionsSince2022,

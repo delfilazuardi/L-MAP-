@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
+import { auth, db, sanitizeForFirestore, toFirestoreDocId } from '../lib/firebase';
 import { UserAccount } from '../types';
 import { INITIAL_USERS, INITIAL_SEKOLAH, INITIAL_GURU_MITRA } from '../lib/initialData';
-import { DEMO_USER, DEMO_SEKOLAH_ID } from '../lib/demoData';
+import { DEMO_USER, DEMO_SEKOLAH, DEMO_SEKOLAH_ID } from '../lib/demoData';
 import { useData } from './DataContext';
 
 interface AuthContextType {
@@ -18,6 +21,11 @@ interface AuthContextType {
     expectedMode?: 'admin' | 'sekolah' | 'guru',
     extraGuruData?: { nama?: string; sekolahId?: string; mapel?: string }
   ) => { success: boolean; message?: string };
+  loginGuruWithGoogle: (
+    sekolahId: string,
+    manualGoogleAccount?: { email: string; nama: string; photoUrl?: string; uid?: string }
+  ) => Promise<{ success: boolean; message?: string; popupBlocked?: boolean; user?: UserAccount }>;
+  deleteGuruAccount: (userId: string) => Promise<void>;
   registerGuru: (data: { 
     nama: string; 
     sekolahId: string; 
@@ -62,14 +70,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // State for registered Guru Mitra
+  // State for registered Guru Mitra (synced with Firestore guru_mitra collection)
   const [guruList, setGuruList] = useState<UserAccount[]>(() => {
     try {
       const saved = localStorage.getItem(GURU_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge with initial guru to ensure standard defaults exist
           const ids = new Set(parsed.map(g => g.userId));
           const missingDefaults = INITIAL_GURU_MITRA.filter(g => !ids.has(g.userId));
           return [...parsed, ...missingDefaults];
@@ -81,6 +88,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return INITIAL_GURU_MITRA;
   });
 
+  // Subscribe to Firestore guru_mitra collection for real-time tracking of Google logins
+  useEffect(() => {
+    const colRef = collection(db, 'guru_mitra');
+    const unsubscribe = onSnapshot(
+      colRef,
+      async (snapshot) => {
+        if (snapshot.empty) {
+          // Seed initial guru accounts to Firestore if empty
+          for (const g of INITIAL_GURU_MITRA) {
+            const matchedSchool = INITIAL_SEKOLAH.find(s => s.id === g.sekolahId);
+            const enriched: UserAccount = {
+              ...g,
+              namaSekolah: g.namaSekolah || matchedSchool?.namaSekolah || g.sekolahId,
+            };
+            try {
+              await setDoc(doc(db, 'guru_mitra', toFirestoreDocId(g.userId)), sanitizeForFirestore(enriched));
+            } catch {
+              // ignore
+            }
+          }
+          return;
+        }
+        const docs = snapshot.docs.map(d => d.data() as UserAccount);
+        setGuruList(docs);
+        try {
+          localStorage.setItem(GURU_STORAGE_KEY, JSON.stringify(docs));
+        } catch {
+          // ignore
+        }
+      },
+      (err) => {
+        console.warn('Firestore guru_mitra listener warning:', err);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
   const saveGuruList = (newList: UserAccount[]) => {
     setGuruList(newList);
     try {
@@ -89,6 +133,127 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Failed to persist registered guru list:', e);
     }
   };
+
+  // Function to login Guru Mitra via Google + Nama Sekolah and record to Firestore
+  const loginGuruWithGoogle = useCallback(async (
+    sekolahId: string,
+    manualGoogleAccount?: { email: string; nama: string; photoUrl?: string; uid?: string }
+  ): Promise<{ success: boolean; message?: string; popupBlocked?: boolean; user?: UserAccount }> => {
+    if (!sekolahId) {
+      return { success: false, message: 'Silakan pilih Nama Sekolah Mitra terlebih dahulu.' };
+    }
+
+    const allAvailableSchools = [...(sekolahList && sekolahList.length > 0 ? sekolahList : INITIAL_SEKOLAH), DEMO_SEKOLAH];
+    const targetSchool = allAvailableSchools.find(s => s.id === sekolahId);
+    const schoolName = targetSchool ? targetSchool.namaSekolah : sekolahId;
+
+    let googleEmail = manualGoogleAccount?.email?.trim() || '';
+    let googleName = manualGoogleAccount?.nama?.trim() || '';
+    let googlePhoto = manualGoogleAccount?.photoUrl || '';
+    let googleUid = manualGoogleAccount?.uid || '';
+
+    if (!manualGoogleAccount) {
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const result = await signInWithPopup(auth, provider);
+        const fbUser = result.user;
+        googleEmail = fbUser.email || '';
+        googleName = fbUser.displayName || (googleEmail ? googleEmail.split('@')[0] : 'Guru Mitra');
+        googlePhoto = fbUser.photoURL || '';
+        googleUid = fbUser.uid || '';
+      } catch (err: any) {
+        const code = err?.code || '';
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+          return {
+            success: false,
+            message: 'Jendela login Google ditutup sebelum selesai. Silakan coba lagi.',
+          };
+        }
+        // Popup blocked by browser / iframe or unauthorized preview domain
+        return {
+          success: false,
+          popupBlocked: true,
+          message: 'Pop-up Google diblokir oleh browser/jendela pratinjau. Silakan masukkan akun Google Anda pada kolom konfirmasi di bawah untuk melanjutkan.',
+        };
+      }
+    }
+
+    if (!googleEmail) {
+      return { success: false, message: 'Email Google tidak ditemukan.' };
+    }
+
+    const cleanEmail = googleEmail.toLowerCase();
+    const emailSlug = cleanEmail.replace(/[^a-z0-9]/g, '_');
+    const existingGuru = guruList.find(
+      g => g.email.toLowerCase() === cleanEmail
+    );
+
+    const userId = existingGuru?.userId || `GURU-GGL-${emailSlug.slice(0, 24).toUpperCase()}`;
+    const nowFormatted = new Date().toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const recordedGuru: UserAccount = {
+      userId,
+      nama: googleName || existingGuru?.nama || cleanEmail.split('@')[0],
+      email: cleanEmail,
+      role: 'Guru Mitra',
+      akses: 'Akses Terbatas',
+      status: 'Aktif',
+      sekolahId,
+      namaSekolah: schoolName,
+      mapel: existingGuru?.mapel || 'Guru Mitra (Google Login)',
+      photoUrl: googlePhoto || existingGuru?.photoUrl || undefined,
+      googleUid: googleUid || existingGuru?.googleUid || undefined,
+      lastLoginAt: nowFormatted,
+      loginCount: (existingGuru?.loginCount || 0) + 1,
+      isDemo: sekolahId === DEMO_SEKOLAH_ID ? true : undefined,
+    };
+
+    const updatedList = [
+      recordedGuru,
+      ...guruList.filter(g => g.userId !== userId && g.email.toLowerCase() !== cleanEmail),
+    ];
+    saveGuruList(updatedList);
+    setCurrentUser(recordedGuru);
+
+    try {
+      await setDoc(
+        doc(db, 'guru_mitra', toFirestoreDocId(userId)),
+        sanitizeForFirestore(recordedGuru)
+      );
+    } catch (e) {
+      console.error('Failed to record Guru Google login to Firestore:', e);
+    }
+
+    return {
+      success: true,
+      message: `Selamat datang, ${recordedGuru.nama} (${schoolName})!`,
+      user: recordedGuru,
+    };
+  }, [sekolahList, guruList]);
+
+  const deleteGuruAccount = useCallback(async (userId: string) => {
+    setGuruList(prev => {
+      const next = prev.filter(g => g.userId !== userId);
+      try {
+        localStorage.setItem(GURU_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    try {
+      await deleteDoc(doc(db, 'guru_mitra', toFirestoreDocId(userId)));
+    } catch (e) {
+      console.error('Failed to delete guru account from Firestore:', e);
+    }
+  }, []);
 
   // Function to register a new teacher from a partner school
   const registerGuru = (data: {
@@ -126,6 +291,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updated = [newGuru, ...guruList];
     saveGuruList(updated);
+
+    setDoc(doc(db, 'guru_mitra', toFirestoreDocId(newId)), sanitizeForFirestore(newGuru)).catch(() => {});
 
     if (data.password) {
       saveCustomPasswords({ ...customPasswords, [newId]: cleanPass });
@@ -435,6 +602,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loginDemo,
       guruList,
       login,
+      loginGuruWithGoogle,
+      deleteGuruAccount,
       registerGuru,
       switchUser,
       logout,

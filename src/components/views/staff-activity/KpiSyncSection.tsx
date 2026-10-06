@@ -18,6 +18,7 @@ import {
 import { 
   StaffActivity, 
   AdminMitraStaff, 
+  MasterKpiStandar,
   DEFAULT_KPI_PROGRAMS, 
   TAHUN_AJARAN_LIST, 
   BULAN_LIST 
@@ -26,11 +27,13 @@ import {
 interface KpiSyncSectionProps {
   tasks: StaffActivity[];
   adminStaffList: AdminMitraStaff[];
+  masterKpiList?: MasterKpiStandar[];
 }
 
 export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
   tasks,
   adminStaffList,
+  masterKpiList = [],
 }) => {
   // Filter States: Tahun Ajaran & Bulan
   const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<string>('Semua Tahun Ajaran');
@@ -101,7 +104,13 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
       if (t.programKpi) presentPrograms.add(t.programKpi);
     });
 
-    // Also include default programs if filtered tasks has them or if no filters
+    // Also include programs from Master 15 KPI Standar and default programs if tasks have them
+    masterKpiList.forEach((kpi) => {
+      if (kpi.programKpi && tasks.some(t => t.programKpi === kpi.programKpi || t.noKpi === kpi.noKpi)) {
+        presentPrograms.add(kpi.programKpi);
+      }
+    });
+
     DEFAULT_KPI_PROGRAMS.forEach((prog) => {
       if (tasks.some(t => t.programKpi === prog)) {
         presentPrograms.add(prog);

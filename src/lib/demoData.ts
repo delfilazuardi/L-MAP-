@@ -7,6 +7,7 @@ import {
   EventItem, 
   PermintaanMitra, 
   PerformanceMenDAKI, 
+  MendakiFormSubmission,
   ProgramMitraItem 
 } from '../types';
 
@@ -172,6 +173,8 @@ export const DEMO_EVENTS: EventItem[] = [
     deskripsi: 'Agenda supervisi mutu kurikulum dan pembelajaran ramah anak (Compassionate School).',
     status: 'Direncanakan',
     pembicara: 'Dr. Anita Rahayu (L-MAP Pusat)',
+    flyerUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&h=800&q=80',
+    linkRegistrasi: 'https://forms.gle/supervisi-mendaki-cinere-2026',
     isDemo: true,
   },
   {
@@ -187,6 +190,8 @@ export const DEMO_EVENTS: EventItem[] = [
     deskripsi: 'Pelatihan modul compassionate school bagi guru sekolah mitra baru dan penyegaran semester.',
     status: 'Berjalan',
     pembicara: 'Tim Kurikulum Lazuardi Pusat',
+    flyerUrl: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=600&h=800&q=80',
+    linkRegistrasi: 'https://forms.gle/workshop-compassionate-cinere-2026',
     isDemo: true,
   }
 ];
@@ -273,13 +278,61 @@ export const DEMO_PROGRAM_MITRA: ProgramMitraItem[] = [
 ];
 
 /**
+ * Data Isian Form Evaluasi MenDAKI untuk Sekolah Lazuardi Cinere
+ */
+export const DEMO_MENDAKI_SUBMISSIONS: MendakiFormSubmission[] = [
+  {
+    id: 'SUB-DEMO-001',
+    formId: 'FORM-MENDAKI-01',
+    judulForm: 'Form Evaluasi & Refleksi Kegiatan MenDAKI',
+    email: 'lazuardi.cinere@lazuardi.sch.id',
+    nama: 'Drs. H. Mulyadi Kusuma, M.Pd.',
+    mitraId: DEMO_SEKOLAH_ID,
+    namaSekolah: 'Sekolah Lazuardi Cinere',
+    kategoriEvent: 'Supervisi Mutu',
+    eventKegiatan: 'Supervisi Mutu',
+    temaTopik: 'Penguatan Budaya Compassionate School',
+    drop: 'Administrasi laporan manual berulang.',
+    add: 'Sesi klinik konsultasi kurikulum bulanan.',
+    keep: 'Pendampingan tim asesor yang sangat komunikatif dan solutif.',
+    improve: 'Sinkronisasi jadwal supervisi lebih awal di awal semester.',
+    halDisukai: 'Diskusi reflektif dua arah yang sangat membangun.',
+    rating: 5,
+    pengisiRole: 'Sekolah Mitra',
+    tanggalIsi: '2026-09-20',
+    isDemo: true,
+  },
+  {
+    id: 'SUB-DEMO-002',
+    formId: 'FORM-MENDAKI-01',
+    judulForm: 'Form Evaluasi & Refleksi Kegiatan MenDAKI',
+    email: 'guru.cinere@lazuardi.sch.id',
+    nama: 'Dewi Sartika, S.Pd.',
+    mitraId: DEMO_SEKOLAH_ID,
+    namaSekolah: 'Sekolah Lazuardi Cinere',
+    kategoriEvent: 'Pelatihan Guru',
+    eventKegiatan: 'Pelatihan Guru',
+    temaTopik: 'Desain Pembelajaran Berdiferensiasi Ramah Anak',
+    drop: 'Sesi teori satu arah yang terlalu lama.',
+    add: 'Contoh video micro-teaching di kelas inklusi.',
+    keep: 'Praktik langsung penyusunan modul ajar kolaboratif.',
+    improve: 'Penambahan waktu diskusi tanya jawab studi kasus.',
+    halDisukai: 'Materi sangat aplikatif dan langsung bisa diterapkan di kelas.',
+    rating: 5,
+    pengisiRole: 'Guru Mitra',
+    tanggalIsi: '2026-09-22',
+    isDemo: true,
+  }
+];
+
+/**
  * Pemeriksaan apakah suatu entitas atau ID merupakan bagian dari demo sandbox terisolasi
  */
 export function isDemoEntity(idOrObj: any): boolean {
   if (!idOrObj) return false;
   if (typeof idOrObj === 'string') {
     const s = idOrObj.toLowerCase();
-    return s === DEMO_SEKOLAH_ID.toLowerCase() || s === 'mo-demo' || s === 'mo-cinere' || s.startsWith('demo-') || s.startsWith('inv-demo-') || s.startsWith('byr-demo-') || s.startsWith('lap-demo-') || s.startsWith('evt-demo-') || s.startsWith('req-demo-') || s.startsWith('perf-demo-') || s.startsWith('prg-demo-');
+    return s === DEMO_SEKOLAH_ID.toLowerCase() || s === 'mo-demo' || s === 'mo-cinere' || s.startsWith('demo-') || s.startsWith('inv-demo-') || s.startsWith('byr-demo-') || s.startsWith('lap-demo-') || s.startsWith('evt-demo-') || s.startsWith('req-demo-') || s.startsWith('perf-demo-') || s.startsWith('prg-demo-') || s.startsWith('sub-demo-') || s.startsWith('form-demo-');
   }
   if (typeof idOrObj === 'object') {
     return Boolean(

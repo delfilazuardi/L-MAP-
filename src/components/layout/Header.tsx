@@ -332,7 +332,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ))}
 
                   <div className="px-3 pt-2 text-[9px] uppercase font-bold text-slate-400">
-                    Guru Sekolah Mitra
+                    Guru Sekolah Mitra (Login Google)
                   </div>
                   {allUsers.filter(u => u.role === 'Guru Mitra').map(user => (
                     <button
@@ -345,15 +345,17 @@ export const Header: React.FC<HeaderProps> = ({
                         currentUser?.userId === user.userId ? 'bg-purple-100/60 font-bold text-purple-900' : 'text-slate-700'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <GraduationCap size={14} className="text-purple-600" />
-                        <div>
-                          <span className="font-medium">{user.nama}</span>
-                          <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({user.sekolahId})</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <GraduationCap size={14} className="text-purple-600 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{user.nama}</div>
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {user.email} • {user.namaSekolah || user.sekolahId}
+                          </div>
                         </div>
                       </div>
-                      <span className="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded font-bold">
-                        {user.mapel || 'Guru Mitra'}
+                      <span className="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded font-bold shrink-0 ml-2">
+                        {user.loginCount ? `${user.loginCount}x` : 'Guru'}
                       </span>
                     </button>
                   ))}

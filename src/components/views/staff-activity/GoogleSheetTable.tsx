@@ -13,11 +13,12 @@ import {
   Edit3,
   Trash2
 } from 'lucide-react';
-import { StaffActivity, AdminMitraStaff, DEFAULT_KPI_PROGRAMS } from '../../../types';
+import { StaffActivity, AdminMitraStaff, MasterKpiStandar, DEFAULT_KPI_PROGRAMS } from '../../../types';
 
 interface GoogleSheetTableProps {
   tasks: StaffActivity[];
   adminStaffList: AdminMitraStaff[];
+  masterKpiList?: MasterKpiStandar[];
   selectedStaffFilter: string;
   onSelectStaffFilter: (name: string) => void;
   onAddTask: () => void;
@@ -30,6 +31,7 @@ interface GoogleSheetTableProps {
 export const GoogleSheetTable: React.FC<GoogleSheetTableProps> = ({
   tasks,
   adminStaffList,
+  masterKpiList = [],
   selectedStaffFilter,
   onSelectStaffFilter,
   onAddTask,
@@ -44,9 +46,10 @@ export const GoogleSheetTable: React.FC<GoogleSheetTableProps> = ({
   const [activeRowId, setActiveRowId] = useState<string | null>(tasks[0]?.id || null);
   const [copiedNotification, setCopiedNotification] = useState(false);
 
-  // Available unique programs from data + defaults
+  // Available unique programs from data + master KPI list + defaults
   const allAvailablePrograms = Array.from(
     new Set([
+      ...masterKpiList.map(k => k.programKpi).filter(Boolean),
       ...DEFAULT_KPI_PROGRAMS,
       ...tasks.map(t => t.programKpi).filter(Boolean) as string[]
     ])

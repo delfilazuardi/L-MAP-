@@ -144,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Performance (MenDAKI)',
       icon: TrendingUp,
       badge: null,
-      desc: 'Evaluasi Mutu Lazuardi',
+      desc: isGuruMitra ? 'Isi Form Evaluasi Kegiatan' : 'Form Refleksi & Mutu Lazuardi',
     },
     {
       id: 'pengaturan' as ActiveNavTab,
@@ -165,15 +165,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     'program-mitra',
     'data-mitra',
     'template',
+    'performance-mendaki',
   ];
 
-  // Specific tabs allowed for Guru Mitra per requirement:
-  // "tetapi aksesnya sangat terbatas hanya event tracker, program mitra, data mitra dan tempate & berkas saja"
+  // Specific tabs allowed for Guru Mitra per requirement
   const allowedTabsForGuru: ActiveNavTab[] = [
     'event-tracker',
     'program-mitra',
     'data-mitra',
     'template',
+    'performance-mendaki',
   ];
 
   const navItems = isAdmin 

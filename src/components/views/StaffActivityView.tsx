@@ -34,6 +34,8 @@ export const StaffActivityView: React.FC = () => {
     staffActivityList, 
     adminStaffList, 
     sekolahList, 
+    masterKpiList,
+    saveMasterKpiList,
     addStaffActivity, 
     updateStaffActivity, 
     deleteStaffActivity,
@@ -42,27 +44,8 @@ export const StaffActivityView: React.FC = () => {
     deleteAdminStaff
   } = useData();
 
-  // Master 15 Standar & 15 KPI State with local storage persistence
-  const [masterKpiList, setMasterKpiList] = useState<MasterKpiStandar[]>(() => {
-    try {
-      const saved = localStorage.getItem('L_MAP_MASTER_15_KPI_V1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return DAFTAR_15_STANDAR_KPI;
-  });
-
-  const handleSaveMasterList = (newList: MasterKpiStandar[]) => {
-    setMasterKpiList(newList);
-    try {
-      localStorage.setItem('L_MAP_MASTER_15_KPI_V1', JSON.stringify(newList));
-    } catch {
-      // ignore
-    }
+  const handleSaveMasterList = async (newList: MasterKpiStandar[]) => {
+    await saveMasterKpiList(newList);
   };
 
   // View switch: 'sheet' | 'calendar' | 'both'
@@ -405,6 +388,7 @@ export const StaffActivityView: React.FC = () => {
           <GoogleSheetTable
             tasks={staffActivityList}
             adminStaffList={adminStaffList}
+            masterKpiList={masterKpiList}
             selectedStaffFilter={selectedStaffFilter}
             onSelectStaffFilter={setSelectedStaffFilter}
             onAddTask={() => handleOpenAddTask()}
@@ -418,6 +402,7 @@ export const StaffActivityView: React.FC = () => {
           <KpiSyncSection
             tasks={staffActivityList}
             adminStaffList={adminStaffList}
+            masterKpiList={masterKpiList}
           />
         </div>
       )}
@@ -437,6 +422,7 @@ export const StaffActivityView: React.FC = () => {
           <KpiSyncSection
             tasks={staffActivityList}
             adminStaffList={adminStaffList}
+            masterKpiList={masterKpiList}
           />
         </div>
       )}

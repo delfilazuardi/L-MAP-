@@ -37,14 +37,14 @@ function MainApp() {
     if (!currentUser) return;
 
     if (isGuruMitra) {
-      // Guru Mitra: strictly limited to event tracker, program mitra, data mitra, and template
-      const allowedGuruTabs: ActiveNavTab[] = ['event-tracker', 'program-mitra', 'data-mitra', 'template'];
+      // Guru Mitra: limited to event tracker, program mitra, data mitra, template, and performance-mendaki
+      const allowedGuruTabs: ActiveNavTab[] = ['event-tracker', 'program-mitra', 'data-mitra', 'template', 'performance-mendaki'];
       if (!allowedGuruTabs.includes(activeTab)) {
         setActiveTab('event-tracker');
       }
     } else if (!isAdmin) {
-      // Admin only tabs: staff-activity, performance-mendaki, and pengaturan
-      const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'performance-mendaki', 'pengaturan'];
+      // Admin only tabs: staff-activity and pengaturan
+      const adminOnlyTabs: ActiveNavTab[] = ['staff-activity', 'pengaturan'];
       if (adminOnlyTabs.includes(activeTab)) {
         setActiveTab('dashboard');
       }

@@ -388,9 +388,9 @@ export const EventTrackerView: React.FC = () => {
       </div>
 
       {/* Events Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filtered.length === 0 ? (
-          <div className="col-span-2 bg-white p-12 text-center rounded-2xl border border-dashed border-slate-300">
+          <div className="col-span-full bg-white p-12 text-center rounded-2xl border border-dashed border-slate-300">
             <CalendarDays size={40} className="mx-auto text-slate-300 mb-3" />
             <p className="text-sm font-semibold text-slate-700">Belum ada agenda event yang sesuai pencarian.</p>
           </div>
@@ -400,7 +400,7 @@ export const EventTrackerView: React.FC = () => {
               key={evt.id}
               className="bg-white rounded-2xl border border-slate-200 hover:border-blue-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
             >
-              {/* Event Flyer Banner (jika ada flyerUrl) */}
+              {/* Event Flyer Portrait (jika ada flyerUrl) */}
               {evt.flyerUrl ? (
                 <div 
                   onClick={() => setPreviewFlyer({
@@ -409,32 +409,41 @@ export const EventTrackerView: React.FC = () => {
                     pembicara: evt.pembicara,
                     linkRegistrasi: evt.linkRegistrasi
                   })}
-                  className="relative h-44 w-full bg-slate-900 group cursor-pointer overflow-hidden"
+                  className="relative aspect-[3/4] w-full bg-slate-900 group cursor-pointer overflow-hidden border-b border-slate-100"
                   title="Klik untuk melihat foto flyer penuh"
                 >
+                  {/* Blurred backdrop for uploaded portrait flyers of varying ratios */}
+                  <img 
+                    src={evt.flyerUrl} 
+                    alt="" 
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover blur-xl opacity-50 scale-110" 
+                  />
                   <img 
                     src={evt.flyerUrl} 
                     alt={`Flyer ${evt.judul}`} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90 group-hover:opacity-100" 
+                    className={`relative z-10 w-full h-full ${
+                      evt.flyerUrl.includes('images.unsplash.com') ? 'object-cover' : 'object-contain'
+                    } group-hover:scale-[1.03] transition-transform duration-300`} 
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30" />
+                  <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/75 via-transparent to-black/35 pointer-events-none" />
                   
                   {/* Floating Badges */}
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] font-bold text-white bg-blue-600/90 backdrop-blur-xs px-2.5 py-0.5 rounded-full shadow-xs">
                       {evt.kategori}
                     </span>
-                    <span className="text-[10px] font-mono text-white/80 bg-black/40 backdrop-blur-xs px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-mono text-white/90 bg-black/45 backdrop-blur-xs px-2 py-0.5 rounded-full">
                       {evt.id}
                     </span>
                   </div>
                   
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 z-30">
                     {getStatusPill(evt.status)}
                   </div>
 
                   {/* Zoom indicator on hover */}
-                  <div className="absolute bottom-3 right-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition">
+                  <div className="absolute bottom-3 right-3 z-30 px-2.5 py-1 rounded-lg bg-black/65 backdrop-blur-xs text-white text-[11px] font-medium flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition">
                     <Eye size={13} />
                     <span>Lihat Flyer Penuh</span>
                   </div>
@@ -614,7 +623,7 @@ export const EventTrackerView: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-800 flex items-center gap-1.5">
                     <ImageIcon size={15} className="text-blue-600" />
-                    <span>Foto Flyer / Banner Event</span>
+                    <span>Foto Flyer Event (Potrait)</span>
                   </label>
                   <div className="flex items-center gap-1 text-[11px]">
                     <button
@@ -657,7 +666,7 @@ export const EventTrackerView: React.FC = () => {
                     >
                       <Upload size={18} className="text-slate-400" />
                       <span className="text-[11px] font-semibold text-slate-700">
-                        Klik untuk upload foto flyer (PNG, JPG, WebP - maks 3 MB)
+                        Klik untuk upload foto flyer potrait (PNG, JPG, WebP - maks 3 MB)
                       </span>
                     </div>
                   </div>
@@ -667,19 +676,25 @@ export const EventTrackerView: React.FC = () => {
                       type="url"
                       value={formFlyerUrl}
                       onChange={(e) => setFormFlyerUrl(e.target.value)}
-                      placeholder="https://... (URL gambar flyer)"
+                      placeholder="https://... (URL gambar flyer potrait)"
                       className="w-full p-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs"
                     />
                   </div>
                 )}
 
-                {/* Pratinjau Foto Flyer jika ada */}
+                {/* Pratinjau Foto Flyer Potrait jika ada */}
                 {formFlyerUrl && (
-                  <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 bg-black/5 max-h-36 flex items-center justify-center">
+                  <div className="relative mt-2 mx-auto w-44 aspect-[3/4] rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shadow-xs flex items-center justify-center">
                     <img 
                       src={formFlyerUrl} 
-                      alt="Pratinjau Flyer" 
-                      className="max-h-36 w-full object-contain"
+                      alt="" 
+                      aria-hidden="true"
+                      className="absolute inset-0 w-full h-full object-cover blur-lg opacity-40 scale-110"
+                    />
+                    <img 
+                      src={formFlyerUrl} 
+                      alt="Pratinjau Flyer Potrait" 
+                      className="relative z-10 w-full h-full object-contain"
                     />
                     <button
                       type="button"
@@ -687,7 +702,7 @@ export const EventTrackerView: React.FC = () => {
                         setFormFlyerUrl('');
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
-                      className="absolute top-2 right-2 p-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full shadow-sm cursor-pointer"
+                      className="absolute top-2 right-2 z-20 p-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full shadow-sm cursor-pointer"
                       title="Hapus foto flyer"
                     >
                       <X size={12} />
@@ -1020,36 +1035,44 @@ export const EventTrackerView: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: Full Preview Foto Flyer (Lightbox) */}
+      {/* MODAL: Full Preview Foto Flyer Potrait (Lightbox) */}
       {previewFlyer && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col max-h-[92vh]">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div>
+              <div className="pr-2">
                 <h3 className="text-sm font-bold text-slate-900 line-clamp-1">{previewFlyer.judul}</h3>
                 {previewFlyer.pembicara && (
-                  <p className="text-xs text-purple-700 font-medium">Narasumber: {previewFlyer.pembicara}</p>
+                  <p className="text-xs text-purple-700 font-medium line-clamp-1">Narasumber: {previewFlyer.pembicara}</p>
                 )}
               </div>
               <button 
                 type="button"
                 onClick={() => setPreviewFlyer(null)}
-                className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-xl cursor-pointer"
+                className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-xl cursor-pointer shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-4 bg-slate-900 flex items-center justify-center overflow-auto flex-1 max-h-[65vh]">
-              <img 
-                src={previewFlyer.url} 
-                alt={`Flyer ${previewFlyer.judul}`}
-                className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-lg"
-              />
+            <div className="relative p-3 bg-slate-950 flex items-center justify-center overflow-auto flex-1">
+              <div className="relative w-full aspect-[3/4] max-h-[70vh] flex items-center justify-center overflow-hidden rounded-xl">
+                <img 
+                  src={previewFlyer.url} 
+                  alt="" 
+                  aria-hidden="true"
+                  className="absolute inset-0 w-full h-full object-cover blur-xl opacity-40 scale-110"
+                />
+                <img 
+                  src={previewFlyer.url} 
+                  alt={`Flyer ${previewFlyer.judul}`}
+                  className="relative z-10 w-full h-full object-contain rounded-lg shadow-lg"
+                />
+              </div>
             </div>
 
             <div className="p-4 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-500">Pratinjau Foto Flyer Resmi</span>
+              <span className="text-xs text-slate-500">Flyer Kegiatan (Potrait)</span>
               <div className="flex items-center gap-2">
                 {previewFlyer.linkRegistrasi && (
                   <a

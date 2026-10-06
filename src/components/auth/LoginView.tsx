@@ -25,13 +25,13 @@ import { DEMO_SEKOLAH, DEMO_SEKOLAH_ID } from '../../lib/demoData';
 import { LMapLogo } from '../common/LMapLogo';
 
 export const LoginView: React.FC = () => {
-  const { login, loginDemo, allUsers, updatePassword, resetPassword, hasCustomPassword, guruList } = useAuth();
+  const { login, loginGuruWithGoogle, updatePassword, resetPassword, guruList } = useAuth();
   const { sekolahList } = useData();
   
   // Tab: 'admin' | 'sekolah' | 'guru'
   const [activeTab, setActiveTab] = useState<'admin' | 'sekolah' | 'guru'>('admin');
   
-  // Available schools from live state (including demo school for sandbox preview)
+  // Available schools from live state (including Lazuardi Cinere)
   const availableSchools = useMemo(() => {
     const list = (sekolahList && sekolahList.length > 0) ? sekolahList : INITIAL_SEKOLAH;
     if (!list.some(s => s.id === DEMO_SEKOLAH_ID)) {
@@ -40,22 +40,22 @@ export const LoginView: React.FC = () => {
     return list;
   }, [sekolahList]);
   
-  // Admin form state
+  // Admin form state (Password TIDAK otomatis terisi)
   const [adminIdentifier, setAdminIdentifier] = useState('admin');
-  const [adminPassword, setAdminPassword] = useState('admin123');
+  const [adminPassword, setAdminPassword] = useState('');
   const [showAdminPass, setShowAdminPass] = useState(false);
 
-  // Sekolah form state
+  // Sekolah form state (Password TIDAK otomatis terisi)
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>('MO004'); // default Al-Falah Depok
-  const [schoolPassword, setSchoolPassword] = useState('admin123');
+  const [schoolPassword, setSchoolPassword] = useState('');
   const [showSchoolPass, setShowSchoolPass] = useState(false);
-  const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
-  const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
 
-  // Guru form state (Hanya Sekolah dan Kata Sandi Default)
-  const [selectedGuruSchoolId, setSelectedGuruSchoolId] = useState<string>('MO004'); // default Al-Falah Depok
-  const [guruPassword, setGuruPassword] = useState<string>('guru123');
-  const [showGuruPass, setShowGuruPass] = useState<boolean>(false);
+  // Guru form state (Hanya Nama Sekolah & Login Google)
+  const [selectedGuruSchoolId, setSelectedGuruSchoolId] = useState<string>('MO004');
+  const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
+  const [showManualGoogleInput, setShowManualGoogleInput] = useState<boolean>(false);
+  const [manualGoogleEmail, setManualGoogleEmail] = useState<string>('');
+  const [manualGoogleNama, setManualGoogleNama] = useState<string>('');
 
   // Messages
   const [errorMsg, setErrorMsg] = useState('');
@@ -90,15 +90,6 @@ export const LoginView: React.FC = () => {
     return availableSchools.find(s => s.id === selectedGuruSchoolId) || availableSchools[0];
   }, [availableSchools, selectedGuruSchoolId]);
 
-  // Filtered schools for list
-  const filteredSchools = useMemo(() => {
-    return availableSchools.filter(s => 
-      s.namaSekolah.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
-      (s.kota && s.kota.toLowerCase().includes(schoolSearchQuery.toLowerCase())) ||
-      (s.kodeMitra && s.kodeMitra.toLowerCase().includes(schoolSearchQuery.toLowerCase()))
-    );
-  }, [availableSchools, schoolSearchQuery]);
-
   const handleTabChange = (tab: 'admin' | 'sekolah' | 'guru') => {
     setActiveTab(tab);
     setErrorMsg('');
@@ -111,7 +102,12 @@ export const LoginView: React.FC = () => {
     setSuccessMsg('');
 
     const idToUse = adminIdentifier.trim() || 'admin';
-    const passToUse = adminPassword.trim() || 'admin123';
+    const passToUse = adminPassword.trim();
+
+    if (!passToUse) {
+      setErrorMsg('Silakan masukkan kata sandi Administrator terlebih dahulu.');
+      return;
+    }
 
     const res = login(idToUse, passToUse, 'admin');
     if (!res.success) {
@@ -131,7 +127,12 @@ export const LoginView: React.FC = () => {
       return;
     }
 
-    const passToUse = schoolPassword.trim() || 'admin123';
+    const passToUse = schoolPassword.trim();
+    if (!passToUse) {
+      setErrorMsg('Silakan masukkan kata sandi Sekolah Mitra terlebih dahulu.');
+      return;
+    }
+
     const res = login(selectedSchoolId, passToUse, 'sekolah');
     if (!res.success) {
       setErrorMsg(res.message || 'Login Sekolah Mitra gagal.');
@@ -140,22 +141,64 @@ export const LoginView: React.FC = () => {
     }
   };
 
-  const handleGuruLogin = (e: React.FormEvent) => {
+  const handleGuruGooglePopupLogin = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!selectedGuruSchoolId) {
+      setErrorMsg('Silakan pilih Nama Sekolah Mitra terlebih dahulu.');
+      return;
+    }
+
+    setIsGoogleLoading(true);
+    try {
+      const res = await loginGuruWithGoogle(selectedGuruSchoolId);
+      if (!res.success) {
+        if (res.popupBlocked) {
+          setShowManualGoogleInput(true);
+        }
+        setErrorMsg(res.message || 'Login Google gagal.');
+      } else {
+        setSuccessMsg(res.message || `Login Google berhasil sebagai Guru ${currentGuruSchool.namaSekolah}!`);
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGuruManualGoogleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
     if (!selectedGuruSchoolId) {
-      setErrorMsg('Silakan pilih salah satu sekolah mitra.');
+      setErrorMsg('Silakan pilih Nama Sekolah Mitra terlebih dahulu.');
+      return;
+    }
+    const cleanEmail = manualGoogleEmail.trim();
+    const cleanNama = manualGoogleNama.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMsg('Silakan masukkan alamat Email Google yang valid.');
+      return;
+    }
+    if (!cleanNama) {
+      setErrorMsg('Silakan masukkan Nama Lengkap pemilik akun Google.');
       return;
     }
 
-    const passToUse = guruPassword.trim() || 'guru123';
-    const res = login(selectedGuruSchoolId, passToUse, 'guru', { sekolahId: selectedGuruSchoolId });
-    if (!res.success) {
-      setErrorMsg(res.message || 'Login Guru Mitra gagal.');
-    } else {
-      setSuccessMsg(`Login berhasil sebagai Guru ${currentGuruSchool.namaSekolah}!`);
+    setIsGoogleLoading(true);
+    try {
+      const res = await loginGuruWithGoogle(selectedGuruSchoolId, {
+        email: cleanEmail,
+        nama: cleanNama,
+      });
+      if (!res.success) {
+        setErrorMsg(res.message || 'Login Google gagal.');
+      } else {
+        setSuccessMsg(res.message || `Login Google berhasil sebagai Guru ${currentGuruSchool.namaSekolah}!`);
+      }
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -362,9 +405,10 @@ export const LoginView: React.FC = () => {
                     <input
                       id="admin-password-input"
                       type={showAdminPass ? 'text' : 'password'}
+                      autoComplete="new-password"
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="Masukkan kata sandi..."
                       className="bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none w-full font-medium"
                     />
                     <button
@@ -451,9 +495,10 @@ export const LoginView: React.FC = () => {
                     <input
                       id="school-password-input"
                       type={showSchoolPass ? 'text' : 'password'}
+                      autoComplete="new-password"
                       value={schoolPassword}
                       onChange={(e) => setSchoolPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="Masukkan kata sandi..."
                       className="bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none w-full font-medium"
                     />
                     <button
@@ -477,82 +522,142 @@ export const LoginView: React.FC = () => {
               </form>
             )}
 
-            {/* TAB: GURU MITRA FORM (HANYA SEKOLAH DAN KATA SANDI DEFAULT) */}
+            {/* TAB: GURU MITRA FORM (HANYA NAMA SEKOLAH & LOGIN GOOGLE) */}
             {activeTab === 'guru' && (
-              <form onSubmit={handleGuruLogin} className="space-y-4">
+              <div className="space-y-4">
                 {/* Access scope banner */}
                 <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-800/40 text-xs text-purple-200/90 leading-relaxed flex items-start gap-2.5">
                   <GraduationCap size={16} className="text-purple-400 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-bold text-purple-300">Login Guru Mitra</p>
+                    <p className="font-bold text-purple-300">Login Guru Mitra via Google</p>
                     <p className="text-[11px] text-purple-200/75 mt-0.5">
-                      Pilih sekolah mitra asal Anda dan gunakan kata sandi default untuk langsung masuk ke portal.
+                      Pilih nama sekolah mitra Anda lalu masuk menggunakan akun Google. Identitas Google yang login akan otomatis tercatat di sistem.
                     </p>
                   </div>
                 </div>
 
-                {/* 1. Pilih Sekolah Asal Guru */}
+                {/* 1. Pilih Nama Sekolah Asal Guru */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    Sekolah Mitra
+                    Nama Sekolah Mitra
                   </label>
-                  <div className="relative">
-                    <select
-                      id="guru-school-select"
-                      value={selectedGuruSchoolId}
-                      onChange={(e) => setSelectedGuruSchoolId(e.target.value)}
-                      className="w-full bg-[#060c1c] border border-slate-800/90 rounded-xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-purple-400 transition cursor-pointer font-medium appearance-none"
-                    >
-                      {availableSchools.map((s) => (
-                        <option key={s.id} value={s.id} className="bg-[#0b1329] text-white">
-                          {s.namaSekolah} ({s.id})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <div className="relative bg-[#060c1c] border border-slate-800/90 rounded-xl focus-within:border-purple-400 transition">
+                    <div className="flex items-center px-3 py-1">
+                      <Building2 size={18} className="text-purple-400 shrink-0 mr-2.5" />
+                      <select
+                        id="guru-school-select"
+                        value={selectedGuruSchoolId}
+                        onChange={(e) => {
+                          setSelectedGuruSchoolId(e.target.value);
+                          setErrorMsg('');
+                        }}
+                        className="w-full bg-transparent py-2.5 text-xs sm:text-sm text-white font-semibold focus:outline-none cursor-pointer pr-6"
+                      >
+                        {availableSchools.map((s) => (
+                          <option key={s.id} value={s.id} className="bg-[#0b1329] text-white py-2">
+                            {s.namaSekolah}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. Kata Sandi Default */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Kata Sandi Default
-                    </label>
-                    <span className="text-[10px] text-purple-300/80 font-mono">
-                      Default: guru123
+                {/* 2. Tombol Login Menggunakan Google */}
+                <div className="pt-1 space-y-2.5">
+                  <button
+                    id="guru-google-login-btn"
+                    type="button"
+                    disabled={isGoogleLoading}
+                    onClick={handleGuruGooglePopupLogin}
+                    className="w-full py-3.5 px-4 rounded-xl font-bold text-slate-900 text-xs sm:text-sm bg-white hover:bg-slate-100 active:scale-[0.99] transition shadow-lg flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60"
+                  >
+                    {/* Official Google "G" SVG */}
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      />
+                    </svg>
+                    <span>
+                      {isGoogleLoading ? 'Menghubungkan ke Google...' : 'Masuk dengan Akun Google'}
                     </span>
-                  </div>
-                  <div className="bg-[#060c1c] border border-slate-800/90 rounded-xl px-3.5 py-3 flex items-center gap-3 focus-within:border-purple-400/80 transition">
-                    <KeyRound size={18} className="text-slate-500 shrink-0" />
-                    <input
-                      id="guru-password-input"
-                      type={showGuruPass ? 'text' : 'password'}
-                      value={guruPassword}
-                      onChange={(e) => setGuruPassword(e.target.value)}
-                      placeholder="guru123"
-                      className="bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none w-full font-medium"
-                    />
+                  </button>
+
+                  <div className="text-center">
                     <button
                       type="button"
-                      onClick={() => setShowGuruPass(!showGuruPass)}
-                      className="text-slate-500 hover:text-slate-300 transition cursor-pointer"
-                      title={showGuruPass ? "Sembunyikan sandi" : "Lihat sandi"}
+                      onClick={() => setShowManualGoogleInput(prev => !prev)}
+                      className="text-[11px] font-semibold text-purple-300/80 hover:text-purple-200 underline cursor-pointer"
                     >
-                      {showGuruPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showManualGoogleInput
+                        ? 'Sembunyikan input akun Google manual'
+                        : 'Pop-up Google terblokir browser? Masuk dengan ketik Email Google'}
                     </button>
                   </div>
                 </div>
 
-                {/* 3. Tombol MASUK */}
-                <button
-                  id="guru-submit-btn"
-                  type="submit"
-                  className="w-full py-3.5 rounded-xl font-black text-white text-sm uppercase tracking-widest bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:brightness-105 active:scale-[0.99] transition shadow-lg shadow-purple-600/30 cursor-pointer mt-2"
-                >
-                  MASUK
-                </button>
-              </form>
+                {/* Form Konfirmasi Akun Google jika pop-up browser terblokir di iframe */}
+                {showManualGoogleInput && (
+                  <form
+                    onSubmit={handleGuruManualGoogleSubmit}
+                    className="p-3.5 rounded-2xl bg-[#060c1c] border border-purple-500/40 space-y-3 animate-in fade-in"
+                  >
+                    <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                      <Mail size={14} className="text-purple-400" />
+                      <span>Identitas Akun Google Guru</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Nama Lengkap (Akun Google)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={manualGoogleNama}
+                        onChange={(e) => setManualGoogleNama(e.target.value)}
+                        placeholder="Nama lengkap Anda"
+                        className="w-full px-3 py-2 bg-[#0b1329] border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Alamat Email Google
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={manualGoogleEmail}
+                        onChange={(e) => setManualGoogleEmail(e.target.value)}
+                        placeholder="nama@gmail.com / @lazuardi.sch.id"
+                        className="w-full px-3 py-2 bg-[#0b1329] border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isGoogleLoading}
+                      className="w-full py-2.5 rounded-xl font-bold text-white text-xs uppercase tracking-wider bg-gradient-to-r from-purple-600 to-indigo-600 hover:brightness-105 transition shadow-md cursor-pointer"
+                    >
+                      Lanjutkan Masuk sebagai Guru {currentGuruSchool?.namaSekolah}
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
 
           </div>
