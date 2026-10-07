@@ -263,9 +263,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <p className="text-[10px] text-blue-200/80 truncate font-medium">
-                  {isGuruMitra ? (currentUser?.mapel ? `Guru • ${currentUser.mapel}` : 'Guru Sekolah Mitra') : (currentUser?.role || 'Guest')}
+                  {isGuruMitra
+                    ? (currentUser?.namaSekolah || currentUser?.mapel || 'Guru Sekolah Mitra')
+                    : (currentUser?.role || 'Guest')}
                 </p>
               </div>
+              {isGuruMitra && currentUser?.email && (
+                <p className="text-[10px] text-purple-300/90 truncate mt-0.5">
+                  {currentUser.email}
+                </p>
+              )}
             </div>
           </div>
           <div className="mt-2.5 pt-2 border-t border-blue-900/50 flex items-center justify-between text-[11px]">

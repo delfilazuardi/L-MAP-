@@ -43,10 +43,26 @@ const DEFAULT_EVENT_KEGIATAN_OPTIONS = [
   'Lomba Siswa'
 ];
 
-export const PerformanceMendakiView: React.FC = () => {
+interface PerformanceMendakiViewProps {
+  initialEventContext?: {
+    eventId?: string;
+    judul: string;
+    kategori: string;
+    mode?: 'isi-form' | 'kelola-form';
+  } | null;
+  onClearEventContext?: () => void;
+  onNavigateToEventTracker?: () => void;
+}
+
+export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
+  initialEventContext,
+  onClearEventContext,
+  onNavigateToEventTracker,
+}) => {
   const { currentUser, isAdmin, isSekolahMitra, isGuruMitra } = useAuth();
   const { 
     sekolahList, 
+    eventList,
     mendakiFormList,
     mendakiSubmissionList,
     addMendakiForm,
@@ -59,6 +75,14 @@ export const PerformanceMendakiView: React.FC = () => {
 
   const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
   const mySchoolId = currentUser?.sekolahId || '';
+
+  // Active events from Event Tracker (isolated Demo vs Real)
+  const connectedEvents = useMemo(() => {
+    if (isDemoUser) {
+      return eventList.filter(evt => evt.isDemo || evt.sekolahId === 'DEMO-MITRA' || evt.mitra === 'Semua Sekolah Mitra');
+    }
+    return eventList.filter(evt => !evt.isDemo && evt.sekolahId !== 'DEMO-MITRA');
+  }, [eventList, isDemoUser]);
 
   // Available schools (strictly isolate DEMO-MITRA from production schools)
   const realSchools = useMemo(
@@ -155,14 +179,18 @@ export const PerformanceMendakiView: React.FC = () => {
     return mendakiSubmissionList.filter(s => !s.isDemo && s.mitraId !== 'DEMO-MITRA');
   }, [mendakiSubmissionList, isDemoUser]);
 
-  // Dropdown options for Event / Kegiatan (configured by Administrator)
+  // Dropdown options for Event / Kegiatan (combines Form Options + Event Tracker Categories + Event Tracker Titles)
   const eventDropdownOptions = useMemo(() => {
     const configured =
       currentFormDef.daftarKategoriEvent && currentFormDef.daftarKategoriEvent.length > 0
         ? currentFormDef.daftarKategoriEvent
         : DEFAULT_EVENT_KEGIATAN_OPTIONS;
-    return Array.from(new Set(configured.filter(Boolean)));
-  }, [currentFormDef]);
+    const fromEventTrackerCategories = connectedEvents.map(e => e.kategori).filter(Boolean);
+    const fromEventTrackerTitles = connectedEvents.map(e => e.judul).filter(Boolean);
+    return Array.from(
+      new Set([...configured, ...fromEventTrackerCategories, ...fromEventTrackerTitles].filter(Boolean))
+    );
+  }, [currentFormDef, connectedEvents]);
 
   // All categories/events for rekapitulasi & filter
   const allEventCategories = useMemo(() => {
@@ -229,6 +257,7 @@ export const PerformanceMendakiView: React.FC = () => {
   const [subMitraId, setSubMitraId] = useState(
     mySchoolId || selectableSchools[0]?.id || 'MO004'
   );
+  const [subEventId, setSubEventId] = useState<string>('');
   const [subEventKegiatan, setSubEventKegiatan] = useState(
     currentFormDef.eventKegiatanDefault || eventDropdownOptions[0] || DEFAULT_EVENT_KEGIATAN_OPTIONS[0]
   );
@@ -242,6 +271,24 @@ export const PerformanceMendakiView: React.FC = () => {
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [editingSubmission, setEditingSubmission] = useState<MendakiFormSubmission | null>(null);
   const [submitSuccessBanner, setSubmitSuccessBanner] = useState<string | null>(null);
+
+  // When user navigates from an Event card in Event Tracker, pre-select that event in MenDAKI
+  useEffect(() => {
+    if (initialEventContext) {
+      if (initialEventContext.mode && isAdmin) {
+        setActiveSubTab(initialEventContext.mode);
+      } else {
+        setActiveSubTab('isi-form');
+      }
+      setSubEventId(initialEventContext.eventId || '');
+      setSubEventKegiatan(initialEventContext.kategori || initialEventContext.judul);
+      setSubTemaTopik(initialEventContext.judul);
+      if (initialEventContext.mode === 'kelola-form') {
+        setSubFilterKategori('ALL');
+        setSubSearchQuery(initialEventContext.judul);
+      }
+    }
+  }, [initialEventContext, isAdmin]);
 
   // Sync default school/email when user or selected form changes
   useEffect(() => {
@@ -257,18 +304,21 @@ export const PerformanceMendakiView: React.FC = () => {
     }
   }, [mySchoolId, selectableSchools, currentUser, editingSubmission, subMitraId, subEmail]);
 
+  // Initialize default event only when form definition changes or if empty
   useEffect(() => {
-    if (!editingSubmission) {
-      if (currentFormDef.eventKegiatanDefault && eventDropdownOptions.includes(currentFormDef.eventKegiatanDefault)) {
-        setSubEventKegiatan(currentFormDef.eventKegiatanDefault);
-      } else if (eventDropdownOptions.length > 0 && !eventDropdownOptions.includes(subEventKegiatan)) {
-        setSubEventKegiatan(eventDropdownOptions[0]);
-      }
+    if (!editingSubmission && !initialEventContext) {
+      setSubEventKegiatan(prev => {
+        if (prev) return prev;
+        if (currentFormDef.eventKegiatanDefault && eventDropdownOptions.includes(currentFormDef.eventKegiatanDefault)) {
+          return currentFormDef.eventKegiatanDefault;
+        }
+        return eventDropdownOptions[0] || DEFAULT_EVENT_KEGIATAN_OPTIONS[0];
+      });
       if (currentFormDef.temaTopikDefault) {
-        setSubTemaTopik(currentFormDef.temaTopikDefault);
+        setSubTemaTopik(prev => prev || currentFormDef.temaTopikDefault || '');
       }
     }
-  }, [currentFormDef, eventDropdownOptions, editingSubmission, subEventKegiatan]);
+  }, [selectedFormId, editingSubmission, initialEventContext]);
 
   const handleResetSubmissionForm = () => {
     setEditingSubmission(null);
@@ -299,16 +349,26 @@ export const PerformanceMendakiView: React.FC = () => {
 
     const selectedEventVal = subEventKegiatan.trim() || eventDropdownOptions[0] || 'Workshop Kurikulum';
 
+    const matchedTrackerEvent = connectedEvents.find(
+      evt =>
+        evt.id === subEventId ||
+        evt.judul.toLowerCase() === selectedEventVal.toLowerCase() ||
+        evt.judul.toLowerCase() === subTemaTopik.trim().toLowerCase()
+    );
+    const resolvedEventId = subEventId || matchedTrackerEvent?.id || undefined;
+    const resolvedKategori = matchedTrackerEvent?.kategori || selectedEventVal;
+
     if (editingSubmission && isAdmin) {
       await updateMendakiSubmission({
         ...editingSubmission,
         formId: currentFormDef.id,
         judulForm: currentFormDef.judulForm,
+        eventId: resolvedEventId,
         email: subEmail.trim(),
         nama: subNama.trim(),
         mitraId: subMitraId,
         namaSekolah: schoolName,
-        kategoriEvent: selectedEventVal,
+        kategoriEvent: resolvedKategori,
         eventKegiatan: selectedEventVal,
         temaTopik: subTemaTopik.trim(),
         drop: subDrop.trim(),
@@ -324,11 +384,12 @@ export const PerformanceMendakiView: React.FC = () => {
       await addMendakiSubmission({
         formId: currentFormDef.id,
         judulForm: currentFormDef.judulForm,
+        eventId: resolvedEventId,
         email: subEmail.trim(),
         nama: subNama.trim(),
         mitraId: subMitraId,
         namaSekolah: schoolName,
-        kategoriEvent: selectedEventVal,
+        kategoriEvent: resolvedKategori,
         eventKegiatan: selectedEventVal,
         temaTopik: subTemaTopik.trim(),
         drop: subDrop.trim(),
@@ -340,7 +401,7 @@ export const PerformanceMendakiView: React.FC = () => {
         pengisiRole: roleLabel,
         isDemo: isDemoUser || undefined,
       });
-      setSubmitSuccessBanner('Terima kasih! Formulir evaluasi kegiatan MenDAKI Anda telah berhasil dikirim.');
+      setSubmitSuccessBanner('Terima kasih! Formulir evaluasi kegiatan MenDAKI Anda telah berhasil dikirim dan terhubung ke Event Tracker.');
     }
 
     handleResetSubmissionForm();
@@ -656,6 +717,46 @@ export const PerformanceMendakiView: React.FC = () => {
         </div>
       </div>
 
+      {/* Active Event Context Banner when navigated from Event Tracker */}
+      {initialEventContext && (
+        <div className="mx-6 mt-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <Calendar size={18} className="text-indigo-600 shrink-0" />
+            <div>
+              <span className="font-black block">
+                Terhubung dari Event Tracker: {initialEventContext.judul}
+              </span>
+              <span className="text-[11px] text-indigo-700">
+                Kategori: <strong>{initialEventContext.kategori}</strong> {initialEventContext.eventId ? `• ID: ${initialEventContext.eventId}` : ''}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {onNavigateToEventTracker && (
+              <button
+                type="button"
+                onClick={onNavigateToEventTracker}
+                className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-700 font-bold hover:bg-indigo-100 cursor-pointer"
+              >
+                Kembali ke Event Tracker
+              </button>
+            )}
+            {onClearEventContext && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClearEventContext();
+                  setSubSearchQuery('');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 cursor-pointer"
+              >
+                Tampilkan Semua
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Success Notification */}
       {submitSuccessBanner && (
         <div className="mx-6 mt-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between gap-3">
@@ -753,11 +854,11 @@ export const PerformanceMendakiView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 4. Event / Kegiatan (Dropdown - Administrator bisa tambah & edit) */}
+            {/* 4. Event / Kegiatan (Terhubung langsung dengan Event Tracker & Opsi Kategori) */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700">
-                  {currentFormDef.labelEventKegiatan || 'Event / Kegiatan'} <span className="text-rose-500">*</span>
+                  {currentFormDef.labelEventKegiatan || 'Event / Kegiatan'} (Terhubung Event Tracker) <span className="text-rose-500">*</span>
                 </label>
                 {isAdmin && (
                   <button
@@ -775,17 +876,44 @@ export const PerformanceMendakiView: React.FC = () => {
                 <select
                   required
                   value={subEventKegiatan}
-                  onChange={(e) => setSubEventKegiatan(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSubEventKegiatan(val);
+                    // Check if user selected an Event Tracker agenda title
+                    const matchedEvt = connectedEvents.find(evt => evt.judul === val);
+                    if (matchedEvt) {
+                      setSubEventId(matchedEvt.id);
+                      setSubTemaTopik(matchedEvt.judul);
+                    } else {
+                      const matchedByCat = connectedEvents.find(evt => evt.kategori === val);
+                      if (matchedByCat && !subTemaTopik) {
+                        setSubEventId(matchedByCat.id);
+                      }
+                    }
+                  }}
                   className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition font-medium"
                 >
-                  {eventDropdownOptions.map(evOpt => (
-                    <option key={evOpt} value={evOpt}>
-                      {evOpt}
-                    </option>
-                  ))}
-                  {subEventKegiatan && !eventDropdownOptions.includes(subEventKegiatan) && (
-                    <option value={subEventKegiatan}>{subEventKegiatan}</option>
-                  )}
+                  <optgroup label="Agenda Event Tracker (Pilih Event Spesifik)">
+                    {connectedEvents.map(evt => (
+                      <option key={`evt-${evt.id}`} value={evt.judul}>
+                        [{evt.kategori}] {evt.judul} ({evt.tanggal})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Kategori Kegiatan MenDAKI">
+                    {eventDropdownOptions
+                      .filter(opt => !connectedEvents.some(e => e.judul === opt))
+                      .map(evOpt => (
+                        <option key={evOpt} value={evOpt}>
+                          {evOpt}
+                        </option>
+                      ))}
+                  </optgroup>
+                  {subEventKegiatan &&
+                    !eventDropdownOptions.includes(subEventKegiatan) &&
+                    !connectedEvents.some(e => e.judul === subEventKegiatan) && (
+                      <option value={subEventKegiatan}>{subEventKegiatan}</option>
+                    )}
                 </select>
               </div>
             </div>
@@ -816,9 +944,8 @@ export const PerformanceMendakiView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 6. DROP */}
             <div className="p-4 rounded-2xl bg-rose-50/50 border border-rose-200/80 space-y-1.5">
-              <label className="flex items-center justify-between text-xs font-extrabold text-rose-900">
-                <span>{currentFormDef.labelDrop || 'Drop'} <span className="text-rose-600">*</span></span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold">DROP</span>
+              <label className="block text-xs font-extrabold text-rose-900">
+                {currentFormDef.labelDrop || 'Drop'} <span className="text-rose-600">*</span>
               </label>
               <textarea
                 rows={3}
@@ -831,9 +958,8 @@ export const PerformanceMendakiView: React.FC = () => {
 
             {/* 7. ADD */}
             <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-200/80 space-y-1.5">
-              <label className="flex items-center justify-between text-xs font-extrabold text-sky-900">
-                <span>{currentFormDef.labelAdd || 'Add'} <span className="text-rose-600">*</span></span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-bold">ADD</span>
+              <label className="block text-xs font-extrabold text-sky-900">
+                {currentFormDef.labelAdd || 'Add'} <span className="text-rose-600">*</span>
               </label>
               <textarea
                 rows={3}
@@ -846,9 +972,8 @@ export const PerformanceMendakiView: React.FC = () => {
 
             {/* 8. KEEP */}
             <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-1.5">
-              <label className="flex items-center justify-between text-xs font-extrabold text-emerald-900">
-                <span>{currentFormDef.labelKeep || 'Keep'} <span className="text-rose-600">*</span></span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">KEEP</span>
+              <label className="block text-xs font-extrabold text-emerald-900">
+                {currentFormDef.labelKeep || 'Keep'} <span className="text-rose-600">*</span>
               </label>
               <textarea
                 rows={3}
@@ -861,9 +986,8 @@ export const PerformanceMendakiView: React.FC = () => {
 
             {/* 9. IMPROVE */}
             <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-1.5">
-              <label className="flex items-center justify-between text-xs font-extrabold text-amber-900">
-                <span>{currentFormDef.labelImprove || 'Improve'} <span className="text-rose-600">*</span></span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">IMPROVE</span>
+              <label className="block text-xs font-extrabold text-amber-900">
+                {currentFormDef.labelImprove || 'Improve'} <span className="text-rose-600">*</span>
               </label>
               <textarea
                 rows={3}
@@ -1054,6 +1178,106 @@ export const PerformanceMendakiView: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Connected Agenda Events from Event Tracker */}
+      {connectedEvents.length > 0 && (
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Calendar size={16} className="text-indigo-600" />
+                <span>Daftar Event (Event Tracker) yang Terhubung dengan Evaluasi MenDAKI</span>
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Setiap agenda di tab Event Tracker otomatis tersambung dengan form dan rekapitulasi evaluasi MenDAKI
+              </p>
+            </div>
+            {onNavigateToEventTracker && (
+              <button
+                type="button"
+                onClick={onNavigateToEventTracker}
+                className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition cursor-pointer"
+              >
+                Buka Event Tracker
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {connectedEvents.map((evt) => {
+              const titleLower = evt.judul.trim().toLowerCase();
+              const catLower = evt.kategori.trim().toLowerCase();
+              const directSubs = baseSubmissions.filter(
+                s =>
+                  (s.eventId && s.eventId === evt.id) ||
+                  s.eventKegiatan?.trim().toLowerCase() === titleLower ||
+                  s.temaTopik?.trim().toLowerCase() === titleLower
+              );
+              const catSubs = baseSubmissions.filter(
+                s =>
+                  s.eventKegiatan?.trim().toLowerCase() === catLower ||
+                  s.kategoriEvent?.trim().toLowerCase() === catLower
+              );
+              const matchedSubs = directSubs.length > 0 ? directSubs : catSubs;
+              const avgRating =
+                matchedSubs.length > 0
+                  ? Number(
+                      (
+                        matchedSubs.reduce((acc, item) => acc + (item.rating || 0), 0) /
+                        matchedSubs.length
+                      ).toFixed(1)
+                    )
+                  : 0;
+
+              return (
+                <div
+                  key={evt.id}
+                  className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 border border-indigo-200/80 hover:border-indigo-400 transition flex flex-col justify-between gap-2.5"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                        {evt.kategori}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">{evt.tanggal}</span>
+                    </div>
+                    <h5 className="text-xs font-extrabold text-slate-900 line-clamp-2 leading-snug">
+                      {evt.judul}
+                    </h5>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-indigo-700">
+                        {matchedSubs.length} Evaluasi
+                      </span>
+                      {avgRating > 0 && (
+                        <span className="inline-flex items-center gap-0.5 font-bold text-amber-600">
+                          <Star size={11} className="fill-amber-400 text-amber-400" />
+                          {avgRating}
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubEventId(evt.id);
+                        setSubEventKegiatan(evt.judul);
+                        setSubTemaTopik(evt.judul);
+                        setActiveSubTab('isi-form');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition cursor-pointer"
+                    >
+                      Isi Evaluasi
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Privacy Notice for Sekolah Mitra */}
       {!isAdmin && (

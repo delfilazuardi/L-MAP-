@@ -516,6 +516,17 @@ export const GoogleCalendarView: React.FC<GoogleCalendarViewProps> = ({
                 </span>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const taskToEdit = selectedTaskPreview;
+                      setSelectedTaskPreview(null);
+                      onSelectTask(taskToEdit);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition flex items-center gap-1.5 cursor-pointer border border-slate-200"
+                  >
+                    <span>Edit Tugas</span>
+                  </button>
                   <a
                     href={getGoogleCalendarUrl(selectedTaskPreview)}
                     target="_blank"

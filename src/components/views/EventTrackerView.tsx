@@ -19,7 +19,10 @@ import {
   Eye,
   Sparkles,
   Tag,
-  Settings
+  Settings,
+  TrendingUp,
+  Star,
+  ClipboardCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -37,9 +40,18 @@ export const DEFAULT_EVENT_CATEGORIES: string[] = [
 
 const CATEGORIES_STORAGE_KEY = 'lmap_event_categories';
 
-export const EventTrackerView: React.FC = () => {
+interface EventTrackerViewProps {
+  onNavigateToMendaki?: (payload: {
+    eventId?: string;
+    judul: string;
+    kategori: string;
+    mode?: 'isi-form' | 'kelola-form';
+  }) => void;
+}
+
+export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateToMendaki }) => {
   const { isAdmin, currentUser } = useAuth();
-  const { eventList, addEvent, updateEvent, deleteEvent } = useData();
+  const { eventList, mendakiSubmissionList, addEvent, updateEvent, deleteEvent } = useData();
 
   const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
 
@@ -49,6 +61,48 @@ export const EventTrackerView: React.FC = () => {
     }
     return eventList.filter(evt => !evt.isDemo && evt.sekolahId !== 'DEMO-MITRA');
   }, [eventList, isDemoUser]);
+
+  const baseMendakiSubmissions = useMemo(() => {
+    if (isDemoUser) {
+      return mendakiSubmissionList.filter(s => s.isDemo || s.mitraId === 'DEMO-MITRA');
+    }
+    return mendakiSubmissionList.filter(s => !s.isDemo && s.mitraId !== 'DEMO-MITRA');
+  }, [mendakiSubmissionList, isDemoUser]);
+
+  // Helper to get connected MenDAKI evaluation submissions for a specific event
+  const getEventMendakiStats = (evt: EventItem) => {
+    const titleLower = evt.judul.trim().toLowerCase();
+    const catLower = evt.kategori.trim().toLowerCase();
+
+    // Direct match by eventId or exact event title/temaTopik, or fallback to matching category
+    const directMatches = baseMendakiSubmissions.filter(
+      s =>
+        (s.eventId && s.eventId === evt.id) ||
+        s.eventKegiatan?.trim().toLowerCase() === titleLower ||
+        s.temaTopik?.trim().toLowerCase() === titleLower ||
+        (s.eventKegiatan?.trim().toLowerCase().includes(titleLower) && titleLower.length > 5)
+    );
+
+    const categoryMatches = baseMendakiSubmissions.filter(
+      s =>
+        s.eventKegiatan?.trim().toLowerCase() === catLower ||
+        s.kategoriEvent?.trim().toLowerCase() === catLower
+    );
+
+    const matchedList = directMatches.length > 0 ? directMatches : categoryMatches;
+    const count = matchedList.length;
+    const avgRating =
+      count > 0
+        ? Number((matchedList.reduce((acc, item) => acc + (item.rating || 0), 0) / count).toFixed(1))
+        : 0;
+
+    return {
+      count,
+      directCount: directMatches.length,
+      avgRating,
+      isDirectMatch: directMatches.length > 0,
+    };
+  };
 
   // Dynamic Categories State
   const [categories, setCategories] = useState<string[]>(() => {
@@ -218,55 +272,110 @@ export const EventTrackerView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 3 * 1024 * 1024) {
-      alert('Ukuran file flyer maksimal 3 MB. Silakan kompres gambar atau gunakan URL eksternal.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Ukuran file gambar terlalu besar (maksimal 10 MB).');
       return;
     }
 
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === 'string') {
-        setFormFlyerUrl(reader.result);
+        const rawDataUrl = reader.result;
+        // Compress image via canvas so it fits comfortably inside Firestore's 1MB document limit
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxWidth = 900;
+            const maxHeight = 1200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth || height > maxHeight) {
+              const ratio = Math.min(maxWidth / width, maxHeight / height);
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+              setFormFlyerUrl(compressedDataUrl);
+            } else {
+              setFormFlyerUrl(rawDataUrl);
+            }
+          } catch {
+            setFormFlyerUrl(rawDataUrl);
+          }
+        };
+        img.onerror = () => {
+          setFormFlyerUrl(rawDataUrl);
+        };
+        img.src = rawDataUrl;
       }
     };
     reader.readAsDataURL(file);
   };
 
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
+
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingEvent) {
-      await updateEvent({
-        ...editingEvent,
-        judul: formJudul,
-        kategori: formKategori,
-        tanggal: formTanggal,
-        waktu: formWaktu,
-        lokasi: formLokasi,
-        pic: formPic,
-        mitraPeserta: formMitra,
-        status: formStatus,
-        deskripsi: formDeskripsi,
-        pembicara: formPembicara.trim() || undefined,
-        flyerUrl: formFlyerUrl.trim() || undefined,
-        linkRegistrasi: formLinkRegistrasi.trim() || undefined,
-      });
-    } else {
-      await addEvent({
-        judul: formJudul,
-        kategori: formKategori,
-        tanggal: formTanggal,
-        waktu: formWaktu,
-        lokasi: formLokasi,
-        pic: formPic,
-        mitraPeserta: formMitra,
-        status: formStatus,
-        deskripsi: formDeskripsi,
-        pembicara: formPembicara.trim() || undefined,
-        flyerUrl: formFlyerUrl.trim() || undefined,
-        linkRegistrasi: formLinkRegistrasi.trim() || undefined,
-      });
+    if (!formJudul.trim()) return;
+
+    const normalizeLink = (val: string) => {
+      const clean = val.trim();
+      if (!clean) return undefined;
+      if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
+        return clean;
+      }
+      return `https://${clean}`;
+    };
+
+    try {
+      setIsSavingEvent(true);
+      if (editingEvent) {
+        await updateEvent({
+          ...editingEvent,
+          judul: formJudul.trim(),
+          kategori: formKategori,
+          tanggal: formTanggal,
+          waktu: formWaktu.trim(),
+          lokasi: formLokasi.trim(),
+          pic: formPic.trim(),
+          mitraPeserta: formMitra.trim(),
+          status: formStatus,
+          deskripsi: formDeskripsi.trim(),
+          pembicara: formPembicara.trim() || undefined,
+          flyerUrl: normalizeLink(formFlyerUrl),
+          linkRegistrasi: normalizeLink(formLinkRegistrasi),
+        });
+      } else {
+        await addEvent({
+          judul: formJudul.trim(),
+          kategori: formKategori,
+          tanggal: formTanggal,
+          waktu: formWaktu.trim(),
+          lokasi: formLokasi.trim(),
+          pic: formPic.trim(),
+          mitraPeserta: formMitra.trim(),
+          status: formStatus,
+          deskripsi: formDeskripsi.trim(),
+          pembicara: formPembicara.trim() || undefined,
+          flyerUrl: normalizeLink(formFlyerUrl),
+          linkRegistrasi: normalizeLink(formLinkRegistrasi),
+        });
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Gagal menyimpan event:', err);
+      setIsModalOpen(false);
+    } finally {
+      setIsSavingEvent(false);
     }
-    setIsModalOpen(false);
   };
 
   /**
@@ -500,6 +609,73 @@ export const EventTrackerView: React.FC = () => {
                       <span>PIC Event: <strong className="text-slate-800">{evt.pic}</strong></span>
                     </div>
                   </div>
+
+                  {/* KONEKSI LANGSUNG KE PERFORMANCE MENDAKI */}
+                  {(() => {
+                    const mendakiStats = getEventMendakiStats(evt);
+                    return (
+                      <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-indigo-50/90 via-blue-50/80 to-emerald-50/60 border border-indigo-200/80 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <TrendingUp size={14} className="text-indigo-600 shrink-0" />
+                            <span className="text-[11px] font-extrabold text-indigo-950">
+                              Terhubung ke MenDAKI
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-600 text-white">
+                              {mendakiStats.count} Evaluasi
+                            </span>
+                            {mendakiStats.avgRating > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                <Star size={10} className="fill-amber-400 text-amber-500" />
+                                {mendakiStats.avgRating}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {onNavigateToMendaki && (
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onNavigateToMendaki({
+                                  eventId: evt.id,
+                                  judul: evt.judul,
+                                  kategori: evt.kategori,
+                                  mode: 'isi-form',
+                                })
+                              }
+                              className="flex-1 py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                            >
+                              <ClipboardCheck size={13} />
+                              <span>Isi Evaluasi MenDAKI</span>
+                            </button>
+
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onNavigateToMendaki({
+                                    eventId: evt.id,
+                                    judul: evt.judul,
+                                    kategori: evt.kategori,
+                                    mode: 'kelola-form',
+                                  })
+                                }
+                                className="py-1.5 px-2.5 rounded-lg bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                                title="Lihat Sheet Hasil Evaluasi MenDAKI untuk Event ini"
+                              >
+                                <TrendingUp size={12} />
+                                <span>Hasil Sheet</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Footer Action Area */}
@@ -673,7 +849,7 @@ export const EventTrackerView: React.FC = () => {
                 ) : (
                   <div>
                     <input
-                      type="url"
+                      type="text"
                       value={formFlyerUrl}
                       onChange={(e) => setFormFlyerUrl(e.target.value)}
                       placeholder="https://... (URL gambar flyer potrait)"
@@ -733,7 +909,7 @@ export const EventTrackerView: React.FC = () => {
                   <span>Link Registrasi / Formulir Pendaftaran (Google Form / Link Mitra)</span>
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   value={formLinkRegistrasi}
                   onChange={(e) => setFormLinkRegistrasi(e.target.value)}
                   placeholder="https://forms.gle/... atau tautan formulir pendaftaran"

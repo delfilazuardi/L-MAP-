@@ -163,6 +163,7 @@ export interface EventItem {
   pembicara?: string; // Nama Pembicara / Narasumber
   flyerUrl?: string; // Foto flyer / banner poster event
   linkRegistrasi?: string; // Tautan Formulir / Google Form Registrasi
+  mendakiFormId?: string; // ID Form Evaluasi MenDAKI yang terhubung (default FORM-MENDAKI-01)
   mitraPeserta: string;
   sekolahId?: string;
   status: EventStatus;
@@ -224,10 +225,12 @@ export interface TahapanBobotItem {
 
 export interface StaffActivity {
   id: string;
-  noKpi?: string; // No. KPI / Kode Indikator (e.g. 'KPI-01' s/d 'KPI-15')
+  noKpi?: string; // No. KPI / Kode Indikator utama atau gabungan (e.g. 'KPI-01' atau 'KPI-01, KPI-03')
+  noKpiList?: string[]; // Daftar beberapa No. KPI jika 1 program mencakup banyak KPI (e.g. ['KPI-01', 'KPI-03'])
   standarKpi?: string; // Nama Standar (e.g. 'Standar 1: Kurikulum & Pendampingan MenDAKI')
+  standarKpiList?: string[]; // Daftar Standar KPI terkait
   penjelasanKpi?: string; // Penjelasan / Uraian Target Indikator KPI
-  programKpi?: string; // Sasaran Program KPI (Khusus Program Saja)
+  programKpi?: string; // Sasaran Program KPI (e.g. 'LATOF Akademik', 'Supervisi & Pendampingan Kurikulum/MenDAKI')
   namaStaff: string; // PIC Admin Mitra Office
   tugas?: string; // Uraian Tugas / Pekerjaan
   judulAktivitas?: string;
@@ -253,21 +256,24 @@ export interface StaffActivity {
 }
 
 export const DEFAULT_KPI_PROGRAMS = [
-  'Supervisi & Pendampingan Kurikulum/MenDAKI',
-  'Layanan Administrasi, Kontrak Lisensi & Legalitas',
-  'Pelatihan & Peningkatan Mutu SDM / Guru Inklusi',
-  'Audit Lisensi, Kepatuhan & Keuangan Mitra',
-  'Evaluasi Kinerja, Rekapitulasi & Pelaporan Bulanan',
-  'Pengelolaan Keuangan, Billing & Verifikasi Pembayaran',
-  'Pengadaan Logistik & Pengiriman Dokumen Mitra',
-  'Pendampingan Inklusi & Konsultasi Kasus Siswa',
-  'Ekspansi Kemitraan & Penjajakan Sekolah Baru',
-  'Manajemen Portal L-MAP & Publikasi Branding',
-  'Koordinasi Pimpinan & Rapat Kerja Triwulan',
-  'Penjaminan Mutu Asesmen Karakter Siswa',
-  'Layanan Helpdesk & Penanganan Keluhan Mitra',
-  'Event Tracker & Sinkronisasi Kalender Pendidikan',
-  'Operasional Internal & Koordinasi Mitra Office',
+  'LATOF Akademik',
+  'LATOF Bisnis',
+  'Training of Trainers',
+  'Visitasi',
+  'Magang',
+  'Laporan Bulanan',
+  'Pembayaran Mitra',
+  'PLN',
+  'In House Training',
+  'Permintaan Mitra',
+  'STEP UP',
+  'SPARK',
+  'Dashboard',
+  'RAKER',
+  'Pertemuan Feedback',
+  'Konsultasi Mitra',
+  'Monitoring Mitra',
+  'Pelayanan (MoU, SOP, Panduan)',
 ] as const;
 
 export const BULAN_LIST = [
@@ -367,6 +373,7 @@ export interface MendakiFormSubmission {
   id: string; // e.g. 'SUB-MENDAKI-001'
   formId: string;
   judulForm?: string;
+  eventId?: string; // ID Event dari Event Tracker (e.g. 'EVT-01')
   email: string;
   nama: string;
   mitraId: string;

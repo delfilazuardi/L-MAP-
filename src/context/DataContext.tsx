@@ -139,29 +139,118 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Single Source of Truth: In-memory React state synced via Firestore onSnapshot
+  const getInitialCollectionState = <T,>(collectionName: string, defaultItems: T[]): T[] => {
+    try {
+      const raw = localStorage.getItem(`lmap_backup_${collectionName}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return defaultItems;
+  };
+
+  // Single Source of Truth: In-memory React state synced via Firestore onSnapshot + localStorage backup
   // Catatan: Entitas Demo Sekolah Mitra diisolasi di memori dan tidak disimpan di Firestore produksi
-  const [sekolahList, setSekolahList] = useState<SekolahMitra[]>([...INITIAL_SEKOLAH, DEMO_SEKOLAH]);
-  const [laporanList, setLaporanList] = useState<LaporanBulanan[]>([...INITIAL_LAPORAN, ...DEMO_LAPORAN]);
-  const [invoiceList, setInvoiceList] = useState<Invoice[]>([...INITIAL_INVOICES, ...DEMO_INVOICES]);
-  const [pembayaranList, setPembayaranList] = useState<Pembayaran[]>([...INITIAL_PEMBAYARAN, ...DEMO_PEMBAYARAN]);
-  const [eventList, setEventList] = useState<EventItem[]>([...INITIAL_EVENTS, ...DEMO_EVENTS]);
-  const [permintaanList, setPermintaanList] = useState<PermintaanMitra[]>([...INITIAL_PERMINTAAN, ...DEMO_PERMINTAAN]);
-  const [staffActivityList, setStaffActivityList] = useState<StaffActivity[]>(INITIAL_STAFF_ACTIVITY);
-  const [adminStaffList, setAdminStaffList] = useState<AdminMitraStaff[]>(INITIAL_ADMIN_STAFF);
-  const [templateList, setTemplateList] = useState<TemplateDokumen[]>(INITIAL_TEMPLATES);
-  const [performanceList, setPerformanceList] = useState<PerformanceMenDAKI[]>([...INITIAL_PERFORMANCE_MENDAKI, ...DEMO_PERFORMANCE]);
-  const [mendakiFormList, setMendakiFormList] = useState<MendakiFormDefinition[]>(INITIAL_MENDAKI_FORMS);
-  const [mendakiSubmissionList, setMendakiSubmissionList] = useState<MendakiFormSubmission[]>([...INITIAL_MENDAKI_SUBMISSIONS, ...DEMO_MENDAKI_SUBMISSIONS]);
-  const [programMitraList, setProgramMitraList] = useState<ProgramMitraItem[]>([...INITIAL_PROGRAM_MITRA, ...DEMO_PROGRAM_MITRA]);
-  const [programMitraTemplates, setProgramMitraTemplates] = useState<ProgramMitraTemplate[]>(INITIAL_PROGRAM_MITRA_TEMPLATES);
-  const [masterKpiList, setMasterKpiList] = useState<MasterKpiStandar[]>(DAFTAR_15_STANDAR_KPI);
+  const [sekolahList, setSekolahList] = useState<SekolahMitra[]>(() =>
+    getInitialCollectionState('mitra', [...INITIAL_SEKOLAH, DEMO_SEKOLAH])
+  );
+  const [laporanList, setLaporanList] = useState<LaporanBulanan[]>(() =>
+    getInitialCollectionState('laporan_bulanan', [...INITIAL_LAPORAN, ...DEMO_LAPORAN])
+  );
+  const [invoiceList, setInvoiceList] = useState<Invoice[]>(() =>
+    getInitialCollectionState('invoices', [...INITIAL_INVOICES, ...DEMO_INVOICES])
+  );
+  const [pembayaranList, setPembayaranList] = useState<Pembayaran[]>(() =>
+    getInitialCollectionState('pembayaran', [...INITIAL_PEMBAYARAN, ...DEMO_PEMBAYARAN])
+  );
+  const [eventList, setEventList] = useState<EventItem[]>(() =>
+    getInitialCollectionState('events', [...INITIAL_EVENTS, ...DEMO_EVENTS])
+  );
+  const [permintaanList, setPermintaanList] = useState<PermintaanMitra[]>(() =>
+    getInitialCollectionState('permintaan_mitra', [...INITIAL_PERMINTAAN, ...DEMO_PERMINTAAN])
+  );
+  const [staffActivityList, setStaffActivityList] = useState<StaffActivity[]>(() =>
+    getInitialCollectionState('staff_activities', INITIAL_STAFF_ACTIVITY)
+  );
+  const [adminStaffList, setAdminStaffList] = useState<AdminMitraStaff[]>(() =>
+    getInitialCollectionState('admin_staff', INITIAL_ADMIN_STAFF)
+  );
+  const [templateList, setTemplateList] = useState<TemplateDokumen[]>(() =>
+    getInitialCollectionState('templates', INITIAL_TEMPLATES)
+  );
+  const [performanceList, setPerformanceList] = useState<PerformanceMenDAKI[]>(() =>
+    getInitialCollectionState('performance_mendaki', [...INITIAL_PERFORMANCE_MENDAKI, ...DEMO_PERFORMANCE])
+  );
+  const [mendakiFormList, setMendakiFormList] = useState<MendakiFormDefinition[]>(() =>
+    getInitialCollectionState('mendaki_forms', INITIAL_MENDAKI_FORMS)
+  );
+  const [mendakiSubmissionList, setMendakiSubmissionList] = useState<MendakiFormSubmission[]>(() =>
+    getInitialCollectionState('mendaki_submissions', [...INITIAL_MENDAKI_SUBMISSIONS, ...DEMO_MENDAKI_SUBMISSIONS])
+  );
+  const [programMitraList, setProgramMitraList] = useState<ProgramMitraItem[]>(() =>
+    getInitialCollectionState('program_mitra', [...INITIAL_PROGRAM_MITRA, ...DEMO_PROGRAM_MITRA])
+  );
+  const [programMitraTemplates, setProgramMitraTemplates] = useState<ProgramMitraTemplate[]>(() =>
+    getInitialCollectionState('program_mitra_templates', INITIAL_PROGRAM_MITRA_TEMPLATES)
+  );
+  const [masterKpiList, setMasterKpiList] = useState<MasterKpiStandar[]>(() =>
+    getInitialCollectionState('master_kpi_standar', DAFTAR_15_STANDAR_KPI)
+  );
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
   const [syncStatusMessage, setSyncStatusMessage] = useState<string>('Menyambungkan ke Firebase Firestore...');
+
+  // Helper for resilient local storage backup so user changes are never lost
+  const saveLocalBackup = (collectionName: string, items: any[]) => {
+    try {
+      localStorage.setItem(`lmap_backup_${collectionName}`, JSON.stringify(items));
+    } catch {
+      // ignore quota errors
+    }
+  };
+
+  const loadLocalBackup = <T,>(collectionName: string): T[] | null => {
+    try {
+      const raw = localStorage.getItem(`lmap_backup_${collectionName}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const safeFirestoreSet = async (collectionName: string, docId: string, data: any) => {
+    try {
+      const safeId = toFirestoreDocId(docId);
+      await setDoc(doc(db, collectionName, safeId), sanitizeForFirestore(data));
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.warn(`Firestore write fallback to local [${collectionName}/${docId}]:`, err);
+    }
+  };
+
+  const safeFirestoreDelete = async (collectionName: string, docId: string) => {
+    try {
+      const safeId = toFirestoreDocId(docId);
+      await deleteDoc(doc(db, collectionName, safeId));
+      if (safeId !== docId) {
+        await deleteDoc(doc(db, collectionName, docId)).catch(() => {});
+      }
+      setLastSyncTime(new Date());
+    } catch (err) {
+      console.warn(`Firestore delete fallback to local [${collectionName}/${docId}]:`, err);
+    }
+  };
 
   // Track bootstrapped collections so we never recreate deleted items
   const bootstrappedRef = React.useRef<Set<string>>(new Set());
@@ -226,7 +315,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               else if (collectionName === 'program_mitra') demoFallback = DEMO_PROGRAM_MITRA as unknown as T[];
 
               const demoItemsToKeep = prevDemo.length > 0 ? prevDemo : demoFallback;
-              return [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+              const nextItems = [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+              saveLocalBackup(collectionName, nextItems);
+              return nextItems;
             });
           }
 
@@ -237,10 +328,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         },
         (error) => {
-          console.error(`Firestore realtime listener error [${collectionName}]:`, error);
+          console.warn(`Firestore realtime listener fallback [${collectionName}]:`, error);
+          const localSaved = loadLocalBackup<T>(collectionName);
+          if (localSaved && localSaved.length > 0) {
+            setter(localSaved);
+          }
           if (isMounted) {
+            setIsLoading(false);
             setIsFirebaseConnected(false);
-            setSyncStatusMessage(`Koneksi Firestore terganggu: ${error.message}`);
+            setSyncStatusMessage(`Mode Penyimpanan Lokal Aktif (${error.message})`);
           }
         }
       );
@@ -292,12 +388,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // Optimistic state update
-    setLaporanList(prev => [newLaporan, ...prev.filter(l => l.id !== id)]);
+    setLaporanList(prev => {
+      const next = [newLaporan, ...prev.filter(l => l.id !== id)];
+      saveLocalBackup('laporan_bulanan', next);
+      return next;
+    });
 
     if (isDemo) return;
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(newLaporan));
+    await safeFirestoreSet('laporan_bulanan', id, newLaporan);
   }, []);
 
   const updateLaporan = useCallback(async (updated: LaporanBulanan) => {
@@ -309,26 +408,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tahunAjaran: updated.tahunAjaran || '2026/2027',
     };
 
-    setLaporanList(prev => prev.map(item => item.id === updated.id ? withUpdate : item));
+    setLaporanList(prev => {
+      const next = prev.map(item => item.id === updated.id ? withUpdate : item);
+      saveLocalBackup('laporan_bulanan', next);
+      return next;
+    });
 
     if (isDemoEntity(updated)) return;
 
-    const safeId = toFirestoreDocId(updated.id);
-    await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(withUpdate));
+    await safeFirestoreSet('laporan_bulanan', updated.id, withUpdate);
   }, []);
 
   const deleteLaporan = useCallback(async (id: string) => {
-    setLaporanList(prev => prev.filter(item => item.id !== id));
+    setLaporanList(prev => {
+      const next = prev.filter(item => item.id !== id);
+      saveLocalBackup('laporan_bulanan', next);
+      return next;
+    });
     if (isDemoEntity(id)) return;
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'laporan_bulanan', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'laporan_bulanan', id));
-      } catch (e) {
-        // ignore
-      }
-    }
+    await safeFirestoreDelete('laporan_bulanan', id);
   }, []);
 
   const reviewLaporan = useCallback(async (id: string, status: LaporanStatus, catatanAdmin?: string) => {
@@ -343,12 +441,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: today,
     };
 
-    setLaporanList(prev => prev.map(item => item.id === id ? updated : item));
+    setLaporanList(prev => {
+      const next = prev.map(item => item.id === id ? updated : item);
+      saveLocalBackup('laporan_bulanan', next);
+      return next;
+    });
 
     if (isDemoEntity(target)) return;
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(updated));
+    await safeFirestoreSet('laporan_bulanan', id, updated);
   }, [laporanList]);
 
   const updateLaporanSheet = useCallback(async (id: string, sheetData: SheetPerhitunganData) => {
@@ -362,12 +463,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: today,
     };
 
-    setLaporanList(prev => prev.map(item => item.id === id ? updated : item));
+    setLaporanList(prev => {
+      const next = prev.map(item => item.id === id ? updated : item);
+      saveLocalBackup('laporan_bulanan', next);
+      return next;
+    });
 
     if (isDemoEntity(target)) return;
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'laporan_bulanan', safeId), sanitizeForFirestore(updated));
+    await safeFirestoreSet('laporan_bulanan', id, updated);
   }, [laporanList]);
 
   // ==========================================
@@ -611,42 +715,82 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [bulkImportInvoiceAndPayment]);
 
   // ==========================================
-  // EVENT TRACKER CRUD
+  // EVENT TRACKER CRUD (Connected to Performance MenDAKI)
   // ==========================================
+  const syncEventToMendakiForms = useCallback(async (eventItem: EventItem) => {
+    if (isDemoEntity(eventItem)) return;
+    const eventTitle = eventItem.judul?.trim();
+    const eventCat = eventItem.kategori?.trim();
+    if (!eventTitle && !eventCat) return;
+
+    setMendakiFormList(prev => {
+      const next = prev.map(form => {
+        const currentOpts = form.daftarKategoriEvent || [];
+        const additions: string[] = [];
+        if (eventCat && !currentOpts.includes(eventCat)) additions.push(eventCat);
+        if (eventTitle && !currentOpts.includes(eventTitle)) additions.push(eventTitle);
+        if (additions.length === 0) return form;
+
+        const updatedForm: MendakiFormDefinition = {
+          ...form,
+          daftarKategoriEvent: [...currentOpts, ...additions],
+          updatedAt: new Date().toISOString().split('T')[0],
+        };
+        safeFirestoreSet('mendaki_forms', updatedForm.id, updatedForm);
+        return updatedForm;
+      });
+      saveLocalBackup('mendaki_forms', next);
+      return next;
+    });
+  }, []);
+
   const addEvent = useCallback(async (eventData: Omit<EventItem, 'id'> & { id?: string }) => {
     const isDemo = isDemoEntity(eventData) || isDemoEntity(eventData.sekolahId);
     const id = eventData.id || (isDemo ? `EVT-DEMO-${Date.now().toString().slice(-4)}` : `EVT-${Date.now().toString().slice(-5)}`);
-    const newEvent: EventItem = { ...eventData, id, isDemo: isDemo || undefined };
+    const newEvent: EventItem = {
+      ...eventData,
+      id,
+      mendakiFormId: eventData.mendakiFormId || 'FORM-MENDAKI-01',
+      isDemo: isDemo || undefined,
+    };
 
-    setEventList(prev => [newEvent, ...prev.filter(e => e.id !== id)]);
+    setEventList(prev => {
+      const next = [newEvent, ...prev.filter(e => e.id !== id)];
+      saveLocalBackup('events', next);
+      return next;
+    });
 
     if (isDemo) return;
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'events', safeId), sanitizeForFirestore(newEvent));
-  }, []);
+    await safeFirestoreSet('events', id, newEvent);
+    await syncEventToMendakiForms(newEvent);
+  }, [syncEventToMendakiForms]);
 
   const updateEvent = useCallback(async (event: EventItem) => {
-    setEventList(prev => prev.map(e => e.id === event.id ? event : e));
-    if (isDemoEntity(event)) return;
+    const updatedEvent: EventItem = {
+      ...event,
+      mendakiFormId: event.mendakiFormId || 'FORM-MENDAKI-01',
+    };
+    setEventList(prev => {
+      const next = prev.map(e => e.id === updatedEvent.id ? updatedEvent : e);
+      saveLocalBackup('events', next);
+      return next;
+    });
+    if (isDemoEntity(updatedEvent)) return;
 
-    const safeId = toFirestoreDocId(event.id);
-    await setDoc(doc(db, 'events', safeId), sanitizeForFirestore(event));
-  }, []);
+    await safeFirestoreSet('events', updatedEvent.id, updatedEvent);
+    await syncEventToMendakiForms(updatedEvent);
+  }, [syncEventToMendakiForms]);
 
   const deleteEvent = useCallback(async (id: string) => {
-    setEventList(prev => prev.filter(e => e.id !== id));
+    setEventList(prev => {
+      const next = prev.filter(e => e.id !== id);
+      saveLocalBackup('events', next);
+      return next;
+    });
     if (isDemoEntity(id)) return;
 
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'events', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'events', id));
-      } catch (e) {
-        // ignore
-      }
-    }
+    await safeFirestoreDelete('events', id);
   }, []);
 
   // ==========================================
@@ -794,27 +938,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newIds = new Set<string>(sorted.map(k => k.id));
 
     setMasterKpiList(sorted);
+    saveLocalBackup('master_kpi_standar', sorted);
 
     // Delete removed KPI standards from Firestore
     for (const oldId of oldIds) {
       if (!newIds.has(oldId)) {
-        const safeOldId = toFirestoreDocId(oldId);
-        await deleteDoc(doc(db, 'master_kpi_standar', safeOldId)).catch(() => {});
+        await safeFirestoreDelete('master_kpi_standar', oldId);
       }
     }
 
     // Upsert all current KPI standards to Firestore
     await Promise.all(
-      sorted.map((item) => {
-        const safeId = toFirestoreDocId(item.id);
-        return setDoc(doc(db, 'master_kpi_standar', safeId), sanitizeForFirestore(item));
-      })
+      sorted.map((item) => safeFirestoreSet('master_kpi_standar', item.id, item))
     );
 
     // Sync any updated KPI names/programs/descriptions to existing staff activities with matching noKpi
     const updatedActivities: StaffActivity[] = [];
-    setStaffActivityList(prev =>
-      prev.map(act => {
+    setStaffActivityList(prev => {
+      const next = prev.map(act => {
         const matchedKpi = sorted.find(k => k.noKpi === act.noKpi);
         if (matchedKpi && (
           act.standarKpi !== matchedKpi.namaStandar ||
@@ -830,14 +971,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return syncedAct;
         }
         return act;
-      })
-    );
+      });
+      saveLocalBackup('staff_activities', next);
+      return next;
+    });
 
     if (updatedActivities.length > 0) {
       await Promise.all(
-        updatedActivities.map(act =>
-          setDoc(doc(db, 'staff_activities', toFirestoreDocId(act.id)), sanitizeForFirestore(act))
-        )
+        updatedActivities.map(act => safeFirestoreSet('staff_activities', act.id, act))
       );
     }
   }, [masterKpiList]);
@@ -846,29 +987,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = activityData.id || `ACT-${Date.now().toString().slice(-4)}`;
     const newAct: StaffActivity = { ...activityData, id };
 
-    setStaffActivityList(prev => [newAct, ...prev.filter(a => a.id !== id)]);
+    setStaffActivityList(prev => {
+      const next = [newAct, ...prev.filter(a => a.id !== id)];
+      saveLocalBackup('staff_activities', next);
+      return next;
+    });
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'staff_activities', safeId), sanitizeForFirestore(newAct));
+    await safeFirestoreSet('staff_activities', id, newAct);
   }, []);
 
   const updateStaffActivity = useCallback(async (activity: StaffActivity) => {
-    setStaffActivityList(prev => prev.map(a => a.id === activity.id ? activity : a));
-    const safeId = toFirestoreDocId(activity.id);
-    await setDoc(doc(db, 'staff_activities', safeId), sanitizeForFirestore(activity));
+    setStaffActivityList(prev => {
+      const next = prev.map(a => a.id === activity.id ? activity : a);
+      saveLocalBackup('staff_activities', next);
+      return next;
+    });
+    await safeFirestoreSet('staff_activities', activity.id, activity);
   }, []);
 
   const deleteStaffActivity = useCallback(async (id: string) => {
-    setStaffActivityList(prev => prev.filter(a => a.id !== id));
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'staff_activities', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'staff_activities', id));
-      } catch (e) {
-        // ignore
-      }
-    }
+    setStaffActivityList(prev => {
+      const next = prev.filter(a => a.id !== id);
+      saveLocalBackup('staff_activities', next);
+      return next;
+    });
+    await safeFirestoreDelete('staff_activities', id);
   }, []);
 
   // ==========================================
@@ -878,29 +1021,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = staffData.id || `MO0${(adminStaffList.length + 3).toString().padStart(2, '0')}`;
     const newStaff: AdminMitraStaff = { ...staffData, id };
 
-    setAdminStaffList(prev => [...prev.filter(s => s.id !== id), newStaff]);
+    setAdminStaffList(prev => {
+      const next = [...prev.filter(s => s.id !== id), newStaff];
+      saveLocalBackup('admin_staff', next);
+      return next;
+    });
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'admin_staff', safeId), sanitizeForFirestore(newStaff));
+    await safeFirestoreSet('admin_staff', id, newStaff);
   }, [adminStaffList.length]);
 
   const updateAdminStaff = useCallback(async (staff: AdminMitraStaff) => {
-    setAdminStaffList(prev => prev.map(s => s.id === staff.id ? staff : s));
-    const safeId = toFirestoreDocId(staff.id);
-    await setDoc(doc(db, 'admin_staff', safeId), sanitizeForFirestore(staff));
+    setAdminStaffList(prev => {
+      const next = prev.map(s => s.id === staff.id ? staff : s);
+      saveLocalBackup('admin_staff', next);
+      return next;
+    });
+    await safeFirestoreSet('admin_staff', staff.id, staff);
   }, []);
 
   const deleteAdminStaff = useCallback(async (id: string) => {
-    setAdminStaffList(prev => prev.filter(s => s.id !== id));
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'admin_staff', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'admin_staff', id));
-      } catch (e) {
-        // ignore
-      }
-    }
+    setAdminStaffList(prev => {
+      const next = prev.filter(s => s.id !== id);
+      saveLocalBackup('admin_staff', next);
+      return next;
+    });
+    await safeFirestoreDelete('admin_staff', id);
   }, []);
 
   // ==========================================
@@ -910,29 +1055,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = tplData.id || `TMP-${Date.now().toString().slice(-4)}`;
     const newTpl: TemplateDokumen = { ...tplData, id };
 
-    setTemplateList(prev => [newTpl, ...prev.filter(t => t.id !== id)]);
+    setTemplateList(prev => {
+      const next = [newTpl, ...prev.filter(t => t.id !== id)];
+      saveLocalBackup('templates', next);
+      return next;
+    });
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'templates', safeId), sanitizeForFirestore(newTpl));
+    await safeFirestoreSet('templates', id, newTpl);
   }, []);
 
   const updateTemplate = useCallback(async (template: TemplateDokumen) => {
-    setTemplateList(prev => prev.map(t => t.id === template.id ? template : t));
-    const safeId = toFirestoreDocId(template.id);
-    await setDoc(doc(db, 'templates', safeId), sanitizeForFirestore(template));
+    setTemplateList(prev => {
+      const next = prev.map(t => t.id === template.id ? template : t);
+      saveLocalBackup('templates', next);
+      return next;
+    });
+    await safeFirestoreSet('templates', template.id, template);
   }, []);
 
   const deleteTemplate = useCallback(async (id: string) => {
-    setTemplateList(prev => prev.filter(t => t.id !== id));
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'templates', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'templates', id));
-      } catch (e) {
-        // ignore
-      }
-    }
+    setTemplateList(prev => {
+      const next = prev.filter(t => t.id !== id);
+      saveLocalBackup('templates', next);
+      return next;
+    });
+    await safeFirestoreDelete('templates', id);
   }, []);
 
   // ==========================================
@@ -1066,12 +1213,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isDemo: isDemo || undefined,
     };
 
-    setProgramMitraList(prev => [newItem, ...prev.filter(p => p.id !== id)]);
+    setProgramMitraList(prev => {
+      const next = [newItem, ...prev.filter(p => p.id !== id)];
+      saveLocalBackup('program_mitra', next);
+      return next;
+    });
 
     if (isDemo) return;
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'program_mitra', safeId), sanitizeForFirestore(newItem));
+    await safeFirestoreSet('program_mitra', id, newItem);
   }, []);
 
   const updateProgramMitra = useCallback(async (item: ProgramMitraItem) => {
@@ -1081,27 +1231,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: today,
     };
 
-    setProgramMitraList(prev => prev.map(p => p.id === item.id ? withUpdate : p));
+    setProgramMitraList(prev => {
+      const next = prev.map(p => p.id === item.id ? withUpdate : p);
+      saveLocalBackup('program_mitra', next);
+      return next;
+    });
 
     if (isDemoEntity(item)) return;
 
-    const safeId = toFirestoreDocId(item.id);
-    await setDoc(doc(db, 'program_mitra', safeId), sanitizeForFirestore(withUpdate));
+    await safeFirestoreSet('program_mitra', item.id, withUpdate);
   }, []);
 
   const deleteProgramMitra = useCallback(async (id: string) => {
-    setProgramMitraList(prev => prev.filter(p => p.id !== id));
+    setProgramMitraList(prev => {
+      const next = prev.filter(p => p.id !== id);
+      saveLocalBackup('program_mitra', next);
+      return next;
+    });
     if (isDemoEntity(id)) return;
 
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'program_mitra', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'program_mitra', id));
-      } catch (e) {
-        // ignore
-      }
-    }
+    await safeFirestoreDelete('program_mitra', id);
   }, []);
 
   const addProgramMitraTemplate = useCallback(async (templateData: Omit<ProgramMitraTemplate, 'id' | 'diperbarui'> & { id?: string }) => {
@@ -1114,10 +1263,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       diperbarui: today,
     };
 
-    setProgramMitraTemplates(prev => [...prev.filter(t => t.id !== id), newTemplate]);
+    setProgramMitraTemplates(prev => {
+      const next = [...prev.filter(t => t.id !== id), newTemplate];
+      saveLocalBackup('program_mitra_templates', next);
+      return next;
+    });
 
-    const safeId = toFirestoreDocId(id);
-    await setDoc(doc(db, 'program_mitra_templates', safeId), sanitizeForFirestore(newTemplate));
+    await safeFirestoreSet('program_mitra_templates', id, newTemplate);
   }, []);
 
   const updateProgramMitraTemplate = useCallback(async (template: ProgramMitraTemplate) => {
@@ -1129,25 +1281,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setProgramMitraTemplates(prev => {
       const exists = prev.some(t => t.id === template.id);
-      return exists ? prev.map(t => t.id === template.id ? withDate : t) : [...prev, withDate];
+      const next = exists ? prev.map(t => t.id === template.id ? withDate : t) : [...prev, withDate];
+      saveLocalBackup('program_mitra_templates', next);
+      return next;
     });
 
-    const safeId = toFirestoreDocId(template.id);
-    await setDoc(doc(db, 'program_mitra_templates', safeId), sanitizeForFirestore(withDate));
+    await safeFirestoreSet('program_mitra_templates', template.id, withDate);
   }, []);
 
   const deleteProgramMitraTemplate = useCallback(async (id: string) => {
-    setProgramMitraTemplates(prev => prev.filter(t => t.id !== id));
+    setProgramMitraTemplates(prev => {
+      const next = prev.filter(t => t.id !== id);
+      saveLocalBackup('program_mitra_templates', next);
+      return next;
+    });
 
-    const safeId = toFirestoreDocId(id);
-    await deleteDoc(doc(db, 'program_mitra_templates', safeId));
-    if (safeId !== id) {
-      try {
-        await deleteDoc(doc(db, 'program_mitra_templates', id));
-      } catch {
-        // ignore
-      }
-    }
+    await safeFirestoreDelete('program_mitra_templates', id);
   }, []);
 
   // ==========================================

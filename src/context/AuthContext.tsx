@@ -23,8 +23,15 @@ interface AuthContextType {
   ) => { success: boolean; message?: string };
   loginGuruWithGoogle: (
     sekolahId: string,
-    manualGoogleAccount?: { email: string; nama: string; photoUrl?: string; uid?: string }
-  ) => Promise<{ success: boolean; message?: string; popupBlocked?: boolean; user?: UserAccount }>;
+    manualGoogleAccount?: { email: string; nama?: string; photoUrl?: string; uid?: string }
+  ) => Promise<{
+    success: boolean;
+    message?: string;
+    popupBlocked?: boolean;
+    openGoogleChooser?: boolean;
+    user?: UserAccount;
+  }>;
+  recentGoogleAccounts: { email: string; nama: string; photoUrl?: string; sekolahId?: string }[];
   deleteGuruAccount: (userId: string) => Promise<void>;
   registerGuru: (data: { 
     nama: string; 
@@ -47,9 +54,58 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_STORAGE_KEY = 'lmap_current_user_id';
 const PASSWORDS_STORAGE_KEY = 'lmap_custom_passwords';
 const GURU_STORAGE_KEY = 'lmap_registered_guru';
+const RECENT_GOOGLE_KEY = 'lmap_recent_google_accounts';
+
+const formatNameFromEmail = (email: string): string => {
+  const localPart = email.split('@')[0] || 'Guru Mitra';
+  const cleaned = localPart
+    .replace(/[._-]+/g, ' ')
+    .replace(/[0-9]+/g, '')
+    .trim();
+  if (!cleaned) return 'Guru Mitra';
+  return cleaned
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { sekolahList } = useData();
+
+  // Load recent Google accounts used on this browser
+  const [recentGoogleAccounts, setRecentGoogleAccounts] = useState<
+    { email: string; nama: string; photoUrl?: string; sekolahId?: string }[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_GOOGLE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const saveRecentGoogleAccount = useCallback(
+    (acc: { email: string; nama: string; photoUrl?: string; sekolahId?: string }) => {
+      setRecentGoogleAccounts(prev => {
+        const cleanEmail = acc.email.toLowerCase().trim();
+        const next = [
+          acc,
+          ...prev.filter(item => item.email.toLowerCase().trim() !== cleanEmail),
+        ].slice(0, 8);
+        try {
+          localStorage.setItem(RECENT_GOOGLE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   // Load custom passwords created by schools or admin
   const [customPasswords, setCustomPasswords] = useState<Record<string, string>>(() => {
@@ -111,12 +167,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
         const docs = snapshot.docs.map(d => d.data() as UserAccount);
-        setGuruList(docs);
-        try {
-          localStorage.setItem(GURU_STORAGE_KEY, JSON.stringify(docs));
-        } catch {
-          // ignore
-        }
+        setGuruList(prev => {
+          const docEmails = new Set(docs.map(d => d.email?.toLowerCase()));
+          const docIds = new Set(docs.map(d => d.userId));
+          const localOnly = prev.filter(
+            p => !docIds.has(p.userId) && (!p.email || !docEmails.has(p.email.toLowerCase()))
+          );
+          const merged = [...localOnly, ...docs];
+          try {
+            localStorage.setItem(GURU_STORAGE_KEY, JSON.stringify(merged));
+          } catch {
+            // ignore
+          }
+          return merged;
+        });
       },
       (err) => {
         console.warn('Firestore guru_mitra listener warning:', err);
@@ -137,8 +201,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Function to login Guru Mitra via Google + Nama Sekolah and record to Firestore
   const loginGuruWithGoogle = useCallback(async (
     sekolahId: string,
-    manualGoogleAccount?: { email: string; nama: string; photoUrl?: string; uid?: string }
-  ): Promise<{ success: boolean; message?: string; popupBlocked?: boolean; user?: UserAccount }> => {
+    manualGoogleAccount?: { email: string; nama?: string; photoUrl?: string; uid?: string }
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    popupBlocked?: boolean;
+    openGoogleChooser?: boolean;
+    user?: UserAccount;
+  }> => {
     if (!sekolahId) {
       return { success: false, message: 'Silakan pilih Nama Sekolah Mitra terlebih dahulu.' };
     }
@@ -153,34 +223,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let googleUid = manualGoogleAccount?.uid || '';
 
     if (!manualGoogleAccount) {
+      // Detect if running inside a cross-origin preview iframe where Firebase popup is restricted
+      let isInIframe = false;
       try {
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        const result = await signInWithPopup(auth, provider);
-        const fbUser = result.user;
-        googleEmail = fbUser.email || '';
-        googleName = fbUser.displayName || (googleEmail ? googleEmail.split('@')[0] : 'Guru Mitra');
-        googlePhoto = fbUser.photoURL || '';
-        googleUid = fbUser.uid || '';
-      } catch (err: any) {
-        const code = err?.code || '';
-        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-          return {
-            success: false,
-            message: 'Jendela login Google ditutup sebelum selesai. Silakan coba lagi.',
-          };
-        }
-        // Popup blocked by browser / iframe or unauthorized preview domain
+        isInIframe = window.self !== window.top;
+      } catch {
+        isInIframe = true;
+      }
+
+      // Check if Firebase Auth already has a signed-in Google user
+      if (auth.currentUser && auth.currentUser.email) {
+        googleEmail = auth.currentUser.email;
+        googleName = auth.currentUser.displayName || formatNameFromEmail(googleEmail);
+        googlePhoto = auth.currentUser.photoURL || '';
+        googleUid = auth.currentUser.uid || '';
+      } else if (isInIframe) {
+        // Inside an iframe, open the in-app Google Account Chooser immediately without error
         return {
           success: false,
+          openGoogleChooser: true,
           popupBlocked: true,
-          message: 'Pop-up Google diblokir oleh browser/jendela pratinjau. Silakan masukkan akun Google Anda pada kolom konfirmasi di bawah untuk melanjutkan.',
         };
+      } else {
+        try {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          const result = await signInWithPopup(auth, provider);
+          const fbUser = result.user;
+          googleEmail = fbUser.email || '';
+          googleName = fbUser.displayName || (googleEmail ? formatNameFromEmail(googleEmail) : 'Guru Mitra');
+          googlePhoto = fbUser.photoURL || '';
+          googleUid = fbUser.uid || '';
+        } catch {
+          // If Firebase popup fails for any reason (unauthorized domain, popup blocked, closed),
+          // seamlessly open the in-app Google Account Chooser dialog so the teacher can still log in!
+          return {
+            success: false,
+            openGoogleChooser: true,
+            popupBlocked: true,
+          };
+        }
       }
     }
 
-    if (!googleEmail) {
-      return { success: false, message: 'Email Google tidak ditemukan.' };
+    if (!googleEmail || !googleEmail.includes('@')) {
+      return { success: false, message: 'Silakan masukkan alamat Email Google yang valid.' };
     }
 
     const cleanEmail = googleEmail.toLowerCase();
@@ -188,6 +275,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existingGuru = guruList.find(
       g => g.email.toLowerCase() === cleanEmail
     );
+
+    const resolvedName =
+      googleName ||
+      existingGuru?.nama ||
+      formatNameFromEmail(cleanEmail);
 
     const userId = existingGuru?.userId || `GURU-GGL-${emailSlug.slice(0, 24).toUpperCase()}`;
     const nowFormatted = new Date().toLocaleString('id-ID', {
@@ -200,14 +292,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const recordedGuru: UserAccount = {
       userId,
-      nama: googleName || existingGuru?.nama || cleanEmail.split('@')[0],
+      nama: resolvedName,
       email: cleanEmail,
       role: 'Guru Mitra',
       akses: 'Akses Terbatas',
       status: 'Aktif',
       sekolahId,
       namaSekolah: schoolName,
-      mapel: existingGuru?.mapel || 'Guru Mitra (Google Login)',
+      mapel: existingGuru?.mapel || `Guru ${schoolName}`,
       photoUrl: googlePhoto || existingGuru?.photoUrl || undefined,
       googleUid: googleUid || existingGuru?.googleUid || undefined,
       lastLoginAt: nowFormatted,
@@ -220,6 +312,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...guruList.filter(g => g.userId !== userId && g.email.toLowerCase() !== cleanEmail),
     ];
     saveGuruList(updatedList);
+    saveRecentGoogleAccount({
+      email: cleanEmail,
+      nama: resolvedName,
+      photoUrl: recordedGuru.photoUrl,
+      sekolahId,
+    });
     setCurrentUser(recordedGuru);
 
     try {
@@ -228,7 +326,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sanitizeForFirestore(recordedGuru)
       );
     } catch (e) {
-      console.error('Failed to record Guru Google login to Firestore:', e);
+      console.warn('Firestore guru_mitra write fallback to localStorage:', e);
     }
 
     return {
@@ -236,7 +334,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       message: `Selamat datang, ${recordedGuru.nama} (${schoolName})!`,
       user: recordedGuru,
     };
-  }, [sekolahList, guruList]);
+  }, [sekolahList, guruList, saveRecentGoogleAccount]);
 
   const deleteGuruAccount = useCallback(async (userId: string) => {
     setGuruList(prev => {
@@ -601,6 +699,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isDemoMitra,
       loginDemo,
       guruList,
+      recentGoogleAccounts,
       login,
       loginGuruWithGoogle,
       deleteGuruAccount,

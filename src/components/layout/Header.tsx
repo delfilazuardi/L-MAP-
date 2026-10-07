@@ -186,6 +186,11 @@ export const Header: React.FC<HeaderProps> = ({
                         <ShieldCheck size={13} className="text-amber-500" />
                         <span>Sesi Administrator</span>
                       </>
+                    ) : currentUser?.role === 'Guru Mitra' ? (
+                      <>
+                        <GraduationCap size={13} className="text-purple-600" />
+                        <span>Akun Google Guru Aktif</span>
+                      </>
                     ) : (
                       <>
                         <Building size={13} className="text-sky-600" />
@@ -193,16 +198,18 @@ export const Header: React.FC<HeaderProps> = ({
                       </>
                     )}
                   </span>
-                  <button
-                    onClick={() => {
-                      setShowSwitchDropdown(false);
-                      setIsChangePassOpen(true);
-                    }}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <KeyRound size={11} />
-                    <span>Ganti Sandi</span>
-                  </button>
+                  {currentUser?.role !== 'Guru Mitra' && (
+                    <button
+                      onClick={() => {
+                        setShowSwitchDropdown(false);
+                        setIsChangePassOpen(true);
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <KeyRound size={11} />
+                      <span>Ganti Sandi</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-start gap-3">
@@ -243,10 +250,22 @@ export const Header: React.FC<HeaderProps> = ({
                     <Mail size={12} className="text-slate-400 shrink-0" />
                     <span className="truncate">{currentUser?.email || '-'}</span>
                   </div>
+                  {currentUser?.role === 'Guru Mitra' && currentUser?.namaSekolah && (
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400">Sekolah Mitra:</span>
+                      <span className="font-bold text-purple-700 truncate max-w-[160px]">
+                        {currentUser.namaSekolah}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-slate-400">Status Kredensial:</span>
+                    <span className="text-slate-400">Metode Login:</span>
                     <span className="font-semibold text-slate-700">
-                      {hasCustomPassword(currentUser?.userId || '') ? '✨ Sandi Khusus Aktif' : '🔑 Sandi Bawaan'}
+                      {currentUser?.role === 'Guru Mitra'
+                        ? '✅ Terhubung via Google'
+                        : hasCustomPassword(currentUser?.userId || '')
+                        ? '✨ Sandi Khusus Aktif'
+                        : '🔑 Sandi Bawaan'}
                     </span>
                   </div>
                 </div>

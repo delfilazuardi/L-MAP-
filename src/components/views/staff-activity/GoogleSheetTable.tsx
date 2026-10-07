@@ -389,18 +389,36 @@ export const GoogleSheetTable: React.FC<GoogleSheetTableProps> = ({
                       {index + 1}
                     </td>
 
-                    {/* No. KPI & Progress */}
+                    {/* No. KPI & Progress (Supports Multi-KPI per Program) */}
                     <td className="py-2.5 px-3 border-r border-slate-200 text-center">
                       {item.noKpi && item.noKpi !== '-' ? (
                         (() => {
-                          const kpiStat = getKpiProgressStats(item.noKpi, item.standarKpi, item.programKpi);
+                          const codes =
+                            item.noKpiList && item.noKpiList.length > 0
+                              ? item.noKpiList
+                              : item.noKpi
+                                  .split(',')
+                                  .map((s) => s.trim())
+                                  .filter(Boolean);
+                          const primaryCode = codes[0] || item.noKpi;
+                          const kpiStat = getKpiProgressStats(primaryCode, item.standarKpi, item.programKpi);
                           return (
                             <div className="flex flex-col items-center gap-1">
-                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] border border-emerald-300">
-                                {item.noKpi}
-                              </span>
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                {codes.map((code) => (
+                                  <span
+                                    key={code}
+                                    className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono font-bold text-[10px] border border-emerald-300"
+                                  >
+                                    {code}
+                                  </span>
+                                ))}
+                              </div>
                               {kpiStat && (
-                                <div className="w-full max-w-[72px] flex flex-col items-center gap-0.5" title={`Progress ${item.noKpi}: ${kpiStat.percent}% (${kpiStat.done}/${kpiStat.total} tugas selesai)`}>
+                                <div
+                                  className="w-full max-w-[72px] flex flex-col items-center gap-0.5"
+                                  title={`Progress ${codes.join(', ')}: ${kpiStat.percent}%`}
+                                >
                                   <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                     <div
                                       className={`h-full rounded-full ${

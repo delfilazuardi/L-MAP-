@@ -21,7 +21,7 @@ import { SekolahMitra } from '../../types';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const DataMitraView: React.FC = () => {
-  const { currentUser, isAdmin, guruList, deleteGuruAccount } = useAuth();
+  const { currentUser, isAdmin, isGuruMitra, guruList, deleteGuruAccount } = useAuth();
   const { sekolahList, addSekolah, updateSekolah, deleteSekolah } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -352,7 +352,8 @@ export const DataMitraView: React.FC = () => {
         ))}
       </div>
 
-      {/* SECTION: DATA AKUN GOOGLE GURU MITRA YANG LOGIN */}
+      {/* SECTION: DATA AKUN GOOGLE GURU MITRA YANG LOGIN (Hanya untuk Sekolah Mitra & Admin, TIDAK tampil untuk Guru Mitra) */}
+      {!isGuruMitra && (
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mt-6">
         <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -517,6 +518,7 @@ export const DataMitraView: React.FC = () => {
           </table>
         </div>
       </div>
+      )}
 
       {/* MODAL: Tambah/Edit Sekolah Mitra */}
       {isModalOpen && (

@@ -31,6 +31,12 @@ function MainApp() {
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | undefined>(undefined);
+  const [selectedMendakiEvent, setSelectedMendakiEvent] = useState<{
+    eventId?: string;
+    judul: string;
+    kategori: string;
+    mode?: 'isi-form' | 'kelola-form';
+  } | null>(null);
 
   // Guard access based on specific role requirements
   useEffect(() => {
@@ -91,6 +97,16 @@ function MainApp() {
     setActiveTab('pembayaran');
   };
 
+  const handleNavigateToMendakiFromEvent = (payload: {
+    eventId?: string;
+    judul: string;
+    kategori: string;
+    mode?: 'isi-form' | 'kelola-form';
+  }) => {
+    setSelectedMendakiEvent(payload);
+    setActiveTab('performance-mendaki');
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Left Navigation Sidebar */}
@@ -133,7 +149,7 @@ function MainApp() {
           )}
 
           {activeTab === 'event-tracker' && (
-            <EventTrackerView />
+            <EventTrackerView onNavigateToMendaki={handleNavigateToMendakiFromEvent} />
           )}
 
           {activeTab === 'permintaan-mitra' && (
@@ -157,7 +173,11 @@ function MainApp() {
           )}
 
           {activeTab === 'performance-mendaki' && (
-            <PerformanceMendakiView />
+            <PerformanceMendakiView 
+              initialEventContext={selectedMendakiEvent}
+              onClearEventContext={() => setSelectedMendakiEvent(null)}
+              onNavigateToEventTracker={() => setActiveTab('event-tracker')}
+            />
           )}
 
           {activeTab === 'pengaturan' && (

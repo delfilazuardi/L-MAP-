@@ -96,33 +96,16 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
   const onTimeTasks = completedTasks.filter((t) => !t.deadline || t.tanggal <= t.deadline);
   const onTimeRate = completedTasks.length > 0 ? Math.round((onTimeTasks.length / completedTasks.length) * 100) : 100;
 
-  // Group KPIs strictly PER PROGRAM (Bukan Per Orang, seperti di sheet)
+  // Group KPIs strictly PER PROGRAM (Menampilkan seluruh 18 Program Mitra Office)
   const programGroups = useMemo(() => {
-    // Collect all unique program names present in tasks or standard list
-    const presentPrograms = new Set<string>();
+    // Always include all 18 official programs + any custom programs from tasks
+    const presentPrograms = new Set<string>(DEFAULT_KPI_PROGRAMS);
     filteredTasks.forEach((t) => {
       if (t.programKpi) presentPrograms.add(t.programKpi);
     });
-
-    // Also include programs from Master 15 KPI Standar and default programs if tasks have them
-    masterKpiList.forEach((kpi) => {
-      if (kpi.programKpi && tasks.some(t => t.programKpi === kpi.programKpi || t.noKpi === kpi.noKpi)) {
-        presentPrograms.add(kpi.programKpi);
-      }
+    tasks.forEach((t) => {
+      if (t.programKpi) presentPrograms.add(t.programKpi);
     });
-
-    DEFAULT_KPI_PROGRAMS.forEach((prog) => {
-      if (tasks.some(t => t.programKpi === prog)) {
-        presentPrograms.add(prog);
-      }
-    });
-
-    // If still empty (e.g. strict filter with no tasks), show present programs from filtered tasks
-    const programList = Array.from(presentPrograms);
-    if (programList.length === 0 && tasks.length > 0) {
-      // fallback to all programs in unfiltered tasks
-      tasks.forEach(t => { if (t.programKpi) presentPrograms.add(t.programKpi); });
-    }
 
     return Array.from(presentPrograms).map((programName) => {
       const progTasks = filteredTasks.filter((t) => t.programKpi === programName);
@@ -144,6 +127,26 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
 
       // PIC Staff involved
       const involvedStaff = Array.from(new Set(progTasks.map((t) => t.namaStaff)));
+
+      // Collect all KPI codes covered by this program
+      const coveredKpiSet = new Set<string>();
+      progTasks.forEach((t) => {
+        if (t.noKpiList && t.noKpiList.length > 0) {
+          t.noKpiList.forEach((c) => coveredKpiSet.add(c));
+        } else if (t.noKpi && t.noKpi !== '-') {
+          t.noKpi
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .forEach((c) => coveredKpiSet.add(c));
+        }
+      });
+      masterKpiList.forEach((k) => {
+        if (k.programKpi === programName) {
+          coveredKpiSet.add(k.noKpi);
+        }
+      });
+      const coveredKpis = Array.from(coveredKpiSet).sort();
 
       let statusBadge = {
         label: 'Belum Dimulai',
@@ -189,6 +192,7 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
         earnedWeight: progEarnedWeight,
         scorePercent: progScorePercent,
         involvedStaff,
+        coveredKpis,
         statusBadge,
       };
     });
@@ -198,16 +202,24 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
   const [kpiStatusFilter, setKpiStatusFilter] = useState<'ALL' | 'TERCAPAI' | 'PROSES' | 'BELUM'>('ALL');
   const [expandedKpiCode, setExpandedKpiCode] = useState<string | null>(null);
 
+  // Helper to check if a task covers a specific KPI
+  const doesTaskCoverKpi = (t: StaffActivity, kpi: MasterKpiStandar) => {
+    if (t.noKpiList && t.noKpiList.includes(kpi.noKpi)) return true;
+    if (t.noKpi && t.noKpi !== '-') {
+      const codes = t.noKpi.split(',').map((s) => s.trim());
+      if (codes.includes(kpi.noKpi)) return true;
+    }
+    if (t.standarKpiList && t.standarKpiList.includes(kpi.namaStandar)) return true;
+    if (t.standarKpi && t.standarKpi.includes(kpi.namaStandar)) return true;
+    if ((!t.noKpi || t.noKpi === '-') && t.programKpi === kpi.programKpi) return true;
+    return false;
+  };
+
   // Per-KPI Progress Evaluation (All 15 Standard KPIs + any Custom KPIs)
   const kpiProgressList = useMemo(() => {
     const items = masterKpiList.map((kpi) => {
-      // Match tasks by noKpi, standarKpi, or programKpi
-      const kpiTasks = filteredTasks.filter(
-        (t) =>
-          (t.noKpi && t.noKpi === kpi.noKpi) ||
-          (t.standarKpi && t.standarKpi === kpi.namaStandar) ||
-          (!t.noKpi && t.programKpi === kpi.programKpi)
-      );
+      // Match tasks by noKpiList, comma-separated noKpi, standarKpi, or programKpi
+      const kpiTasks = filteredTasks.filter((t) => doesTaskCoverKpi(t, kpi));
 
       const total = kpiTasks.length;
       const done = kpiTasks.filter((t) => t.status === 'Selesai').length;
@@ -262,6 +274,9 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
       }
 
       const involvedStaff = Array.from(new Set(kpiTasks.map((t) => t.namaStaff)));
+      const involvedPrograms = Array.from(
+        new Set([kpi.programKpi, ...kpiTasks.map((t) => t.programKpi).filter(Boolean) as string[]])
+      );
 
       return {
         ...kpi,
@@ -281,6 +296,7 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
         statusColor,
         barColor,
         involvedStaff,
+        involvedPrograms,
       };
     });
 
@@ -739,7 +755,16 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
 
                         {/* Sasaran Program */}
                         <td className="py-3 px-4 border-r border-slate-200 text-indigo-900 font-semibold">
-                          {kpi.programKpi}
+                          <div className="flex flex-wrap gap-1">
+                            {kpi.involvedPrograms.map((prog) => (
+                              <span
+                                key={prog}
+                                className="inline-block px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200 text-[11px] font-bold"
+                              >
+                                {prog}
+                              </span>
+                            ))}
+                          </div>
                         </td>
 
                         {/* Indikator & Target */}
@@ -946,19 +971,35 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
                           {idx + 1}
                         </td>
 
-                        {/* Nama Program KPI */}
+                        {/* Nama Program KPI & Cakupan Multi-KPI */}
                         <td className="py-3 px-4 font-bold text-slate-900">
-                          <div className="flex items-center gap-2">
-                            <span className="p-1 rounded-md bg-slate-100 text-slate-500 group-hover:text-emerald-700">
+                          <div className="flex items-start gap-2">
+                            <span className="p-1 rounded-md bg-slate-100 text-slate-500 group-hover:text-emerald-700 mt-0.5">
                               {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                             </span>
-                            <div>
-                              <span className="text-xs leading-snug hover:text-emerald-700 transition">
+                            <div className="space-y-1">
+                              <span className="text-xs leading-snug hover:text-emerald-700 transition block">
                                 {group.programName}
                               </span>
-                              <span className="block text-[10px] font-normal text-slate-500">
-                                {group.totalTasks} baris tugas terdaftar di sheet
-                              </span>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {group.coveredKpis && group.coveredKpis.length > 0 ? (
+                                  group.coveredKpis.map((code) => (
+                                    <span
+                                      key={code}
+                                      className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono text-[9px] font-bold"
+                                    >
+                                      {code}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] font-normal text-slate-400">
+                                    Belum ada KPI tertaut
+                                  </span>
+                                )}
+                                <span className="text-[10px] font-normal text-slate-500 ml-1">
+                                  • {group.totalTasks} tugas
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </td>
