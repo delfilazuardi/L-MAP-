@@ -55,6 +55,33 @@ export const GoogleSheetTable: React.FC<GoogleSheetTableProps> = ({
     ])
   );
 
+  // Helper to get per-KPI progress stats
+  const getKpiProgressStats = (noKpi?: string, standarKpi?: string, programKpi?: string) => {
+    if (!noKpi || noKpi === '-') return null;
+    const kpiTasks = tasks.filter(
+      (t) =>
+        (t.noKpi && t.noKpi === noKpi) ||
+        (standarKpi && t.standarKpi === standarKpi) ||
+        (!t.noKpi && programKpi && t.programKpi === programKpi)
+    );
+    const total = kpiTasks.length;
+    const done = kpiTasks.filter((t) => t.status === 'Selesai').length;
+    const totalWeight = kpiTasks.reduce((acc, c) => acc + (c.bobotKpi || 20), 0);
+    const earnedWeight = kpiTasks
+      .filter((t) => t.status === 'Selesai')
+      .reduce((acc, c) => acc + (c.bobotKpi || 20), 0);
+    const percent = totalWeight > 0 ? Math.min(100, Math.round((earnedWeight / totalWeight) * 100)) : 0;
+    const isTercapai = total > 0 && (percent >= 80 || done === total);
+    return {
+      total,
+      done,
+      percent,
+      isTercapai,
+      earnedWeight,
+      totalWeight,
+    };
+  };
+
   // Filter tasks
   const filteredTasks = tasks.filter((t) => {
     const taskName = t.tugas || t.judulAktivitas || '';
@@ -362,12 +389,46 @@ export const GoogleSheetTable: React.FC<GoogleSheetTableProps> = ({
                       {index + 1}
                     </td>
 
-                    {/* No. KPI */}
+                    {/* No. KPI & Progress */}
                     <td className="py-2.5 px-3 border-r border-slate-200 text-center">
                       {item.noKpi && item.noKpi !== '-' ? (
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] border border-emerald-300">
-                          {item.noKpi}
-                        </span>
+                        (() => {
+                          const kpiStat = getKpiProgressStats(item.noKpi, item.standarKpi, item.programKpi);
+                          return (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono font-bold text-[11px] border border-emerald-300">
+                                {item.noKpi}
+                              </span>
+                              {kpiStat && (
+                                <div className="w-full max-w-[72px] flex flex-col items-center gap-0.5" title={`Progress ${item.noKpi}: ${kpiStat.percent}% (${kpiStat.done}/${kpiStat.total} tugas selesai)`}>
+                                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        kpiStat.isTercapai
+                                          ? 'bg-emerald-500'
+                                          : kpiStat.percent > 0
+                                          ? 'bg-blue-600'
+                                          : 'bg-amber-400'
+                                      }`}
+                                      style={{ width: `${Math.max(kpiStat.percent, 8)}%` }}
+                                    />
+                                  </div>
+                                  <span
+                                    className={`text-[9px] font-mono font-bold ${
+                                      kpiStat.isTercapai
+                                        ? 'text-emerald-700'
+                                        : kpiStat.percent > 0
+                                        ? 'text-blue-700'
+                                        : 'text-amber-700'
+                                    }`}
+                                  >
+                                    {kpiStat.percent}% {kpiStat.isTercapai ? '✓' : ''}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : (
                         <button
                           type="button"

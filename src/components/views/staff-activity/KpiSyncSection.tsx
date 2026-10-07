@@ -192,7 +192,113 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
         statusBadge,
       };
     });
-  }, [filteredTasks, tasks, today]);
+  }, [filteredTasks, tasks, today, masterKpiList]);
+
+  // Filter status for Per-KPI Progress Grid
+  const [kpiStatusFilter, setKpiStatusFilter] = useState<'ALL' | 'TERCAPAI' | 'PROSES' | 'BELUM'>('ALL');
+  const [expandedKpiCode, setExpandedKpiCode] = useState<string | null>(null);
+
+  // Per-KPI Progress Evaluation (All 15 Standard KPIs + any Custom KPIs)
+  const kpiProgressList = useMemo(() => {
+    const items = masterKpiList.map((kpi) => {
+      // Match tasks by noKpi, standarKpi, or programKpi
+      const kpiTasks = filteredTasks.filter(
+        (t) =>
+          (t.noKpi && t.noKpi === kpi.noKpi) ||
+          (t.standarKpi && t.standarKpi === kpi.namaStandar) ||
+          (!t.noKpi && t.programKpi === kpi.programKpi)
+      );
+
+      const total = kpiTasks.length;
+      const done = kpiTasks.filter((t) => t.status === 'Selesai').length;
+      const active = kpiTasks.filter((t) => t.status === 'Sedang Berjalan').length;
+      const pending = kpiTasks.filter((t) => t.status === 'Belum Dimulai' || t.status === 'Tertunda').length;
+
+      const targetPoints = kpi.defaultBobot || 100;
+      const totalAssignedWeight = kpiTasks.reduce((acc, curr) => acc + (curr.bobotKpi || 20), 0);
+      const earnedPoints = kpiTasks
+        .filter((t) => t.status === 'Selesai')
+        .reduce((acc, curr) => acc + (curr.bobotKpi || 20), 0);
+      const inProgressPoints = kpiTasks
+        .filter((t) => t.status === 'Sedang Berjalan')
+        .reduce((acc, curr) => acc + (curr.bobotKpi || 20), 0);
+
+      // Calculate progress percentage:
+      // If tasks are assigned, we calculate achievement against max(targetPoints, totalAssignedWeight) or task completion ratio
+      const denominator = totalAssignedWeight > 0 ? Math.max(targetPoints, totalAssignedWeight) : targetPoints;
+      const rawPercent = total > 0
+        ? Math.round((earnedPoints / (totalAssignedWeight > 0 ? totalAssignedWeight : targetPoints)) * 100)
+        : 0;
+      const progressPercent = Math.min(100, rawPercent);
+
+      // Determine achievement category: 'TERCAPAI' | 'PROSES' | 'BELUM'
+      let category: 'TERCAPAI' | 'PROSES' | 'BELUM' = 'BELUM';
+      let statusLabel = 'Belum Tercapai (0%)';
+      let statusColor = 'bg-slate-100 text-slate-600 border-slate-200';
+      let barColor = 'bg-slate-300';
+
+      if (total > 0 && (progressPercent >= 100 || (done === total && done > 0))) {
+        category = 'TERCAPAI';
+        statusLabel = 'Sudah Tercapai';
+        statusColor = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+        barColor = 'bg-emerald-500';
+      } else if (progressPercent >= 80) {
+        category = 'TERCAPAI';
+        statusLabel = 'Target Tercapai';
+        statusColor = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+        barColor = 'bg-emerald-500';
+      } else if (total > 0 && (done > 0 || active > 0 || progressPercent > 0)) {
+        category = 'PROSES';
+        statusLabel = progressPercent >= 50 ? 'Sedang Berjalan (On-Track)' : 'Dalam Progres';
+        statusColor = progressPercent >= 50
+          ? 'bg-blue-100 text-blue-800 border-blue-300'
+          : 'bg-amber-100 text-amber-800 border-amber-300';
+        barColor = progressPercent >= 50 ? 'bg-blue-600' : 'bg-amber-500';
+      } else if (total > 0) {
+        category = 'BELUM';
+        statusLabel = 'Belum Dimulai';
+        statusColor = 'bg-amber-50 text-amber-700 border-amber-200';
+        barColor = 'bg-amber-400';
+      }
+
+      const involvedStaff = Array.from(new Set(kpiTasks.map((t) => t.namaStaff)));
+
+      return {
+        ...kpi,
+        tasks: kpiTasks,
+        totalTasks: total,
+        completedCount: done,
+        inProgressCount: active,
+        pendingCount: pending,
+        targetPoints,
+        totalAssignedWeight,
+        earnedPoints,
+        inProgressPoints,
+        denominator,
+        progressPercent,
+        category,
+        statusLabel,
+        statusColor,
+        barColor,
+        involvedStaff,
+      };
+    });
+
+    return items;
+  }, [masterKpiList, filteredTasks]);
+
+  const kpiTercapaiCount = kpiProgressList.filter((k) => k.category === 'TERCAPAI').length;
+  const kpiProsesCount = kpiProgressList.filter((k) => k.category === 'PROSES').length;
+  const kpiBelumCount = kpiProgressList.filter((k) => k.category === 'BELUM').length;
+  const overallKpiAveragePercent =
+    kpiProgressList.length > 0
+      ? Math.round(kpiProgressList.reduce((acc, k) => acc + k.progressPercent, 0) / kpiProgressList.length)
+      : 0;
+
+  const displayedKpiProgressList = useMemo(() => {
+    if (kpiStatusFilter === 'ALL') return kpiProgressList;
+    return kpiProgressList.filter((k) => k.category === kpiStatusFilter);
+  }, [kpiProgressList, kpiStatusFilter]);
 
   const hasActiveFilters = selectedTahunAjaran !== 'Semua Tahun Ajaran' || selectedBulan !== 'ALL';
 
@@ -421,6 +527,357 @@ export const KpiSyncSection: React.FC<KpiSyncSectionProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
             <span>Tertunda / Lewat Deadline ({delayedTasks.length + overdueTasks.length})</span>
           </div>
+        </div>
+      </div>
+
+      {/* 3.5. TRACKER PROGRESS PER KPI (15 INDIKATOR KPI MITRA OFFICE) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+        {/* Header Bar */}
+        <div className="p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-emerald-400 shrink-0 shadow-xs">
+              <Target size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-black tracking-tight text-white">
+                  Monitoring Progress Ketercapaian Per KPI ({masterKpiList.length} Indikator KPI)
+                </h3>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  Rata-rata Progress: {overallKpiAveragePercent}%
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Pantau KPI mana yang sudah tercapai, sedang dalam progres, maupun belum tercapai beserta persentase capaiannya
+              </p>
+            </div>
+          </div>
+
+          {/* Filter Pills: Semua / Sudah Tercapai / Dalam Progres / Belum Tercapai */}
+          <div className="flex items-center gap-1.5 flex-wrap bg-white/10 p-1.5 rounded-xl border border-white/15 text-xs">
+            <button
+              type="button"
+              onClick={() => setKpiStatusFilter('ALL')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                kpiStatusFilter === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-200 hover:bg-white/10'
+              }`}
+            >
+              <span>Semua KPI</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-white text-[10px] font-mono">
+                {kpiProgressList.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKpiStatusFilter('TERCAPAI')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                kpiStatusFilter === 'TERCAPAI'
+                  ? 'bg-emerald-500 text-white shadow-xs'
+                  : 'text-emerald-300 hover:bg-white/10'
+              }`}
+            >
+              <CheckCircle2 size={13} />
+              <span>Sudah Tercapai</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-emerald-900/60 text-emerald-100 text-[10px] font-mono">
+                {kpiTercapaiCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKpiStatusFilter('PROSES')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                kpiStatusFilter === 'PROSES'
+                  ? 'bg-blue-500 text-white shadow-xs'
+                  : 'text-blue-300 hover:bg-white/10'
+              }`}
+            >
+              <Activity size={13} />
+              <span>Dalam Progres</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-blue-900/60 text-blue-100 text-[10px] font-mono">
+                {kpiProsesCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKpiStatusFilter('BELUM')}
+              className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                kpiStatusFilter === 'BELUM'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-amber-300 hover:bg-white/10'
+              }`}
+            >
+              <Clock size={13} />
+              <span>Belum Tercapai</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-900/60 text-amber-100 text-[10px] font-mono">
+                {kpiBelumCount}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Summary Banner Bar for KPI Status Overview */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-slate-50/80 border-b border-slate-200 text-xs">
+          <div className="p-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                <CheckCircle2 size={16} />
+              </div>
+              <div>
+                <span className="font-bold text-slate-800 block">KPI Sudah Tercapai</span>
+                <span className="text-[11px] text-slate-500">Progress &ge; 80% atau seluruh tugas selesai</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-black text-emerald-700 font-mono">{kpiTercapaiCount}</span>
+              <span className="text-[11px] text-slate-500 block">dari {kpiProgressList.length} KPI</span>
+            </div>
+          </div>
+
+          <div className="p-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                <Activity size={16} />
+              </div>
+              <div>
+                <span className="font-bold text-slate-800 block">KPI Sedang Berjalan</span>
+                <span className="text-[11px] text-slate-500">Ada tugas berjalan / sebagian selesai</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-black text-blue-700 font-mono">{kpiProsesCount}</span>
+              <span className="text-[11px] text-slate-500 block">dari {kpiProgressList.length} KPI</span>
+            </div>
+          </div>
+
+          <div className="p-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                <Clock size={16} />
+              </div>
+              <div>
+                <span className="font-bold text-slate-800 block">KPI Belum Tercapai / Belum Ada Tugas</span>
+                <span className="text-[11px] text-slate-500">Progress 0% (perlu penugasan/eksekusi)</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-black text-amber-700 font-mono">{kpiBelumCount}</span>
+              <span className="text-[11px] text-slate-500 block">dari {kpiProgressList.length} KPI</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Horizontal Sheet-Style Table for Per-KPI Progress */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse font-sans text-xs">
+            <thead>
+              <tr className="bg-[#f1f3f4] text-slate-700 font-semibold border-b border-slate-300 text-[11px] select-none">
+                <th className="py-2.5 px-3 border-r border-slate-200 w-28 text-center font-mono text-emerald-900">
+                  No. KPI
+                </th>
+                <th className="py-2.5 px-4 border-r border-slate-200 min-w-[240px]">
+                  Standar Mutu
+                </th>
+                <th className="py-2.5 px-4 border-r border-slate-200 min-w-[230px]">
+                  Sasaran Program
+                </th>
+                <th className="py-2.5 px-4 border-r border-slate-200 min-w-[320px]">
+                  Indikator & Target
+                </th>
+                <th className="py-2.5 px-4 min-w-[180px] text-center">
+                  Progress (%)
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-slate-800">
+              {displayedKpiProgressList.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-slate-500 bg-slate-50/50">
+                    Tidak ada indikator KPI yang sesuai dengan filter status.
+                  </td>
+                </tr>
+              ) : (
+                displayedKpiProgressList.map((kpi) => {
+                  const isExpanded = expandedKpiCode === kpi.noKpi;
+                  return (
+                    <React.Fragment key={kpi.id}>
+                      <tr
+                        onClick={() => setExpandedKpiCode(isExpanded ? null : kpi.noKpi)}
+                        className={`transition cursor-pointer ${
+                          isExpanded
+                            ? 'bg-emerald-50/70 ring-1 ring-inset ring-emerald-500'
+                            : kpi.category === 'TERCAPAI'
+                            ? 'bg-emerald-50/20 hover:bg-emerald-50/50'
+                            : 'bg-white hover:bg-slate-50/90'
+                        }`}
+                      >
+                        {/* No. KPI */}
+                        <td className="py-3 px-3 border-r border-slate-200 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="text-slate-400">
+                              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded font-mono font-bold text-[11px] border ${
+                                kpi.category === 'TERCAPAI'
+                                  ? 'bg-emerald-600 text-white border-emerald-700'
+                                  : kpi.category === 'PROSES'
+                                  ? 'bg-blue-600 text-white border-blue-700'
+                                  : 'bg-slate-100 text-slate-800 border-slate-300'
+                              }`}
+                            >
+                              {kpi.noKpi}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Standar Mutu */}
+                        <td className="py-3 px-4 border-r border-slate-200 font-bold text-slate-900">
+                          <span className="leading-snug">{kpi.namaStandar}</span>
+                        </td>
+
+                        {/* Sasaran Program */}
+                        <td className="py-3 px-4 border-r border-slate-200 text-indigo-900 font-semibold">
+                          {kpi.programKpi}
+                        </td>
+
+                        {/* Indikator & Target */}
+                        <td className="py-3 px-4 border-r border-slate-200 text-slate-600">
+                          <span className="text-[11px] leading-relaxed">
+                            {kpi.penjelasanKpi}
+                          </span>
+                        </td>
+
+                        {/* Progress (%) */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex-1 h-2.5 bg-slate-200 rounded-full overflow-hidden min-w-[80px]">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${kpi.barColor}`}
+                                style={{
+                                  width: `${Math.max(
+                                    kpi.progressPercent,
+                                    kpi.inProgressCount > 0 && kpi.progressPercent === 0 ? 10 : 0
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                            <span
+                              className={`font-mono font-black text-xs w-11 text-right ${
+                                kpi.category === 'TERCAPAI'
+                                  ? 'text-emerald-700'
+                                  : kpi.category === 'PROSES'
+                                  ? 'text-blue-700'
+                                  : 'text-slate-500'
+                              }`}
+                            >
+                              {kpi.progressPercent}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Baris Detail Pekerjaan (Muncul saat baris KPI diklik) */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/90 border-b border-slate-200">
+                          <td colSpan={5} className="py-3 px-6">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                  <Layers size={13} className="text-emerald-600" />
+                                  <span>
+                                    Daftar Tugas Terkait [{kpi.noKpi}] {kpi.namaStandar}
+                                  </span>
+                                </span>
+                                <span className="text-[11px] text-slate-600">
+                                  Target Output: <strong>{kpi.targetOutput || '-'}</strong>
+                                </span>
+                              </div>
+
+                              {kpi.tasks.length === 0 ? (
+                                <p className="text-[11px] text-amber-700 italic py-1">
+                                  Belum ada baris tugas yang ditautkan ke {kpi.noKpi} pada periode ini.
+                                </p>
+                              ) : (
+                                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                                  <table className="w-full text-left border-collapse text-[11px]">
+                                    <thead>
+                                      <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-semibold">
+                                        <th className="py-1.5 px-3 border-r border-slate-200 w-8 text-center">#</th>
+                                        <th className="py-1.5 px-3 border-r border-slate-200">Uraian Tugas / Pekerjaan</th>
+                                        <th className="py-1.5 px-3 border-r border-slate-200 w-40">PIC Admin</th>
+                                        <th className="py-1.5 px-3 border-r border-slate-200 w-28 text-center">Mulai</th>
+                                        <th className="py-1.5 px-3 border-r border-slate-200 w-28 text-center">Deadline</th>
+                                        <th className="py-1.5 px-3 border-r border-slate-200 w-24 text-center">Bobot</th>
+                                        <th className="py-1.5 px-3 w-32 text-center">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {kpi.tasks.map((t, tIdx) => (
+                                        <tr key={t.id} className="hover:bg-slate-50">
+                                          <td className="py-1.5 px-3 border-r border-slate-200 text-center font-mono text-slate-400">
+                                            {tIdx + 1}
+                                          </td>
+                                          <td className="py-1.5 px-3 border-r border-slate-200 font-semibold text-slate-900">
+                                            {t.tugas || t.judulAktivitas}
+                                          </td>
+                                          <td className="py-1.5 px-3 border-r border-slate-200 text-slate-700">
+                                            {t.namaStaff}
+                                          </td>
+                                          <td className="py-1.5 px-3 border-r border-slate-200 text-center font-mono text-slate-600">
+                                            {t.tanggal}
+                                          </td>
+                                          <td className="py-1.5 px-3 border-r border-slate-200 text-center font-mono text-slate-600">
+                                            {t.deadline || '-'}
+                                          </td>
+                                          <td className="py-1.5 px-3 border-r border-slate-200 text-center font-mono font-bold text-emerald-700">
+                                            {t.bobotKpi || 20} pts
+                                          </td>
+                                          <td className="py-1.5 px-3 text-center">
+                                            <span
+                                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                t.status === 'Selesai'
+                                                  ? 'bg-emerald-100 text-emerald-800'
+                                                  : t.status === 'Sedang Berjalan'
+                                                  ? 'bg-blue-100 text-blue-800'
+                                                  : 'bg-amber-100 text-amber-800'
+                                              }`}
+                                            >
+                                              {t.status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+
+            {/* Footer Total Row */}
+            <tfoot>
+              <tr className="bg-[#f1f3f4] font-bold text-slate-900 border-t-2 border-slate-300 text-xs">
+                <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono text-emerald-800">
+                  {kpiProgressList.length} KPI
+                </td>
+                <td colSpan={3} className="py-2.5 px-4 border-r border-slate-200">
+                  RATA-RATA CAPAIAN SELURUH INDIKATOR KPI ({kpiTercapaiCount} Tercapai, {kpiProsesCount} Dalam Progres, {kpiBelumCount} Belum Tercapai)
+                </td>
+                <td className="py-2.5 px-4 text-center font-mono text-emerald-800 text-sm">
+                  {overallKpiAveragePercent}%
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
 

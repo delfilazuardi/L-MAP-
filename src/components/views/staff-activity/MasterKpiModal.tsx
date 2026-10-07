@@ -15,7 +15,7 @@ import {
   Info,
   Trash2
 } from 'lucide-react';
-import { MasterKpiStandar } from '../../../types';
+import { MasterKpiStandar, StaffActivity } from '../../../types';
 import { DAFTAR_15_STANDAR_KPI } from '../../../data/masterKpiStandar';
 import { ConfirmDeleteModal } from '../../common/ConfirmDeleteModal';
 
@@ -23,6 +23,7 @@ interface MasterKpiModalProps {
   isOpen: boolean;
   onClose: () => void;
   masterList: MasterKpiStandar[];
+  tasks?: StaffActivity[];
   onSaveMasterList: (updatedList: MasterKpiStandar[]) => void;
   onSelectKpiForTask?: (kpi: MasterKpiStandar) => void;
 }
@@ -31,6 +32,7 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
   isOpen,
   onClose,
   masterList,
+  tasks = [],
   onSaveMasterList,
   onSelectKpiForTask,
 }) => {
@@ -329,17 +331,44 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
 
           {/* List of 15 Standards & KPIs */}
           <div className="space-y-3">
-            {filteredList.map((item) => (
+            {filteredList.map((item) => {
+              const kpiTasks = tasks.filter(
+                (t) =>
+                  (t.noKpi && t.noKpi === item.noKpi) ||
+                  (t.standarKpi && t.standarKpi === item.namaStandar) ||
+                  (!t.noKpi && t.programKpi === item.programKpi)
+              );
+              const totalTasks = kpiTasks.length;
+              const doneTasks = kpiTasks.filter((t) => t.status === 'Selesai').length;
+              const activeTasks = kpiTasks.filter((t) => t.status === 'Sedang Berjalan').length;
+              const totalWeight = kpiTasks.reduce((acc, c) => acc + (c.bobotKpi || 20), 0);
+              const earnedWeight = kpiTasks
+                .filter((t) => t.status === 'Selesai')
+                .reduce((acc, c) => acc + (c.bobotKpi || 20), 0);
+              const progressPercent =
+                totalTasks > 0
+                  ? Math.min(100, Math.round((earnedWeight / (totalWeight > 0 ? totalWeight : 100)) * 100))
+                  : 0;
+              const isTercapai = totalTasks > 0 && (progressPercent >= 80 || doneTasks === totalTasks);
+
+              return (
               <div
                 key={item.id}
                 className="p-4 rounded-2xl bg-white border border-slate-200/90 hover:border-blue-300 hover:shadow-md transition flex flex-col md:flex-row md:items-start justify-between gap-4"
               >
                 <div className="flex items-start gap-3.5 flex-1">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-700 text-white flex flex-col items-center justify-center shrink-0 shadow-xs font-mono">
+                  <div className={`w-12 h-12 rounded-2xl text-white flex flex-col items-center justify-center shrink-0 shadow-xs font-mono ${
+                    isTercapai
+                      ? 'bg-gradient-to-tr from-emerald-600 to-teal-600'
+                      : totalTasks > 0
+                      ? 'bg-gradient-to-tr from-blue-700 to-indigo-700'
+                      : 'bg-slate-700'
+                  }`}>
                     <span className="text-[11px] font-black">{item.noKpi}</span>
+                    <span className="text-[9px] font-bold opacity-90">{progressPercent}%</span>
                   </div>
 
-                  <div className="space-y-1.5 flex-1">
+                  <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-bold text-sm text-slate-900">
                         {item.namaStandar}
@@ -347,6 +376,45 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
                       <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                         Program: {item.programKpi}
                       </span>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          isTercapai
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : totalTasks > 0
+                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        {isTercapai
+                          ? '✓ Sudah Tercapai'
+                          : totalTasks > 0
+                          ? `Dalam Progres (${doneTasks}/${totalTasks} Selesai)`
+                          : 'Belum Tercapai (0 Tugas)'}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar Per KPI */}
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-700">
+                          Progress Ketercapaian {item.noKpi}
+                        </span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {progressPercent}% ({earnedWeight}/{totalWeight || item.defaultBobot || 100} pts • {doneTasks} Selesai, {activeTasks} Berjalan)
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isTercapai
+                              ? 'bg-emerald-500'
+                              : progressPercent > 0 || activeTasks > 0
+                              ? 'bg-blue-600'
+                              : 'bg-slate-300'
+                          }`}
+                          style={{ width: `${Math.max(progressPercent, activeTasks > 0 && progressPercent === 0 ? 8 : 0)}%` }}
+                        />
+                      </div>
                     </div>
 
                     <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
@@ -399,7 +467,8 @@ export const MasterKpiModal: React.FC<MasterKpiModalProps> = ({
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {filteredList.length === 0 && (
               <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">

@@ -468,6 +468,7 @@ export const StaffActivityView: React.FC = () => {
         isOpen={isMasterKpiModalOpen}
         onClose={() => setIsMasterKpiModalOpen(false)}
         masterList={masterKpiList}
+        tasks={staffActivityList}
         onSaveMasterList={handleSaveMasterList}
         onSelectKpiForTask={handleSelectKpiForTask}
       />
