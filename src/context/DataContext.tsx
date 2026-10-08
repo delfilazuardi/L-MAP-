@@ -51,7 +51,11 @@ import {
   isDemoEntity,
   DEMO_SEKOLAH_ID
 } from '../lib/demoData';
-import { generateNomorInvoiceBaru } from '../lib/invoiceUtils';
+import {
+  generateNomorInvoiceBaru,
+  compareInvoiceBySequenceAsc,
+  comparePaymentByInvoiceSequenceAsc,
+} from '../lib/invoiceUtils';
 import { db, testConnection, sanitizeForFirestore, toFirestoreDocId } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 
@@ -315,7 +319,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               else if (collectionName === 'program_mitra') demoFallback = DEMO_PROGRAM_MITRA as unknown as T[];
 
               const demoItemsToKeep = prevDemo.length > 0 ? prevDemo : demoFallback;
-              const nextItems = [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+              let nextItems = [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+              if (collectionName === 'invoices') {
+                nextItems = [...nextItems].sort(compareInvoiceBySequenceAsc as any);
+              } else if (collectionName === 'pembayaran') {
+                nextItems = [...nextItems].sort(comparePaymentByInvoiceSequenceAsc as any);
+              }
               saveLocalBackup(collectionName, nextItems);
               return nextItems;
             });
@@ -520,7 +529,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // ignore in environments where sessionStorage is not available
     }
 
-    setInvoiceList(prev => [newInvoice, ...prev.filter(i => i.id !== id)]);
+    setInvoiceList(prev => {
+      const next = [newInvoice, ...prev.filter(i => i.id !== id)].sort(compareInvoiceBySequenceAsc);
+      saveLocalBackup('invoices', next);
+      return next;
+    });
 
     if (isDemo) return;
 
@@ -531,9 +544,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateInvoice = useCallback(async (updated: Invoice) => {
     const withUpdate: Invoice = {
       ...updated,
+      nomorInvoice: updated.nomorInvoice || updated.id,
       updatedAt: new Date().toISOString(),
     };
-    setInvoiceList(prev => prev.map(inv => inv.id === updated.id ? withUpdate : inv));
+    setInvoiceList(prev => {
+      const next = prev.map(inv => inv.id === updated.id ? withUpdate : inv).sort(compareInvoiceBySequenceAsc);
+      saveLocalBackup('invoices', next);
+      return next;
+    });
 
     if (isDemoEntity(updated)) return;
 
@@ -581,20 +599,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addPembayaran = useCallback(async (pembayaranData: Omit<Pembayaran, 'id'> & { id?: string }) => {
     const isDemo = isDemoEntity(pembayaranData.mitraId) || isDemoEntity(pembayaranData.id);
     const id = pembayaranData.id || (isDemo ? `BYR-DEMO-${Date.now().toString().slice(-4)}` : `PAY-${Date.now().toString().slice(-6)}`);
+    // Auto-set status to Terverifikasi so there is no manual verification needed
     const newPay: Pembayaran = {
       ...pembayaranData,
       id,
+      status: 'Terverifikasi',
       isDemo: isDemo || undefined,
     };
 
-    setPembayaranList(prev => [newPay, ...prev.filter(p => p.id !== id)]);
+    setPembayaranList(prev => {
+      const next = [newPay, ...prev.filter(p => p.id !== id)].sort(comparePaymentByInvoiceSequenceAsc);
+      saveLocalBackup('pembayaran', next);
+      return next;
+    });
 
-    // If linked to an invoice, update invoice status
+    // If linked to an invoice, directly update invoice payment amount & status without waiting for verification
     if (newPay.invoiceId) {
-      const updatedInvoice = invoiceList.find(inv => inv.id === newPay.invoiceId);
+      const updatedInvoice = invoiceList.find(inv => inv.id === newPay.invoiceId || inv.nomorInvoice === newPay.invoiceId);
       if (updatedInvoice) {
-        const invUpdate = { ...updatedInvoice, status: 'Menunggu Konfirmasi' as const };
-        setInvoiceList(prev => prev.map(i => i.id === newPay.invoiceId ? invUpdate : i));
+        const realisasi = updatedInvoice.tagihanRealisasi || updatedInvoice.nominal || newPay.jumlah;
+        const paid = newPay.jumlah;
+        const nextStatus: Invoice['status'] = paid >= realisasi && realisasi > 0
+          ? 'Lunas'
+          : paid > 0
+          ? 'Sebagian'
+          : 'Belum Bayar';
+        const invUpdate: Invoice = {
+          ...updatedInvoice,
+          nominalPembayaran: paid,
+          tanggalDibayar: newPay.tanggalBayar || new Date().toISOString().split('T')[0],
+          status: nextStatus,
+        };
+        setInvoiceList(prev => {
+          const next = prev.map(i => i.id === updatedInvoice.id ? invUpdate : i).sort(compareInvoiceBySequenceAsc);
+          saveLocalBackup('invoices', next);
+          return next;
+        });
         if (!isDemo && !isDemoEntity(updatedInvoice)) {
           const safeInvId = toFirestoreDocId(updatedInvoice.id);
           await setDoc(doc(db, 'invoices', safeInvId), sanitizeForFirestore(invUpdate));
@@ -609,7 +649,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [invoiceList]);
 
   const updatePembayaran = useCallback(async (pembayaran: Pembayaran) => {
-    setPembayaranList(prev => prev.map(p => p.id === pembayaran.id ? pembayaran : p));
+    setPembayaranList(prev => {
+      const next = prev.map(p => p.id === pembayaran.id ? pembayaran : p).sort(comparePaymentByInvoiceSequenceAsc);
+      saveLocalBackup('pembayaran', next);
+      return next;
+    });
     if (isDemoEntity(pembayaran)) return;
 
     const safeId = toFirestoreDocId(pembayaran.id);

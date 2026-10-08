@@ -134,14 +134,14 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
           {/* Metric 3: Pembayaran Diterima */}
           <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              3. Pembayaran Terverifikasi
+              3. Nominal Bayar (Diterima)
             </span>
             <div className="text-base sm:text-lg font-black text-emerald-600 mt-0.5 truncate">
               {formatRupiah(totalDibayar)}
             </div>
             <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-bold mt-0.5">
               <CheckCircle2 size={12} />
-              <span>{verifiedPaymentsCount} transaksi berhasil</span>
+              <span>{lunasCount} invoice lunas</span>
             </div>
           </div>
 
@@ -189,12 +189,7 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
             <span className="text-slate-300">•</span>
             <div className="flex items-center gap-1 text-slate-600">
               <span className="font-bold text-rose-600">{unpaidCount}</span>
-              <span>Tertunda</span>
-            </div>
-            <span className="text-slate-300">•</span>
-            <div className="flex items-center gap-1 text-slate-600">
-              <span className="font-bold text-amber-600">{pendingPaymentsCount}</span>
-              <span>Cek Bukti</span>
+              <span>Belum Lunas</span>
             </div>
           </div>
         </div>

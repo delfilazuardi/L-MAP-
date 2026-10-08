@@ -24,7 +24,12 @@ import {
   Layers,
   Filter,
   Check,
-  Table2
+  Table2,
+  Trophy,
+  Award,
+  Medal,
+  Crown,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -105,10 +110,11 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
   // Active Sub-Tab:
   // - Guru Mitra: locked to 'isi-form' only
   // - Sekolah Mitra: locked to 'isi-form' (shows Form + Rekap Jumlah per Kategori Event)
-  // - Admin: 'kelola-form' (default: Sheet Hasil per Orang + Kelola Form/Dropdown) | 'isi-form'
-  const [activeSubTab, setActiveSubTab] = useState<'kelola-form' | 'isi-form'>(
+  // - Admin: 'kelola-form' (default: Report Setiap Event + Piala Sekolah + Sheet Hasil per Orang + Kelola Form) | 'report-event' | 'isi-form'
+  const [activeSubTab, setActiveSubTab] = useState<'kelola-form' | 'report-event' | 'isi-form'>(
     isAdmin ? 'kelola-form' : 'isi-form'
   );
+  const [selectedReportEventFilter, setSelectedReportEventFilter] = useState<string>('ALL');
 
   useEffect(() => {
     if (!isAdmin) {
@@ -646,6 +652,376 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
     3: '3 Bintang — Baik',
     4: '4 Bintang — Sangat Baik',
     5: '5 Bintang — Luar Biasa / Sangat Bermanfaat',
+  };
+
+  // =====================================================
+  // KHUSUS ADMIN: LEADERBOARD PIALA SEKOLAH TERAKTIF & REPORT SETIAP EVENT
+  // =====================================================
+  const schoolTrophyLeaderboard = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        mitraId: string;
+        namaSekolah: string;
+        totalIsian: number;
+        totalRatingSum: number;
+        eventSet: Set<string>;
+      }
+    >();
+
+    // Seed with all real schools so admin sees complete ranking
+    realSchools.forEach(s => {
+      map.set(s.id, {
+        mitraId: s.id,
+        namaSekolah: s.namaSekolah,
+        totalIsian: 0,
+        totalRatingSum: 0,
+        eventSet: new Set<string>(),
+      });
+    });
+
+    baseSubmissions.forEach(sub => {
+      const key = sub.mitraId || sub.namaSekolah;
+      const existing = map.get(key) || {
+        mitraId: sub.mitraId || key,
+        namaSekolah: sub.namaSekolah || 'Sekolah Mitra',
+        totalIsian: 0,
+        totalRatingSum: 0,
+        eventSet: new Set<string>(),
+      };
+      existing.totalIsian += 1;
+      existing.totalRatingSum += Number(sub.rating || 0);
+      if (sub.eventKegiatan || sub.kategoriEvent) {
+        existing.eventSet.add(sub.eventKegiatan || sub.kategoriEvent);
+      }
+      map.set(key, existing);
+    });
+
+    const totalGlobal = baseSubmissions.length;
+
+    return Array.from(map.values())
+      .map(item => {
+        const avgRating =
+          item.totalIsian > 0
+            ? Number((item.totalRatingSum / item.totalIsian).toFixed(2))
+            : 0;
+        const pct =
+          totalGlobal > 0 ? Math.round((item.totalIsian / totalGlobal) * 100) : 0;
+        return {
+          mitraId: item.mitraId,
+          namaSekolah: item.namaSekolah,
+          totalIsian: item.totalIsian,
+          jumlahEventDiikuti: item.eventSet.size,
+          daftarEvent: Array.from(item.eventSet),
+          avgRating,
+          pct,
+        };
+      })
+      .sort((a, b) => {
+        if (b.totalIsian !== a.totalIsian) return b.totalIsian - a.totalIsian;
+        if (b.jumlahEventDiikuti !== a.jumlahEventDiikuti) return b.jumlahEventDiikuti - a.jumlahEventDiikuti;
+        return b.avgRating - a.avgRating;
+      });
+  }, [realSchools, baseSubmissions]);
+
+  const summarizeDakiPoints = (
+    items: { text: string; nama: string; sekolah: string }[],
+    typeLabel: 'Drop' | 'Add' | 'Keep' | 'Improve'
+  ): string => {
+    const valid = items
+      .map(i => ({ ...i, clean: (i.text || '').trim() }))
+      .filter(i => i.clean.length > 0);
+
+    if (valid.length === 0) {
+      return `Belum ada catatan ${typeLabel} pada event ini.`;
+    }
+
+    const meaningful = valid.filter(
+      i => !/^(tidak ada|nihil|belum ada|-+)$/i.test(i.clean.replace(/[.,!]/g, '').trim())
+    );
+
+    if (meaningful.length === 0) {
+      return `Seluruh responden (${valid.length} orang) menyatakan tidak ada kendala/catatan khusus pada aspek ${typeLabel}.`;
+    }
+
+    const combinedSummary = meaningful
+      .map(m => m.clean.replace(/\.$/, ''))
+      .slice(0, 4)
+      .join('; ');
+
+    if (typeLabel === 'Drop') {
+      return `Hal utama yang perlu dikurangi/dihentikan (${meaningful.length} masukan): ${combinedSummary}.`;
+    }
+    if (typeLabel === 'Add') {
+      return `Usulan penambahan utama (${meaningful.length} masukan): ${combinedSummary}.`;
+    }
+    if (typeLabel === 'Keep') {
+      return `Praktik baik yang perlu dipertahankan (${meaningful.length} apresiasi): ${combinedSummary}.`;
+    }
+    return `Fokus peningkatan ke depan (${meaningful.length} rekomendasi): ${combinedSummary}.`;
+  };
+
+  const adminEventReports = useMemo(() => {
+    const reports: Array<{
+      key: string;
+      eventId?: string;
+      judulEvent: string;
+      kategori: string;
+      tanggal?: string;
+      lokasi?: string;
+      pic?: string;
+      pembicara?: string;
+      totalResponden: number;
+      avgRating: number;
+      predikatRating: string;
+      ratingDistribution: Record<number, number>;
+      topSchool: {
+        namaSekolah: string;
+        jumlah: number;
+        pct: number;
+        avgRating: number;
+      } | null;
+      schoolRankings: Array<{
+        namaSekolah: string;
+        jumlah: number;
+        pct: number;
+        avgRating: number;
+      }>;
+      kesimpulanDrop: string;
+      kesimpulanAdd: string;
+      kesimpulanKeep: string;
+      kesimpulanImprove: string;
+      kesimpulanDisukai: string;
+      dropItems: Array<{ text: string; nama: string; sekolah: string }>;
+      addItems: Array<{ text: string; nama: string; sekolah: string }>;
+      keepItems: Array<{ text: string; nama: string; sekolah: string }>;
+      improveItems: Array<{ text: string; nama: string; sekolah: string }>;
+      disukaiItems: Array<{ text: string; nama: string; sekolah: string }>;
+    }> = [];
+
+    const buildReportObject = (
+      key: string,
+      judulEvent: string,
+      kategori: string,
+      subs: MendakiFormSubmission[],
+      meta?: { eventId?: string; tanggal?: string; lokasi?: string; pic?: string; pembicara?: string }
+    ) => {
+      const totalResponden = subs.length;
+      const ratingSum = subs.reduce((acc, s) => acc + Number(s.rating || 0), 0);
+      const avgRating = totalResponden > 0 ? Number((ratingSum / totalResponden).toFixed(2)) : 0;
+
+      const predikatRating =
+        totalResponden === 0
+          ? 'Belum Ada Rating'
+          : avgRating >= 4.6
+          ? 'Sangat Memuaskan / Luar Biasa (A+)'
+          : avgRating >= 4.0
+          ? 'Sangat Baik (A)'
+          : avgRating >= 3.0
+          ? 'Baik (B)'
+          : 'Perlu Peningkatan (C)';
+
+      const ratingDistribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      subs.forEach(s => {
+        const r = Math.min(5, Math.max(1, Math.round(Number(s.rating || 5))));
+        ratingDistribution[r] = (ratingDistribution[r] || 0) + 1;
+      });
+
+      // School ranking inside this event
+      const schoolMap = new Map<string, { namaSekolah: string; jumlah: number; ratingSum: number }>();
+      subs.forEach(s => {
+        const sKey = s.mitraId || s.namaSekolah;
+        const curr = schoolMap.get(sKey) || {
+          namaSekolah: s.namaSekolah || 'Sekolah Mitra',
+          jumlah: 0,
+          ratingSum: 0,
+        };
+        curr.jumlah += 1;
+        curr.ratingSum += Number(s.rating || 0);
+        schoolMap.set(sKey, curr);
+      });
+
+      const schoolRankings = Array.from(schoolMap.values())
+        .map(sc => ({
+          namaSekolah: sc.namaSekolah,
+          jumlah: sc.jumlah,
+          pct: totalResponden > 0 ? Math.round((sc.jumlah / totalResponden) * 100) : 0,
+          avgRating: sc.jumlah > 0 ? Number((sc.ratingSum / sc.jumlah).toFixed(1)) : 0,
+        }))
+        .sort((a, b) => {
+          if (b.jumlah !== a.jumlah) return b.jumlah - a.jumlah;
+          return b.avgRating - a.avgRating;
+        });
+
+      const topSchool = schoolRankings.length > 0 ? schoolRankings[0] : null;
+
+      const dropItems = subs
+        .filter(s => s.drop && s.drop.trim())
+        .map(s => ({ text: s.drop.trim(), nama: s.nama, sekolah: s.namaSekolah }));
+      const addItems = subs
+        .filter(s => s.add && s.add.trim())
+        .map(s => ({ text: s.add.trim(), nama: s.nama, sekolah: s.namaSekolah }));
+      const keepItems = subs
+        .filter(s => s.keep && s.keep.trim())
+        .map(s => ({ text: s.keep.trim(), nama: s.nama, sekolah: s.namaSekolah }));
+      const improveItems = subs
+        .filter(s => s.improve && s.improve.trim())
+        .map(s => ({ text: s.improve.trim(), nama: s.nama, sekolah: s.namaSekolah }));
+      const disukaiItems = subs
+        .filter(s => s.halDisukai && s.halDisukai.trim())
+        .map(s => ({ text: s.halDisukai.trim(), nama: s.nama, sekolah: s.namaSekolah }));
+
+      const kesimpulanDrop = summarizeDakiPoints(dropItems, 'Drop');
+      const kesimpulanAdd = summarizeDakiPoints(addItems, 'Add');
+      const kesimpulanKeep = summarizeDakiPoints(keepItems, 'Keep');
+      const kesimpulanImprove = summarizeDakiPoints(improveItems, 'Improve');
+      const kesimpulanDisukai =
+        disukaiItems.length > 0
+          ? disukaiItems.map(d => d.text.replace(/\.$/, '')).slice(0, 3).join('; ') + '.'
+          : 'Belum ada catatan hal yang disukai pada event ini.';
+
+      return {
+        key,
+        eventId: meta?.eventId,
+        judulEvent,
+        kategori,
+        tanggal: meta?.tanggal,
+        lokasi: meta?.lokasi,
+        pic: meta?.pic,
+        pembicara: meta?.pembicara,
+        totalResponden,
+        avgRating,
+        predikatRating,
+        ratingDistribution,
+        topSchool,
+        schoolRankings,
+        kesimpulanDrop,
+        kesimpulanAdd,
+        kesimpulanKeep,
+        kesimpulanImprove,
+        kesimpulanDisukai,
+        dropItems,
+        addItems,
+        keepItems,
+        improveItems,
+        disukaiItems,
+      };
+    };
+
+    const coveredSubmissionIds = new Set<string>();
+
+    // 1. Reports for each agenda event in Event Tracker
+    connectedEvents.forEach(evt => {
+      const titleLower = evt.judul.trim().toLowerCase();
+      const catLower = evt.kategori.trim().toLowerCase();
+      const directSubs = baseSubmissions.filter(
+        s =>
+          (s.eventId && s.eventId === evt.id) ||
+          s.eventKegiatan?.trim().toLowerCase() === titleLower ||
+          s.temaTopik?.trim().toLowerCase() === titleLower
+      );
+      const catSubs = baseSubmissions.filter(
+        s =>
+          s.eventKegiatan?.trim().toLowerCase() === catLower ||
+          s.kategoriEvent?.trim().toLowerCase() === catLower
+      );
+      const matchedSubs = directSubs.length > 0 ? directSubs : catSubs;
+      matchedSubs.forEach(s => coveredSubmissionIds.add(s.id));
+
+      reports.push(
+        buildReportObject(`EVT-${evt.id}`, evt.judul, evt.kategori, matchedSubs, {
+          eventId: evt.id,
+          tanggal: evt.tanggal,
+          lokasi: evt.lokasi,
+          pic: evt.pic,
+          pembicara: evt.pembicara,
+        })
+      );
+    });
+
+    // 2. Any additional event/kategori in baseSubmissions not already covered by connectedEvents
+    const extraCategories: string[] = Array.from(
+      new Set(
+        baseSubmissions
+          .filter(s => !coveredSubmissionIds.has(s.id))
+          .map(s => String(s.eventKegiatan || s.kategoriEvent || ''))
+          .filter((val): val is string => Boolean(val))
+      )
+    );
+
+    extraCategories.forEach(catName => {
+      const catLower = catName.trim().toLowerCase();
+      const matchedSubs = baseSubmissions.filter(
+        s =>
+          s.eventKegiatan?.trim().toLowerCase() === catLower ||
+          s.kategoriEvent?.trim().toLowerCase() === catLower
+      );
+      reports.push(buildReportObject(`CAT-${catName}`, catName, catName, matchedSubs));
+    });
+
+    return reports;
+  }, [connectedEvents, baseSubmissions]);
+
+  const filteredEventReports = useMemo(() => {
+    if (selectedReportEventFilter === 'ALL') return adminEventReports;
+    return adminEventReports.filter(r => r.key === selectedReportEventFilter);
+  }, [adminEventReports, selectedReportEventFilter]);
+
+  const globalAverageRating = useMemo(() => {
+    if (baseSubmissions.length === 0) return 0;
+    const sum = baseSubmissions.reduce((acc, s) => acc + Number(s.rating || 0), 0);
+    return Number((sum / baseSubmissions.length).toFixed(2));
+  }, [baseSubmissions]);
+
+  const handleExportAdminEventReportsCsv = () => {
+    const headers = [
+      'No',
+      'Nama Event / Kegiatan',
+      'Kategori',
+      'Tanggal Event',
+      'Total Pengisi MenDAKI',
+      'Rata-Rata Rating',
+      'Predikat Rating',
+      'Sekolah Paling Aktif (Juara Piala)',
+      'Jumlah Pengisi Sekolah Teraktif',
+      'Kesimpulan DROP',
+      'Kesimpulan ADD',
+      'Kesimpulan KEEP',
+      'Kesimpulan IMPROVE',
+      'Hal yang Disukai Peserta',
+    ];
+    const escapeCsv = (val: string | number) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const rows = adminEventReports.map((rep, idx) =>
+      [
+        idx + 1,
+        rep.judulEvent,
+        rep.kategori,
+        rep.tanggal || '-',
+        rep.totalResponden,
+        `${rep.avgRating} / 5`,
+        rep.predikatRating,
+        rep.topSchool ? `🏆 ${rep.topSchool.namaSekolah}` : 'Belum Ada',
+        rep.topSchool ? `${rep.topSchool.jumlah} Responden (${rep.topSchool.pct}%)` : '0',
+        rep.kesimpulanDrop,
+        rep.kesimpulanAdd,
+        rep.kesimpulanKeep,
+        rep.kesimpulanImprove,
+        rep.kesimpulanDisukai,
+      ]
+        .map(escapeCsv)
+        .join(',')
+    );
+
+    const csvContent = '\uFEFF' + [headers.map(escapeCsv).join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Report_Evaluasi_MenDAKI_Per_Event_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // =====================================================
@@ -1292,6 +1668,679 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
   );
 
   // =====================================================
+  // RENDER HELPER (KHUSUS ADMIN):
+  // 1. PIALA & PODIUM SEKOLAH PALING AKTIF MENGISI MENDAKI
+  // 2. REPORT DARI SETIAP EVENT (SEKOLAH TERAKTIF + PIALA, KESIMPULAN DROP, ADD, KEEP, IMPROVE, & RATA-RATA RATING)
+  // =====================================================
+  const renderAdminEventReportAndTrophySection = () => {
+    const activeSchools = schoolTrophyLeaderboard.filter(s => s.totalIsian > 0);
+    const championSchool = activeSchools[0] || null;
+    const secondSchool = activeSchools[1] || null;
+    const thirdSchool = activeSchools[2] || null;
+
+    return (
+      <div className="space-y-6">
+        {/* =====================================================
+            BAGIAN 1: PENGHARGAAN PIALA SEKOLAH PALING AKTIF MENGISI MENDAKI
+           ===================================================== */}
+        <div className="bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 rounded-3xl border border-amber-400/30 p-6 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute -right-12 -top-12 w-72 h-72 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-12 -bottom-12 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 space-y-6">
+            {/* Header Trophy Section */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-5">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-300 text-[11px] font-black uppercase tracking-wider">
+                  <Trophy size={13} className="text-amber-400" />
+                  <span>Apresiasi Keaktifan Evaluasi Kemitraan (Khusus Admin)</span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2.5">
+                  <Crown size={22} className="text-amber-400 shrink-0" />
+                  <span>Piala & Peringkat Sekolah Mitra Paling Aktif Mengisi MenDAKI</span>
+                </h3>
+                <p className="text-xs text-blue-100/85 max-w-3xl leading-relaxed">
+                  Penghargaan khusus bagi Sekolah Mitra dengan tingkat partisipasi tertinggi dalam pengisian form refleksi & evaluasi kegiatan MenDAKI di seluruh agenda Event Tracker.
+                </p>
+              </div>
+
+              {/* Global KPI Summary */}
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <div className="px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-xs text-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-200 block">
+                    Total Evaluasi Masuk
+                  </span>
+                  <span className="text-lg font-black text-white">{baseSubmissions.length} Responden</span>
+                </div>
+                <div className="px-4 py-2.5 rounded-2xl bg-amber-400/15 border border-amber-300/30 backdrop-blur-xs text-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-200 block">
+                    Rata-Rata Rating Global
+                  </span>
+                  <div className="flex items-center justify-center gap-1 text-lg font-black text-amber-300">
+                    <Star size={16} className="fill-amber-400 text-amber-400" />
+                    <span>{globalAverageRating} / 5.0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Podium Top 3 Schools */}
+            {championSchool ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+                {/* JUARA 1 - PIALA EMAS UTAMA */}
+                <div className="lg:col-span-1 p-5 rounded-2xl bg-gradient-to-br from-amber-400/25 via-amber-500/15 to-yellow-600/10 border-2 border-amber-400/70 shadow-lg flex flex-col justify-between gap-4 relative overflow-hidden">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-xs">
+                        <Trophy size={12} className="fill-slate-950" />
+                        <span>Juara 1 • Piala Emas Teraktif</span>
+                      </span>
+                      <h4 className="text-base sm:text-lg font-black text-white pt-1">
+                        🏆 {championSchool.namaSekolah}
+                      </h4>
+                      <p className="text-[11px] text-amber-100/90">
+                        Sekolah Mitra Paling Aktif Mengisi Evaluasi MenDAKI
+                      </p>
+                    </div>
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300 to-amber-500 text-slate-950 flex items-center justify-center shadow-lg shrink-0">
+                      <Trophy size={30} className="stroke-[2.2]" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-amber-300/25 text-center">
+                    <div className="p-2 rounded-xl bg-slate-950/40 border border-white/10">
+                      <span className="text-base font-black text-amber-300 block">
+                        {championSchool.totalIsian}
+                      </span>
+                      <span className="text-[10px] text-blue-100/80 font-semibold">Total Isian</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-950/40 border border-white/10">
+                      <span className="text-base font-black text-white block">
+                        {championSchool.jumlahEventDiikuti} Event
+                      </span>
+                      <span className="text-[10px] text-blue-100/80 font-semibold">Partisipasi</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-950/40 border border-white/10">
+                      <span className="text-base font-black text-amber-300 flex items-center justify-center gap-0.5">
+                        <Star size={12} className="fill-amber-400 text-amber-400" />
+                        {championSchool.avgRating}
+                      </span>
+                      <span className="text-[10px] text-blue-100/80 font-semibold">Rata2 Rating</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* JUARA 2 - PIALA PERAK */}
+                <div className="p-5 rounded-2xl bg-white/10 border border-slate-300/30 flex flex-col justify-between gap-4">
+                  {secondSchool ? (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-200 text-slate-900 text-[10px] font-black uppercase tracking-wider">
+                            <Award size={12} />
+                            <span>Juara 2 • Piala Perak</span>
+                          </span>
+                          <h4 className="text-base font-extrabold text-white pt-1">
+                            🥈 {secondSchool.namaSekolah}
+                          </h4>
+                          <p className="text-[11px] text-blue-100/80">
+                            Kontribusi {secondSchool.pct}% dari total evaluasi
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-slate-200/20 border border-slate-300/40 text-slate-200 flex items-center justify-center shrink-0">
+                          <Trophy size={24} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center">
+                        <div className="p-2 rounded-xl bg-slate-950/35">
+                          <span className="text-sm font-black text-white block">{secondSchool.totalIsian}</span>
+                          <span className="text-[10px] text-blue-200">Total Isian</span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/35">
+                          <span className="text-sm font-black text-white block">{secondSchool.jumlahEventDiikuti} Event</span>
+                          <span className="text-[10px] text-blue-200">Partisipasi</span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/35">
+                          <span className="text-sm font-black text-amber-300 flex items-center justify-center gap-0.5">
+                            <Star size={11} className="fill-amber-400 text-amber-400" />
+                            {secondSchool.avgRating}
+                          </span>
+                          <span className="text-[10px] text-blue-200">Rata2 Rating</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-blue-200/70">
+                      Menunggu partisipasi sekolah mitra berikutnya
+                    </div>
+                  )}
+                </div>
+
+                {/* JUARA 3 - PIALA PERUNGGU */}
+                <div className="p-5 rounded-2xl bg-white/10 border border-amber-700/40 flex flex-col justify-between gap-4">
+                  {thirdSchool ? (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-700/80 text-amber-100 text-[10px] font-black uppercase tracking-wider">
+                            <Medal size={12} />
+                            <span>Juara 3 • Piala Perunggu</span>
+                          </span>
+                          <h4 className="text-base font-extrabold text-white pt-1">
+                            🥉 {thirdSchool.namaSekolah}
+                          </h4>
+                          <p className="text-[11px] text-blue-100/80">
+                            Kontribusi {thirdSchool.pct}% dari total evaluasi
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-amber-700/25 border border-amber-600/40 text-amber-300 flex items-center justify-center shrink-0">
+                          <Trophy size={24} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center">
+                        <div className="p-2 rounded-xl bg-slate-950/35">
+                          <span className="text-sm font-black text-white block">{thirdSchool.totalIsian}</span>
+                          <span className="text-[10px] text-blue-200">Total Isian</span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/35">
+                          <span className="text-sm font-black text-white block">{thirdSchool.jumlahEventDiikuti} Event</span>
+                          <span className="text-[10px] text-blue-200">Partisipasi</span>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/35">
+                          <span className="text-sm font-black text-amber-300 flex items-center justify-center gap-0.5">
+                            <Star size={11} className="fill-amber-400 text-amber-400" />
+                            {thirdSchool.avgRating}
+                          </span>
+                          <span className="text-[10px] text-blue-200">Rata2 Rating</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-blue-200/70">
+                      Menunggu partisipasi sekolah mitra berikutnya
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Klasemen Lengkap Keaktifan Sekolah Mitra */}
+            <div className="bg-slate-900/70 rounded-2xl border border-white/10 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                  <Trophy size={14} className="text-amber-400" />
+                  <span>Tabel Klasemen Keaktifan Seluruh Sekolah Mitra Mengisi MenDAKI</span>
+                </h4>
+                <span className="text-[11px] text-blue-200">
+                  Diurutkan berdasarkan jumlah pengisian form terbanyak & keaktifan event
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {schoolTrophyLeaderboard.map((sch, idx) => {
+                  const isTop1 = idx === 0 && sch.totalIsian > 0;
+                  const isTop2 = idx === 1 && sch.totalIsian > 0;
+                  const isTop3 = idx === 2 && sch.totalIsian > 0;
+                  return (
+                    <div
+                      key={sch.mitraId}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-2.5 transition ${
+                        isTop1
+                          ? 'bg-amber-400/20 border-amber-400/60 text-white'
+                          : isTop2
+                          ? 'bg-slate-200/15 border-slate-300/40 text-white'
+                          : isTop3
+                          ? 'bg-amber-700/20 border-amber-500/40 text-white'
+                          : sch.totalIsian > 0
+                          ? 'bg-white/5 border-white/15 text-white'
+                          : 'bg-white/[0.02] border-white/5 text-slate-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                            isTop1
+                              ? 'bg-amber-400 text-slate-950'
+                              : isTop2
+                              ? 'bg-slate-200 text-slate-900'
+                              : isTop3
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-slate-800 text-slate-300'
+                          }`}
+                        >
+                          {isTop1 ? '🏆' : isTop2 ? '🥈' : isTop3 ? '🥉' : idx + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-extrabold truncate flex items-center gap-1">
+                            <span className="truncate">{sch.namaSekolah}</span>
+                          </div>
+                          <div className="text-[10px] text-blue-200/80">
+                            {sch.totalIsian > 0
+                              ? `${sch.jumlahEventDiikuti} Event • ★ ${sch.avgRating}`
+                              : 'Belum mengisi'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`text-xs font-black px-2 py-0.5 rounded-lg ${
+                            sch.totalIsian > 0
+                              ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {sch.totalIsian} Isian
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* =====================================================
+            BAGIAN 2: REPORT EVALUASI MENDAKI DARI SETIAP EVENT (KHUSUS ADMIN)
+            - Sekolah Paling Aktif per Event (Piala 🏆)
+            - Kesimpulan Drop, Add, Keep, dan Improve
+            - Rata-Rata Rating per Event
+           ===================================================== */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-indigo-600 mb-1">
+                <FileText size={13} />
+                <span>Executive Event Report MenDAKI (Khusus Admin)</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <BarChart3 size={20} className="text-blue-600" />
+                <span>Report Evaluasi dari Setiap Event: Piala Sekolah Teraktif, Kesimpulan DAKI & Rata-Rata Rating</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Rangkuman lengkap setiap agenda event meliputi sekolah paling aktif mengisi (penerima piala), kesimpulan Drop, Add, Keep, Improve, serta rata-rata rating kegiatan
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <select
+                value={selectedReportEventFilter}
+                onChange={(e) => setSelectedReportEventFilter(e.target.value)}
+                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                <option value="ALL">Semua Event ({adminEventReports.length} Event)</option>
+                {adminEventReports.map(rep => (
+                  <option key={rep.key} value={rep.key}>
+                    {rep.judulEvent} ({rep.totalResponden} Pengisi)
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={handleExportAdminEventReportsCsv}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Download size={14} />
+                <span>Unduh Report Semua Event (.CSV)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Event Report Cards List */}
+          <div className="space-y-6">
+            {filteredEventReports.map((rep, index) => (
+              <div
+                key={rep.key}
+                className="rounded-3xl border border-slate-200 bg-slate-50/50 overflow-hidden shadow-2xs"
+              >
+                {/* Event Report Header Bar */}
+                <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 px-6 py-4 text-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-[10px] font-black uppercase tracking-wider">
+                        Event #{index + 1} • {rep.kategori}
+                      </span>
+                      {rep.tanggal && (
+                        <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
+                          <Calendar size={12} className="text-amber-400" />
+                          <span>{rep.tanggal}</span>
+                        </span>
+                      )}
+                      {rep.pembicara && (
+                        <span className="text-[11px] text-slate-300 font-medium">
+                          • Narasumber: <strong className="text-white">{rep.pembicara}</strong>
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="text-base sm:text-lg font-black text-white">
+                      {rep.judulEvent}
+                    </h4>
+                  </div>
+
+                  {/* Rata-Rata Rating & Jumlah Pengisi Badge */}
+                  <div className="flex flex-wrap items-center gap-3 shrink-0">
+                    <div className="px-3.5 py-2 rounded-2xl bg-white/10 border border-white/15 text-center">
+                      <span className="text-[10px] uppercase font-bold text-blue-200 block">
+                        Responden Event
+                      </span>
+                      <span className="text-sm font-black text-white">
+                        {rep.totalResponden} Pengisi
+                      </span>
+                    </div>
+
+                    <div className="px-4 py-2 rounded-2xl bg-amber-400/20 border border-amber-400/50 text-center">
+                      <span className="text-[10px] uppercase font-bold text-amber-200 block">
+                        Rata-Rata Rating Event
+                      </span>
+                      <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map(st => (
+                            <Star
+                              key={st}
+                              size={13}
+                              className={
+                                st <= Math.round(rep.avgRating)
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'fill-slate-600 text-slate-500'
+                              }
+                            />
+                          ))}
+                        </div>
+                        <span className="text-sm font-black text-amber-300">
+                          {rep.avgRating > 0 ? `${rep.avgRating} / 5.0` : 'Belum Ada'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Body Report Event */}
+                <div className="p-6 space-y-5">
+                  {/* Baris Atas: Piala Sekolah Teraktif di Event Ini & Detail Rata-Rata Rating */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    {/* PIALA SEKOLAH PALING AKTIF DI EVENT INI */}
+                    <div className="lg:col-span-7 p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50/70 to-orange-50/40 border border-amber-300/90 flex flex-col justify-between gap-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider">
+                            <Trophy size={11} />
+                            <span>Piala Sekolah Paling Aktif di Event Ini</span>
+                          </span>
+                          {rep.topSchool ? (
+                            <>
+                              <h5 className="text-base font-black text-slate-900 pt-0.5 flex items-center gap-2">
+                                <span>🏆 {rep.topSchool.namaSekolah}</span>
+                                <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-950">
+                                  {rep.topSchool.jumlah} Pengisi ({rep.topSchool.pct}%)
+                                </span>
+                              </h5>
+                              <p className="text-xs text-slate-600">
+                                Sekolah dengan partisipasi pengisian MenDAKI tertinggi pada event <strong>{rep.judulEvent}</strong> (Rata-rata rating sekolah: ★ {rep.topSchool.avgRating}/5).
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-slate-500 pt-1">
+                              Belum ada sekolah yang mengisi form evaluasi pada event ini.
+                            </p>
+                          )}
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-sm">
+                          <Trophy size={24} />
+                        </div>
+                      </div>
+
+                      {/* Daftar seluruh sekolah yang berpartisipasi pada event ini */}
+                      {rep.schoolRankings.length > 0 && (
+                        <div className="pt-2.5 border-t border-amber-200/80 flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-bold text-amber-900">
+                            Peringkat Sekolah di Event Ini:
+                          </span>
+                          {rep.schoolRankings.map((sc, sIdx) => (
+                            <span
+                              key={sc.namaSekolah}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border ${
+                                sIdx === 0
+                                  ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-2xs'
+                                  : sIdx === 1
+                                  ? 'bg-white text-slate-800 border-slate-300'
+                                  : 'bg-white/80 text-slate-700 border-amber-200'
+                              }`}
+                            >
+                              <span>{sIdx === 0 ? '🏆' : sIdx === 1 ? '🥈' : sIdx === 2 ? '🥉' : `#${sIdx + 1}`}</span>
+                              <span>{sc.namaSekolah}</span>
+                              <span className="px-1.5 py-0.2 rounded bg-black/10 text-[10px]">
+                                {sc.jumlah} orang
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* RATA-RATA RATING & DISTRIBUSI BINTANG EVENT */}
+                    <div className="lg:col-span-5 p-4 rounded-2xl bg-white border border-slate-200 flex flex-col justify-between gap-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                            Indeks Kepuasan & Rating Event
+                          </span>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-2xl font-black text-slate-900">
+                              {rep.avgRating > 0 ? rep.avgRating : '0.0'}
+                            </span>
+                            <span className="text-xs font-bold text-slate-400">/ 5.0 Bintang</span>
+                          </div>
+                          <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-extrabold">
+                            {rep.predikatRating}
+                          </span>
+                        </div>
+
+                        <div className="text-right space-y-1">
+                          {[5, 4, 3, 2, 1].map(star => {
+                            const count = rep.ratingDistribution[star] || 0;
+                            return (
+                              <div key={star} className="flex items-center justify-end gap-1.5 text-[10px]">
+                                <span className="font-bold text-slate-600">{star}★</span>
+                                <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-amber-400 rounded-full"
+                                    style={{
+                                      width: `${
+                                        rep.totalResponden > 0
+                                          ? Math.round((count / rep.totalResponden) * 100)
+                                          : 0
+                                      }%`,
+                                    }}
+                                  />
+                                </div>
+                                <span className="font-mono font-bold text-slate-500 w-4 text-right">
+                                  {count}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KESIMPULAN REFLEKSI DAKI (DROP, ADD, KEEP, IMPROVE) PER EVENT */}
+                  <div>
+                    <h5 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
+                      <Layers size={14} className="text-blue-600" />
+                      <span>Kesimpulan Evaluasi Refleksi DAKI (Drop, Add, Keep, Improve) — {rep.judulEvent}</span>
+                    </h5>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 1. KESIMPULAN DROP */}
+                      <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-black uppercase tracking-wider">
+                            1. Kesimpulan DROP (Hentikan / Kurangi)
+                          </span>
+                          <span className="text-[11px] font-bold text-rose-800">
+                            {rep.dropItems.length} Masukan
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-rose-950 bg-white/90 p-3 rounded-xl border border-rose-200/80 leading-relaxed">
+                          {rep.kesimpulanDrop}
+                        </p>
+                        {rep.dropItems.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
+                              Rincian Masukan Responden:
+                            </span>
+                            {rep.dropItems.map((item, i) => (
+                              <div
+                                key={i}
+                                className="text-[11px] text-slate-700 bg-white/70 px-3 py-1.5 rounded-lg border border-rose-100 flex items-start justify-between gap-2"
+                              >
+                                <span>• &ldquo;{item.text}&rdquo;</span>
+                                <span className="text-[10px] font-bold text-rose-800 shrink-0">
+                                  {item.nama} ({item.sekolah})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 2. KESIMPULAN ADD */}
+                      <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-lg bg-sky-600 text-white text-[11px] font-black uppercase tracking-wider">
+                            2. Kesimpulan ADD (Tambahkan Baru)
+                          </span>
+                          <span className="text-[11px] font-bold text-sky-800">
+                            {rep.addItems.length} Masukan
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-sky-950 bg-white/90 p-3 rounded-xl border border-sky-200/80 leading-relaxed">
+                          {rep.kesimpulanAdd}
+                        </p>
+                        {rep.addItems.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 block">
+                              Rincian Usulan Responden:
+                            </span>
+                            {rep.addItems.map((item, i) => (
+                              <div
+                                key={i}
+                                className="text-[11px] text-slate-700 bg-white/70 px-3 py-1.5 rounded-lg border border-sky-100 flex items-start justify-between gap-2"
+                              >
+                                <span>• &ldquo;{item.text}&rdquo;</span>
+                                <span className="text-[10px] font-bold text-sky-800 shrink-0">
+                                  {item.nama} ({item.sekolah})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3. KESIMPULAN KEEP */}
+                      <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-black uppercase tracking-wider">
+                            3. Kesimpulan KEEP (Pertahankan)
+                          </span>
+                          <span className="text-[11px] font-bold text-emerald-800">
+                            {rep.keepItems.length} Masukan
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-emerald-950 bg-white/90 p-3 rounded-xl border border-emerald-200/80 leading-relaxed">
+                          {rep.kesimpulanKeep}
+                        </p>
+                        {rep.keepItems.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
+                              Rincian Apresiasi Responden:
+                            </span>
+                            {rep.keepItems.map((item, i) => (
+                              <div
+                                key={i}
+                                className="text-[11px] text-slate-700 bg-white/70 px-3 py-1.5 rounded-lg border border-emerald-100 flex items-start justify-between gap-2"
+                              >
+                                <span>• &ldquo;{item.text}&rdquo;</span>
+                                <span className="text-[10px] font-bold text-emerald-800 shrink-0">
+                                  {item.nama} ({item.sekolah})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 4. KESIMPULAN IMPROVE */}
+                      <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-black uppercase tracking-wider">
+                            4. Kesimpulan IMPROVE (Tingkatkan)
+                          </span>
+                          <span className="text-[11px] font-bold text-amber-900">
+                            {rep.improveItems.length} Masukan
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-amber-950 bg-white/90 p-3 rounded-xl border border-amber-200/80 leading-relaxed">
+                          {rep.kesimpulanImprove}
+                        </p>
+                        {rep.improveItems.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+                              Rincian Rekomendasi Responden:
+                            </span>
+                            {rep.improveItems.map((item, i) => (
+                              <div
+                                key={i}
+                                className="text-[11px] text-slate-700 bg-white/70 px-3 py-1.5 rounded-lg border border-amber-100 flex items-start justify-between gap-2"
+                              >
+                                <span>• &ldquo;{item.text}&rdquo;</span>
+                                <span className="text-[10px] font-bold text-amber-900 shrink-0">
+                                  {item.nama} ({item.sekolah})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Hal yang Paling Disukai dari Event Ini */}
+                    <div className="mt-4 p-4 rounded-2xl bg-purple-50/60 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-purple-800 flex items-center gap-1.5">
+                          <MessageSquareHeart size={14} className="text-purple-600" />
+                          <span>Kesimpulan Hal yang Paling Disukai Peserta dari Kegiatan Ini:</span>
+                        </span>
+                        <p className="text-xs font-semibold text-slate-800 leading-relaxed">
+                          {rep.kesimpulanDisukai}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubFilterKategori(rep.kategori);
+                          setSubSearchQuery('');
+                          setActiveSubTab('kelola-form');
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-white border border-purple-200 hover:bg-purple-100 text-purple-800 text-xs font-bold shrink-0 cursor-pointer transition"
+                      >
+                        Lihat di Sheet ({rep.totalResponden})
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // =====================================================
   // VIEW KHUSUS GURU MITRA: HANYA BISA MENGISI FORM SAJA
   // =====================================================
   if (isGuruMitra) {
@@ -1325,7 +2374,7 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             {isAdmin
-              ? 'Kelola form evaluasi kegiatan, atur pilihan dropdown Event/Kegiatan, dan lihat hasil isian per orang dalam tabel sheet ke samping'
+              ? 'Laporan eksekutif setiap event, piala sekolah mitra teraktif mengisi MenDAKI, kesimpulan Drop/Add/Keep/Improve, rata-rata rating, serta sheet hasil evaluasi'
               : 'Isi form refleksi kegiatan kemitraan dan pantau jumlah partisipasi pengisian dari setiap kategori event'}
           </p>
         </div>
@@ -1333,6 +2382,14 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
         {/* Action Buttons for Admin */}
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleExportAdminEventReportsCsv}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer"
+            >
+              <Download size={15} />
+              <span>Unduh Report Event (.CSV)</span>
+            </button>
             <button
               type="button"
               onClick={() => setIsManageEventsOpen(true)}
@@ -1373,8 +2430,21 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <Table2 size={15} />
-            <span>Sheet Hasil Evaluasi & Kelola Form ({baseSubmissions.length})</span>
+            <Trophy size={15} />
+            <span>Report Setiap Event, Piala Sekolah & Sheet Evaluasi ({baseSubmissions.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('report-event')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'report-event'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Award size={15} />
+            <span>Fokus Report Per Event & Kesimpulan DAKI</span>
           </button>
 
           <button
@@ -1393,10 +2463,21 @@ export const PerformanceMendakiView: React.FC<PerformanceMendakiViewProps> = ({
       )}
 
       {/* =====================================================
-          TAB 1 (ADMIN): SHEET HASIL KE SAMPING PER ORANG & KELOLA FORM
+          TAB KHUSUS FOKUS REPORT EVENT & PIALA SEKOLAH (ADMIN)
+         ===================================================== */}
+      {isAdmin && activeSubTab === 'report-event' && (
+        <div className="space-y-6">
+          {renderAdminEventReportAndTrophySection()}
+        </div>
+      )}
+
+      {/* =====================================================
+          TAB 1 (ADMIN): REPORT SETIAP EVENT + PIALA SEKOLAH + SHEET HASIL KE SAMPING PER ORANG & KELOLA FORM
          ===================================================== */}
       {isAdmin && activeSubTab === 'kelola-form' && (
         <div className="space-y-6">
+          {/* Tampilkan langsung Podium Piala Sekolah Paling Aktif & Report Setiap Event (Drop, Add, Keep, Improve, Rata-Rata Rating) */}
+          {renderAdminEventReportAndTrophySection()}
           {/* Sheet Hasil Isian Form (Tampilan Spreadsheet Ke Samping Per Orang) */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">

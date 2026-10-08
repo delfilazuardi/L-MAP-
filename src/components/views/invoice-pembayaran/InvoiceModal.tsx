@@ -32,6 +32,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [tanggalKirim, setTanggalKirim] = useState(new Date().toISOString().split('T')[0]);
   const [tagihanFull, setTagihanFull] = useState(45000000);
   const [tagihanRealisasi, setTagihanRealisasi] = useState(45000000);
+  const [isBayarChecked, setIsBayarChecked] = useState(false);
+  const [tanggalDibayar, setTanggalDibayar] = useState(new Date().toISOString().split('T')[0]);
   const [nominalPembayaran, setNominalPembayaran] = useState(0);
   const [statusInvoice, setStatusInvoice] = useState<InvoiceOperationalStatus>('Terkirim');
   const [status, setStatus] = useState<InvoiceStatus>('Belum Bayar');
@@ -50,6 +52,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setTanggalKirim(editingInvoice.tanggalKirim || new Date().toISOString().split('T')[0]);
       setTagihanFull(editingInvoice.tagihanFull || editingInvoice.nominal || 0);
       setTagihanRealisasi(editingInvoice.tagihanRealisasi || editingInvoice.nominal || 0);
+      const hasPaid = (editingInvoice.nominalPembayaran || 0) > 0 || editingInvoice.status === 'Lunas' || editingInvoice.status === 'Sebagian';
+      setIsBayarChecked(hasPaid);
+      setTanggalDibayar(editingInvoice.tanggalDibayar || new Date().toISOString().split('T')[0]);
       setNominalPembayaran(editingInvoice.nominalPembayaran || 0);
       setStatusInvoice(editingInvoice.statusInvoice || 'Terkirim');
       setStatus(editingInvoice.status || 'Belum Bayar');
@@ -70,6 +75,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                          defaultKategori === 'Jenjang Baru' ? 35000000 : 15000000;
       setTagihanFull(defaultNom);
       setTagihanRealisasi(defaultNom);
+      setIsBayarChecked(false);
+      setTanggalDibayar(today.toISOString().split('T')[0]);
       setNominalPembayaran(0);
       setStatusInvoice('Terkirim');
       setStatus('Belum Bayar');
@@ -91,12 +98,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const school = sekolahList.find(s => s.id === mitraId);
     const namaSekolah = school ? school.namaSekolah : 'Sekolah Mitra';
 
-    // Auto calculate status if pembayaran covers realisasi
-    let finalStatus: InvoiceStatus = status;
-    if (nominalPembayaran >= tagihanRealisasi && tagihanRealisasi > 0) {
+    const effectivePaid = isBayarChecked ? Number(nominalPembayaran) : 0;
+
+    // Auto calculate status based on Ceklis Bayar & Nominal Bayar
+    let finalStatus: InvoiceStatus = 'Belum Bayar';
+    if (isBayarChecked && effectivePaid >= tagihanRealisasi && tagihanRealisasi > 0) {
       finalStatus = 'Lunas';
-    } else if (nominalPembayaran > 0 && nominalPembayaran < tagihanRealisasi) {
+    } else if (isBayarChecked && effectivePaid > 0 && effectivePaid < tagihanRealisasi) {
       finalStatus = 'Sebagian';
+    } else {
+      finalStatus = 'Belum Bayar';
     }
 
     try {
@@ -109,15 +120,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         bulan,
         tahunAjaran,
         tanggalKirim,
+        tanggalDibayar: isBayarChecked ? tanggalDibayar : undefined,
         jatuhTempo: editingInvoice?.jatuhTempo || '',
         nominal: Number(tagihanRealisasi),
         tagihanFull: Number(tagihanFull),
         tagihanRealisasi: Number(tagihanRealisasi),
-        nominalPembayaran: Number(nominalPembayaran),
+        nominalPembayaran: effectivePaid,
         statusInvoice,
         status: finalStatus,
         keterangan,
-        createdAt: editingInvoice?.createdAt || new Date().toISOString(),
+        createdAt: editingInvoice ? editingInvoice.createdAt : new Date().toISOString(),
       });
       onClose();
     } finally {
@@ -259,25 +271,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             />
           </div>
 
-          {/* Perincian Nilai Tagihan & Pembayaran */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3.5">
+          {/* Perincian Nilai Tagihan & Opsi Ceklis Bayar */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-1">
               <div>
                 <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
-                  Perincian Nilai Tagihan
+                  Perincian Nominal Tagihan & Pembayaran
                 </span>
                 <span className="text-[11px] text-slate-500">
-                  Format nominal otomatis (bisa ketik angka langsung atau akhiran 'jt' / 'rb')
+                  Isi nominal tagihan & realisasi, lalu ceklis opsi bayar jika sudah ada pembayaran
                 </span>
               </div>
             </div>
 
-            {/* 3 Input Nominal Utama */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              {/* 1. Tagihan Full */}
+            {/* 2 Input Nominal Tagihan & Nominal Realisasi */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* 1. Nominal Tagihan */}
               <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
                 <NominalInput
-                  label="1. Tagihan Full"
+                  label="1. Nominal Tagihan"
                   required
                   value={tagihanFull}
                   onChange={(val) => setTagihanFull(val)}
@@ -285,10 +297,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 />
               </div>
 
-              {/* 2. Tagihan Realisasi */}
+              {/* 2. Nominal Realisasi */}
               <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200/80 shadow-2xs">
                 <NominalInput
-                  label="2. Tagihan Realisasi"
+                  label="2. Nominal Realisasi"
                   required
                   value={tagihanRealisasi}
                   onChange={(val) => setTagihanRealisasi(val)}
@@ -298,120 +310,136 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                       type="button"
                       onClick={() => setTagihanRealisasi(tagihanFull)}
                       className="text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 transition cursor-pointer"
-                      title="Salin nominal dari Tagihan Full"
+                      title="Salin nominal dari Nominal Tagihan"
                     >
-                      ⚡ Samakan Full
+                      ⚡ Samakan Tagihan
                     </button>
-                  }
-                />
-              </div>
-
-              {/* 3. Nominal Telah Bayar */}
-              <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200/80 shadow-2xs">
-                <NominalInput
-                  label="3. Nominal Telah Bayar"
-                  value={nominalPembayaran}
-                  onChange={(val) => setNominalPembayaran(val)}
-                  inputClassName="border-emerald-400 text-emerald-800"
-                  helperAction={
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setNominalPembayaran(tagihanRealisasi)}
-                        className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-white hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition cursor-pointer"
-                        title="Set lunas 100%"
-                      >
-                        ⚡ Lunas
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNominalPembayaran(0)}
-                        className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-white hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition cursor-pointer"
-                        title="Set Rp 0"
-                      >
-                        Rp 0
-                      </button>
-                    </div>
                   }
                 />
               </div>
             </div>
 
-            {/* Sisa Hutang / Piutang (Posisi di Bawah) */}
+            {/* Opsi / Ceklis Bayar */}
+            <div className={`p-4 rounded-2xl border-2 transition-all ${
+              isBayarChecked
+                ? 'bg-emerald-50/70 border-emerald-400 shadow-xs'
+                : 'bg-white border-slate-200 hover:border-emerald-300'
+            }`}>
+              <label className="flex items-center justify-between gap-3 cursor-pointer select-none">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={isBayarChecked}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsBayarChecked(checked);
+                      if (checked && nominalPembayaran === 0) {
+                        setNominalPembayaran(tagihanRealisasi);
+                      } else if (!checked) {
+                        setNominalPembayaran(0);
+                      }
+                    }}
+                    className="w-5 h-5 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                  />
+                  <div>
+                    <span className="text-sm font-black text-slate-900 block">
+                      Ceklis Sudah Bayar / Input Pembayaran
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Centang untuk membuka form Tanggal Pembayaran & Nominal Bayar (tanpa perlu verifikasi)
+                    </span>
+                  </div>
+                </div>
+                <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full ${
+                  isBayarChecked
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {isBayarChecked ? '✓ Sudah Bayar' : 'Belum Dicentang'}
+                </span>
+              </label>
+
+              {/* Form Pembayaran yang terbuka saat Ceklis Bayar aktif */}
+              {isBayarChecked && (
+                <div className="mt-4 pt-4 border-t border-emerald-200/80 space-y-3.5 animate-in fade-in duration-150">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Tanggal Pembayaran */}
+                    <div className="p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        3. Tanggal Pembayaran
+                      </label>
+                      <input
+                        type="date"
+                        required={isBayarChecked}
+                        value={tanggalDibayar}
+                        onChange={(e) => setTanggalDibayar(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-emerald-300 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    {/* Nominal Bayar */}
+                    <div className="p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
+                      <NominalInput
+                        label="4. Nominal Bayar"
+                        required={isBayarChecked}
+                        value={nominalPembayaran}
+                        onChange={(val) => setNominalPembayaran(val)}
+                        inputClassName="border-emerald-400 text-emerald-800"
+                        helperAction={
+                          <button
+                            type="button"
+                            onClick={() => setNominalPembayaran(tagihanRealisasi)}
+                            className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 transition cursor-pointer"
+                            title="Sesuaikan penuh dengan Nominal Realisasi"
+                          >
+                            ⚡ Sesuai Realisasi
+                          </button>
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sisa Tagihan (Otomatis) */}
             <div className={`p-3.5 rounded-xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-              tagihanRealisasi - nominalPembayaran > 0
+              tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0
                 ? 'bg-rose-50/80 border-rose-200 text-rose-950'
                 : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
             }`}>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black uppercase tracking-wider">
-                    Sisa Hutang (Kewajiban Berjalan)
+                    Sisa Piutang
                   </span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    tagihanRealisasi - nominalPembayaran > 0
+                    tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0
                       ? 'bg-rose-200 text-rose-800'
                       : 'bg-emerald-200 text-emerald-800'
                   }`}>
-                    {tagihanRealisasi - nominalPembayaran > 0 ? 'Belum Lunas' : '✓ Lunas 100%'}
+                    {tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'Belum Lunas' : '✓ Lunas'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600">
-                  Dihitung otomatis: Tagihan Realisasi ({formatRupiah(tagihanRealisasi)}) − Telah Bayar ({formatRupiah(nominalPembayaran)})
+                  Realisasi ({formatRupiah(tagihanRealisasi)}) − Nominal Bayar ({formatRupiah(isBayarChecked ? nominalPembayaran : 0)})
                 </p>
               </div>
 
               <div className="text-left sm:text-right shrink-0">
                 <div className={`font-mono text-lg sm:text-xl font-black tracking-tight ${
-                  tagihanRealisasi - nominalPembayaran > 0 ? 'text-rose-600' : 'text-emerald-700'
+                  tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'text-rose-600' : 'text-emerald-700'
                 }`}>
-                  {formatRupiah(Math.max(0, tagihanRealisasi - nominalPembayaran))}
+                  {formatRupiah(Math.max(0, tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0)))}
                 </div>
-                <span className="text-[10px] text-slate-500 block">
-                  {tagihanRealisasi - nominalPembayaran > 0 ? 'Wajib dilunasi sekolah mitra' : 'Tidak ada tunggakan'}
-                </span>
               </div>
             </div>
           </div>
 
-          {/* Status & Keterangan */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Status Pengiriman Dokumen
-              </label>
-              <select
-                value={statusInvoice}
-                onChange={(e) => setStatusInvoice(e.target.value as InvoiceOperationalStatus)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold"
-              >
-                <option value="Terkirim">Terkirim</option>
-                <option value="Draft">Draft</option>
-                <option value="Revisi">Revisi</option>
-                <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Status Pembayaran Invoice
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as InvoiceStatus)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold"
-              >
-                <option value="Belum Bayar">Belum Bayar</option>
-                <option value="Sebagian">Sebagian</option>
-                <option value="Lunas">Lunas</option>
-                <option value="Jatuh Tempo">Jatuh Tempo</option>
-              </select>
-            </div>
-          </div>
-
+          {/* Keterangan */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Keterangan / Uraian Tagihan
+              Keterangan / Uraian Tagihan (Opsional)
             </label>
             <textarea
               rows={2}

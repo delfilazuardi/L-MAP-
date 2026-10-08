@@ -27,7 +27,9 @@ import {
   getSchoolObligationBadgeInfo,
   isSekolahAfiliasiTab,
   SEKOLAH_AFILIASI_3,
-  getTahunAjaranFromDate
+  getTahunAjaranFromDate,
+  compareInvoiceBySequenceAsc,
+  comparePaymentByInvoiceSequenceAsc
 } from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
@@ -105,15 +107,17 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
 
   const baseInvoices = useMemo(() => {
-    return isAdmin 
+    const filtered = isAdmin 
       ? invoiceList.filter(i => !i.isDemo && i.mitraId !== 'DEMO-MITRA') 
       : invoiceList.filter(i => i.mitraId === currentUser?.sekolahId);
+    return [...filtered].sort(compareInvoiceBySequenceAsc);
   }, [isAdmin, invoiceList, currentUser]);
 
   const basePayments = useMemo(() => {
-    return isAdmin 
+    const filtered = isAdmin 
       ? pembayaranList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA') 
       : pembayaranList.filter(p => p.mitraId === currentUser?.sekolahId);
+    return [...filtered].sort(comparePaymentByInvoiceSequenceAsc);
   }, [isAdmin, pembayaranList, currentUser]);
 
   // List of Sekolah Mitra vs Sekolah Afiliasi (3 Sekolah Khusus) - strictly exclude demo school from production billing list
@@ -243,17 +247,20 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     const totalTagihanRealisasiPayable = payableInvoices.reduce(
       (acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0
     );
-    const totalPembayaranMasuk = filteredPayments
-      .filter(p => p.status === 'Terverifikasi')
+    // Hitung total pembayaran masuk dari nominalPembayaran invoice (ataupun riwayat pembayaran) tanpa perlu filter verifikasi
+    const totalPembayaranFromInvoices = payableInvoices.reduce(
+      (acc, i) => acc + (i.nominalPembayaran || 0), 0
+    );
+    const totalPembayaranFromPayments = filteredPayments
+      .filter(p => p.status !== 'Ditolak')
       .reduce((acc, p) => acc + p.jumlah, 0);
+    const totalPembayaranMasuk = Math.max(totalPembayaranFromInvoices, totalPembayaranFromPayments);
 
     const totalSisaPiutang = Math.max(0, totalTagihanRealisasiPayable - totalPembayaranMasuk);
     const totalUnpaidInvoices = payableInvoices.filter(
-      i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo'
+      i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo' || i.status === 'Sebagian'
     ).length;
-    const totalPendingPayments = filteredPayments.filter(
-      p => p.status === 'Menunggu Verifikasi'
-    ).length;
+    const totalPendingPayments = 0;
 
     return {
       totalTagihanFull,
@@ -346,15 +353,111 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     await verifyPembayaran(id, status);
   };
 
-  const handleSavePayment = async (data: Partial<Pembayaran>) => {
+  const handleSavePayment = async (
+    data: Partial<Pembayaran>,
+    invoiceUpdates?: {
+      invoiceId: string;
+      tagihanFull: number;
+      tagihanRealisasi: number;
+      nominalPembayaran: number;
+      tanggalDibayar: string;
+    }
+  ) => {
     if (!isAdmin) return;
     if (editingPembayaran) {
       await updatePembayaran({
         ...editingPembayaran,
         ...data,
+        status: 'Terverifikasi',
       } as Pembayaran);
     } else {
-      await addPembayaran(data as Omit<Pembayaran, 'id'>);
+      await addPembayaran({
+        ...data,
+        status: 'Terverifikasi',
+      } as Omit<Pembayaran, 'id'>);
+    }
+
+    if (invoiceUpdates) {
+      const targetInv = invoiceList.find(
+        i => i.id === invoiceUpdates.invoiceId || i.nomorInvoice === invoiceUpdates.invoiceId
+      );
+      if (targetInv) {
+        const nextStatus =
+          invoiceUpdates.nominalPembayaran >= invoiceUpdates.tagihanRealisasi && invoiceUpdates.tagihanRealisasi > 0
+            ? 'Lunas'
+            : invoiceUpdates.nominalPembayaran > 0
+            ? 'Sebagian'
+            : 'Belum Bayar';
+        await updateInvoice({
+          ...targetInv,
+          tagihanFull: invoiceUpdates.tagihanFull,
+          tagihanRealisasi: invoiceUpdates.tagihanRealisasi,
+          nominal: invoiceUpdates.tagihanRealisasi,
+          nominalPembayaran: invoiceUpdates.nominalPembayaran,
+          tanggalDibayar: invoiceUpdates.tanggalDibayar,
+          status: nextStatus,
+        });
+      }
+    }
+  };
+
+  const handleQuickSavePayment = async (
+    inv: Invoice,
+    values: {
+      isPaid: boolean;
+      tagihanFull: number;
+      tagihanRealisasi: number;
+      tanggalDibayar: string;
+      nominalPembayaran: number;
+    }
+  ) => {
+    if (!isAdmin) return;
+    const paid = values.isPaid ? values.nominalPembayaran : 0;
+    const nextStatus =
+      paid >= values.tagihanRealisasi && values.tagihanRealisasi > 0
+        ? 'Lunas'
+        : paid > 0
+        ? 'Sebagian'
+        : 'Belum Bayar';
+
+    await updateInvoice({
+      ...inv,
+      tagihanFull: values.tagihanFull,
+      tagihanRealisasi: values.tagihanRealisasi,
+      nominal: values.tagihanRealisasi,
+      nominalPembayaran: paid,
+      tanggalDibayar: paid > 0 ? values.tanggalDibayar : undefined,
+      status: nextStatus,
+    });
+
+    // Sync or create payment record automatically
+    const invKey = inv.nomorInvoice || inv.id;
+    const existingPay = pembayaranList.find(p => p.invoiceId === inv.id || p.invoiceId === invKey);
+    if (paid > 0) {
+      if (existingPay) {
+        await updatePembayaran({
+          ...existingPay,
+          jumlah: paid,
+          tanggalBayar: values.tanggalDibayar,
+          status: 'Terverifikasi',
+          catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}`,
+        });
+      } else {
+        await addPembayaran({
+          invoiceId: invKey,
+          mitraId: inv.mitraId,
+          namaSekolah: inv.namaSekolah,
+          kategori: normalizeRuang(inv.kategori),
+          tahunAjaran: inv.tahunAjaran,
+          jumlah: paid,
+          tanggalBayar: values.tanggalDibayar,
+          metodeBayar: 'Transfer Bank',
+          noReferensi: `BYR-${Date.now().toString().slice(-6)}`,
+          buktiUrl: '',
+          status: 'Terverifikasi',
+          catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}`,
+        });
+      }
     }
   };
 
@@ -846,11 +949,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               className="w-full sm:w-40 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">Semua Status</option>
-              <option value="Belum Bayar">Invoice: Belum Bayar</option>
-              <option value="Lunas">Invoice: Lunas</option>
-              <option value="Jatuh Tempo">Invoice: Jatuh Tempo</option>
-              <option value="Terverifikasi">Bayar: Terverifikasi</option>
-              <option value="Menunggu Verifikasi">Bayar: Menunggu Verifikasi</option>
+              <option value="Lunas">Sudah Bayar (Lunas)</option>
+              <option value="Sebagian">Bayar Sebagian</option>
+              <option value="Belum Bayar">Belum Bayar</option>
             </select>
           </div>
         </div>
@@ -875,11 +976,13 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           const tagihanFull = roomInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
           const tagihanRealisasi = roomInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
           const tagihanRealisasiPayable = payableRoomInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
+          const dibayarFromInvoices = payableRoomInvoices.reduce((acc, i) => acc + (i.nominalPembayaran || 0), 0);
+          const dibayarFromPayments = roomPayments
+            .filter(p => p.status !== 'Ditolak')
+            .reduce((acc, p) => acc + p.jumlah, 0);
           const totalDibayar = isAfiliasiTabActive 
             ? 0 
-            : roomPayments
-                .filter(p => p.status === 'Terverifikasi')
-                .reduce((acc, p) => acc + p.jumlah, 0);
+            : Math.max(dibayarFromInvoices, dibayarFromPayments);
           const sisaPiutang = isAfiliasiTabActive ? 0 : Math.max(0, tagihanRealisasiPayable - totalDibayar);
           const persenLunas = isAfiliasiTabActive 
             ? 100 
@@ -892,9 +995,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
             : roomInvoices.filter(i => i.status === 'Lunas').length;
           const unpaidCount = isAfiliasiTabActive 
             ? 0 
-            : payableRoomInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length;
-          const verifiedPaymentsCount = roomPayments.filter(p => p.status === 'Terverifikasi').length;
-          const pendingPaymentsCount = roomPayments.filter(p => p.status === 'Menunggu Verifikasi').length;
+            : payableRoomInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo' || i.status === 'Sebagian').length;
+          const verifiedPaymentsCount = roomPayments.filter(p => p.status !== 'Ditolak').length;
+          const pendingPaymentsCount = 0;
 
           const currentSubView = roomActiveView[config.id];
 
@@ -935,6 +1038,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                   onEdit={handleOpenEditInvoice}
                   onDelete={handleDeleteInvoice}
                   onPay={(inv) => handleOpenAddPayment(config.id, inv.nomorInvoice || inv.id)}
+                  onQuickSavePayment={handleQuickSavePayment}
                 />
               ) : (
                 <PembayaranTable

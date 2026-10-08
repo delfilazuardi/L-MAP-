@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Receipt, 
-  Printer, 
   CreditCard, 
   Edit, 
   Trash2, 
@@ -10,12 +9,18 @@ import {
   AlertCircle,
   Eye,
   ChevronDown,
-  Sparkles,
-  ArrowDownUp
+  Check,
+  X
 } from 'lucide-react';
 import { Invoice, InvoiceStatus, InvoiceOperationalStatus } from '../../../types';
 import { formatRupiah } from './types';
-import { isSchoolPelaporanSaja, getSchoolObligationBadgeInfo } from '../../../lib/invoiceUtils';
+import { NominalInput } from './NominalInput';
+import {
+  isSchoolPelaporanSaja,
+  getSchoolObligationBadgeInfo,
+  extractInvoiceSequenceNumber,
+  compareInvoiceBySequenceAsc,
+} from '../../../lib/invoiceUtils';
 
 interface InvoiceTableProps {
   invoices: Invoice[];
@@ -24,8 +29,18 @@ interface InvoiceTableProps {
   onEdit: (inv: Invoice) => void;
   onDelete: (id: string, nomor: string) => void;
   onPay: (inv: Invoice) => void;
+  onQuickSavePayment?: (
+    inv: Invoice,
+    values: {
+      isPaid: boolean;
+      tagihanFull: number;
+      tagihanRealisasi: number;
+      tanggalDibayar: string;
+      nominalPembayaran: number;
+    }
+  ) => Promise<void>;
   kategoriTitle?: string;
-  defaultSortOrder?: 'terbaru' | 'terlama';
+  defaultSortOrder?: 'terkecil' | 'terbesar';
 }
 
 export const InvoiceTable: React.FC<InvoiceTableProps> = ({
@@ -35,83 +50,61 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   onEdit,
   onDelete,
   onPay,
-  kategoriTitle,
-  defaultSortOrder = 'terbaru',
+  onQuickSavePayment,
+  defaultSortOrder = 'terkecil',
 }) => {
-  // Dropdown Urutan No. Invoice pada matriks: 'terbaru' (baru di-input) vs 'terlama'
-  const [sortOrder, setSortOrder] = useState<'terbaru' | 'terlama'>(defaultSortOrder);
+  // Urutan No. Invoice otomatis dari Terkecil -> Terbesar (mis: 292 -> 293 -> 294)
+  const [sortOrder, setSortOrder] = useState<'terkecil' | 'terbesar'>(defaultSortOrder);
 
-  // Helper untuk mengekstrak nomor urut dari format nomor invoice (mis: /001/ atau -001)
-  const extractInvoiceSequence = (str: string): number => {
-    if (!str) return 0;
-    const m = str.match(/\/(\d{1,4})\//) || str.match(/-(\d{1,4})/);
-    if (m) return parseInt(m[1], 10);
-    const trailingDigits = str.match(/(\d{1,4})$/);
-    if (trailingDigits) return parseInt(trailingDigits[1], 10);
-    return 0;
+  // State untuk form Ceklis Bayar inline per baris invoice
+  const [openPaymentRowId, setOpenPaymentRowId] = useState<string | null>(null);
+  const [formTagihanFull, setFormTagihanFull] = useState<number>(0);
+  const [formTagihanRealisasi, setFormTagihanRealisasi] = useState<number>(0);
+  const [formTanggalBayar, setFormTanggalBayar] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [formNominalBayar, setFormNominalBayar] = useState<number>(0);
+  const [isSavingRow, setIsSavingRow] = useState(false);
+
+  const handleToggleRowPayForm = (inv: Invoice, forceUnpay = false) => {
+    if (openPaymentRowId === inv.id && !forceUnpay) {
+      setOpenPaymentRowId(null);
+      return;
+    }
+    const full = inv.tagihanFull || inv.nominal || 0;
+    const real = inv.tagihanRealisasi || inv.nominal || full;
+    const paid = inv.nominalPembayaran || 0;
+    setFormTagihanFull(full);
+    setFormTagihanRealisasi(real);
+    setFormTanggalBayar(inv.tanggalDibayar || new Date().toISOString().split('T')[0]);
+    setFormNominalBayar(paid > 0 ? paid : real);
+    setOpenPaymentRowId(inv.id);
   };
 
-  // Helper untuk mendapatkan timestamp estimasi invoice
-  const getInvoiceTimestamp = (inv: Invoice): number => {
-    if (inv.createdAt) {
-      const t = new Date(inv.createdAt).getTime();
-      if (!isNaN(t)) return t;
+  const handleSaveInlinePay = async (inv: Invoice) => {
+    if (!onQuickSavePayment) {
+      onPay(inv);
+      return;
     }
-    const dateStr = inv.tanggalTerbit || inv.tanggalKirim;
-    if (dateStr) {
-      const t = new Date(dateStr).getTime();
-      if (!isNaN(t)) return t;
-    }
-    const matchYear = (inv.nomorInvoice || inv.id || '').match(/(202[2-9])/);
-    if (matchYear) {
-      return new Date(`${matchYear[1]}-01-01`).getTime();
-    }
-    return 0;
-  };
-
-  // Cek apakah invoice baru saja di-input (dalam sesi ini atau < 48 jam)
-  const isNewlyInputted = (inv: Invoice): boolean => {
+    setIsSavingRow(true);
     try {
-      const stored = sessionStorage.getItem('recent_invoice_ids');
-      if (stored) {
-        const ids: string[] = JSON.parse(stored);
-        if (ids.includes(inv.id) || (inv.nomorInvoice && ids.includes(inv.nomorInvoice))) {
-          return true;
-        }
-      }
-    } catch {
-      // ignore
+      await onQuickSavePayment(inv, {
+        isPaid: formNominalBayar > 0,
+        tagihanFull: Number(formTagihanFull),
+        tagihanRealisasi: Number(formTagihanRealisasi),
+        tanggalDibayar: formTanggalBayar,
+        nominalPembayaran: Number(formNominalBayar),
+      });
+      setOpenPaymentRowId(null);
+    } finally {
+      setIsSavingRow(false);
     }
-
-    if (inv.createdAt) {
-      const ageMs = Date.now() - new Date(inv.createdAt).getTime();
-      if (ageMs >= 0 && ageMs < 48 * 60 * 60 * 1000) {
-        return true;
-      }
-    }
-
-    return false;
   };
 
-  // Invoices yang sudah diurutkan berdasarkan No. Invoice & Tanggal
+  // Invoices diurutkan murni berdasarkan nomor urut di kode Nomor Invoice (mis: INV/IX/25/292/MO -> 292)
+  // Tanpa menggunakan createdAt / updatedAt sehingga saat diedit posisinya tetap sesuai urutan nomor.
   const sortedInvoices = useMemo(() => {
     return [...invoices].sort((a, b) => {
-      const timeA = getInvoiceTimestamp(a);
-      const timeB = getInvoiceTimestamp(b);
-
-      if (timeA !== timeB) {
-        return sortOrder === 'terbaru' ? timeB - timeA : timeA - timeB;
-      }
-
-      const seqA = extractInvoiceSequence(a.nomorInvoice || a.id);
-      const seqB = extractInvoiceSequence(b.nomorInvoice || b.id);
-      if (seqA !== seqB) {
-        return sortOrder === 'terbaru' ? seqB - seqA : seqA - seqB;
-      }
-
-      return sortOrder === 'terbaru'
-        ? (b.nomorInvoice || b.id).localeCompare(a.nomorInvoice || a.id)
-        : (a.nomorInvoice || a.id).localeCompare(b.nomorInvoice || b.id);
+      const cmp = compareInvoiceBySequenceAsc(a, b);
+      return sortOrder === 'terkecil' ? cmp : -cmp;
     });
   }, [invoices, sortOrder]);
 
@@ -176,20 +169,20 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
       <table className="w-full text-left border-collapse min-w-[900px]">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-            {/* Kolom No. Invoice dengan Dropdown (Terbaru / Terlama) */}
-            <th className="py-3 px-4 min-w-[230px]">
+            {/* Kolom No. Invoice dengan Urutan Otomatis Terkecil -> Terbesar */}
+            <th className="py-3 px-4 min-w-[240px]">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-slate-700 font-extrabold">No. Invoice & Tanggal</span>
                 <div className="flex items-center gap-1">
                   <div className="relative inline-flex items-center">
                     <select
                       value={sortOrder}
-                      onChange={(e) => setSortOrder(e.target.value as 'terbaru' | 'terlama')}
+                      onChange={(e) => setSortOrder(e.target.value as 'terkecil' | 'terbesar')}
                       className="text-[10px] font-extrabold pl-2 pr-6 py-1 rounded-lg bg-white text-blue-900 border border-blue-300 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs cursor-pointer appearance-none"
-                      title="Urutkan No. Invoice: Terbaru (baru di-input) atau Terlama"
+                      title="Urutkan berdasarkan Nomor Urut Invoice (misal 292, 293, dst)"
                     >
-                      <option value="terbaru">Terbaru</option>
-                      <option value="terlama">Terlama</option>
+                      <option value="terkecil">Urut: Terkecil → Terbesar</option>
+                      <option value="terbesar">Urut: Terbesar → Terkecil</option>
                     </select>
                     <ChevronDown size={11} className="absolute right-1.5 pointer-events-none text-blue-700 font-bold" />
                   </div>
@@ -198,17 +191,16 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             </th>
             <th className="py-3 px-4">Sekolah Mitra</th>
             <th className="py-3 px-4">Bulan & TA</th>
-            <th className="py-3 px-4">Status Kirim</th>
-            <th className="py-3 px-4 text-right">Tagihan Full</th>
-            <th className="py-3 px-4 text-right">Realisasi</th>
-            <th className="py-3 px-4 text-right">Dibayar</th>
+            <th className="py-3 px-4 text-right">Nominal Tagihan</th>
+            <th className="py-3 px-4 text-right">Nominal Realisasi</th>
+            <th className="py-3 px-4 text-right">Nominal Bayar</th>
             <th className="py-3 px-4 text-right">Sisa Piutang</th>
-            <th className="py-3 px-4 text-center">Status Bayar</th>
+            <th className="py-3 px-4 text-center">Ceklis & Status Bayar</th>
             <th className="py-3 px-4 text-center">Aksi</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 text-xs">
-          {sortedInvoices.map((inv, idx) => {
+          {sortedInvoices.map((inv) => {
             const isPelaporan = inv.isPelaporanSaja || isSchoolPelaporanSaja(inv.mitraId, {
               date: inv.tanggalKirim,
               tahunAjaran: inv.tahunAjaran,
@@ -221,39 +213,31 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             const realisasi = inv.tagihanRealisasi || inv.nominal || 0;
             const dibayar = inv.nominalPembayaran || 0;
             const sisa = Math.max(0, realisasi - dibayar);
-            const isNew = isNewlyInputted(inv);
+            const seqNumber = extractInvoiceSequenceNumber(inv.nomorInvoice || inv.id);
+            const isCheckedPaid = dibayar > 0 || inv.status === 'Lunas' || inv.status === 'Sebagian';
+            const isRowOpen = openPaymentRowId === inv.id;
 
             return (
+              <React.Fragment key={inv.id}>
               <tr 
-                key={inv.id} 
-                className={`transition-colors ${
-                  isNew 
-                    ? 'bg-purple-50/40 hover:bg-purple-50/70 border-l-4 border-l-purple-600' 
-                    : 'hover:bg-blue-50/30'
-                }`}
+                className={`transition-colors ${isRowOpen ? 'bg-emerald-50/40' : 'hover:bg-blue-50/30'}`}
               >
-                {/* No. Invoice & Tanggal dengan Penanda Baru Di-input */}
+                {/* No. Invoice & Tanggal sesuai urutan nomor */}
                 <td className="py-3.5 px-4">
                   <div className="flex items-center gap-1.5 flex-wrap">
+                    {seqNumber > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200 font-mono text-[10px] font-black">
+                        #{seqNumber}
+                      </span>
+                    )}
                     <span className="font-mono font-bold text-blue-900 text-xs block">
                       {inv.nomorInvoice || inv.id}
                     </span>
-                    {isNew && (
-                      <span 
-                        className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs animate-pulse"
-                        title="Invoice ini baru saja di-input"
-                      >
-                        <Sparkles size={10} className="text-purple-600 shrink-0" />
-                        Baru Di-input
-                      </span>
-                    )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                  <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
                     <span>Kirim: {inv.tanggalKirim || '-'}</span>
-                    {inv.createdAt && (
-                      <span className="text-[9px] text-purple-700 font-medium">
-                        • Input: {new Date(inv.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
-                      </span>
+                    {inv.tanggalDibayar && (
+                      <span className="text-emerald-600 font-semibold">• Bayar: {inv.tanggalDibayar}</span>
                     )}
                   </div>
                 </td>
@@ -277,27 +261,17 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                   <span className="text-[10px] text-slate-400">{inv.tahunAjaran || '2026/2027'}</span>
                 </td>
 
-                {/* Status Kirim */}
-                <td className="py-3.5 px-4">
-                  {getOperationalBadge(inv.statusInvoice)}
-                  {inv.tanggalKirim && (
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      Kirim: {inv.tanggalKirim}
-                    </span>
-                  )}
-                </td>
-
-                {/* Tagihan Full */}
+                {/* Nominal Tagihan */}
                 <td className="py-3.5 px-4 text-right font-medium text-slate-600">
                   {formatRupiah(inv.tagihanFull || inv.nominal || 0)}
                 </td>
 
-                {/* Realisasi */}
+                {/* Nominal Realisasi */}
                 <td className="py-3.5 px-4 text-right font-black text-blue-800">
                   {formatRupiah(realisasi)}
                 </td>
 
-                {/* Dibayar */}
+                {/* Nominal Bayar */}
                 <td className="py-3.5 px-4 text-right font-bold text-emerald-600">
                   {isPelaporan ? '-' : formatRupiah(dibayar)}
                 </td>
@@ -314,12 +288,32 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                   )}
                 </td>
 
-                {/* Status Bayar */}
+                {/* Ceklis Bayar & Status */}
                 <td className="py-3.5 px-4 text-center whitespace-nowrap">
                   {isPelaporan ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
                       Pelaporan Saja
                     </span>
+                  ) : isAdmin ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <label
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-extrabold cursor-pointer transition select-none ${
+                          isCheckedPaid || isRowOpen
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                            : 'bg-white text-slate-700 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/40'
+                        }`}
+                        title="Ceklis untuk membuka form pembayaran (Nominal Tagihan, Realisasi, Tanggal Pembayaran & Nominal Bayar)"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isCheckedPaid || isRowOpen}
+                          onChange={() => handleToggleRowPayForm(inv)}
+                          className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                        />
+                        <span>{isCheckedPaid ? 'Sudah Bayar' : 'Ceklis Bayar'}</span>
+                      </label>
+                      {getStatusBadge(inv.status)}
+                    </div>
                   ) : (
                     getStatusBadge(inv.status)
                   )}
@@ -341,17 +335,6 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                       <Eye size={15} className="text-blue-600" />
                       {!isAdmin && <span className="text-[11px]">Lihat Invoice</span>}
                     </button>
-
-                    {/* Quick Pay - Admin only, for schools with payment obligation */}
-                    {isAdmin && !isPelaporan && inv.status !== 'Lunas' && (
-                      <button
-                        onClick={() => onPay(inv)}
-                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 transition cursor-pointer"
-                        title="Catat Pembayaran untuk Invoice ini"
-                      >
-                        <CreditCard size={15} />
-                      </button>
-                    )}
 
                     {/* Edit (Admin only) */}
                     {isAdmin && (
@@ -377,6 +360,140 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                   </div>
                 </td>
               </tr>
+
+              {/* Inline Form Pembayaran yang terbuka saat Ceklis Bayar diklik */}
+              {isAdmin && isRowOpen && (
+                <tr className="bg-emerald-50/60 border-b border-emerald-200">
+                  <td colSpan={9} className="p-4">
+                    <div className="rounded-2xl bg-white border-2 border-emerald-400 p-4 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-600 text-white font-black text-xs">
+                            ✓
+                          </span>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                              Form Pembayaran Cepat — {inv.nomorInvoice || inv.id} ({inv.namaSekolah})
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Isi Nominal Tagihan, Nominal Realisasi, Tanggal Pembayaran, dan Nominal Bayar (langsung tersimpan tanpa verifikasi)
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setOpenPaymentRowId(null)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* 1. Nominal Tagihan */}
+                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                          <NominalInput
+                            label="1. Nominal Tagihan"
+                            value={formTagihanFull}
+                            onChange={(val) => setFormTagihanFull(val)}
+                            inputClassName="border-slate-300 text-slate-800 bg-white"
+                          />
+                        </div>
+
+                        {/* 2. Nominal Realisasi */}
+                        <div className="p-2.5 rounded-xl bg-blue-50/50 border border-blue-200">
+                          <NominalInput
+                            label="2. Nominal Realisasi"
+                            value={formTagihanRealisasi}
+                            onChange={(val) => setFormTagihanRealisasi(val)}
+                            inputClassName="border-blue-300 text-blue-800 bg-white"
+                            helperAction={
+                              <button
+                                type="button"
+                                onClick={() => setFormTagihanRealisasi(formTagihanFull)}
+                                className="text-[10px] font-bold text-blue-700 bg-white px-1.5 py-0.5 rounded border border-blue-200 cursor-pointer"
+                              >
+                                Samakan
+                              </button>
+                            }
+                          />
+                        </div>
+
+                        {/* 3. Tanggal Pembayaran */}
+                        <div className="p-2.5 rounded-xl bg-emerald-50/40 border border-emerald-200">
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                            3. Tanggal Pembayaran
+                          </label>
+                          <input
+                            type="date"
+                            value={formTanggalBayar}
+                            onChange={(e) => setFormTanggalBayar(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* 4. Nominal Bayar */}
+                        <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-300">
+                          <NominalInput
+                            label="4. Nominal Bayar"
+                            value={formNominalBayar}
+                            onChange={(val) => setFormNominalBayar(val)}
+                            inputClassName="border-emerald-400 text-emerald-800 bg-white"
+                            helperAction={
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setFormNominalBayar(formTagihanRealisasi)}
+                                  className="text-[10px] font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200 cursor-pointer"
+                                >
+                                  Lunas
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setFormNominalBayar(0)}
+                                  className="text-[10px] font-bold text-rose-600 bg-white px-1.5 py-0.5 rounded border border-rose-200 cursor-pointer"
+                                  title="Reset belum bayar"
+                                >
+                                  Rp 0
+                                </button>
+                              </div>
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100">
+                        <div className="text-xs text-slate-600">
+                          Sisa Piutang:{' '}
+                          <strong className={formTagihanRealisasi - formNominalBayar > 0 ? 'text-rose-600 font-mono' : 'text-emerald-600 font-mono'}>
+                            {formatRupiah(Math.max(0, formTagihanRealisasi - formNominalBayar))}
+                          </strong>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setOpenPaymentRowId(null)}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSavingRow}
+                            onClick={() => handleSaveInlinePay(inv)}
+                            className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <Check size={14} />
+                            <span>{isSavingRow ? 'Menyimpan...' : 'Simpan Pembayaran'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             );
           })}
         </tbody>

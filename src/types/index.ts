@@ -163,6 +163,7 @@ export interface EventItem {
   pembicara?: string; // Nama Pembicara / Narasumber
   flyerUrl?: string; // Foto flyer / banner poster event
   linkRegistrasi?: string; // Tautan Formulir / Google Form Registrasi
+  linkGoogleSheet?: string; // Tautan Google Sheet Evaluasi MenDAKI eksternal (docs.google.com/spreadsheets/...)
   mendakiFormId?: string; // ID Form Evaluasi MenDAKI yang terhubung (default FORM-MENDAKI-01)
   mitraPeserta: string;
   sekolahId?: string;

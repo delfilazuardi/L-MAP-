@@ -53,9 +53,127 @@ export function getRomawiBulan(monthNumber: number): string {
 }
 
 /**
+ * Mengekstrak nomor urut (sequence) dari kode Nomor Invoice.
+ * Contoh:
+ * - "INV/IX/25/292/MO" -> 292
+ * - "INV/X/25/293/MO" -> 293
+ * - "INV/VII/2022/001/MO" -> 1
+ */
+export function extractInvoiceSequenceNumber(nomorInvoice?: string | null): number {
+  if (!nomorInvoice) return 0;
+  const str = String(nomorInvoice).trim();
+  if (!str) return 0;
+
+  // Prioritas 1: Angka tepat sebelum "/MO" (misal INV/IX/25/292/MO -> 292)
+  const matchBeforeMO = str.match(/\/(\d+)\/MO\b/i);
+  if (matchBeforeMO && matchBeforeMO[1]) {
+    const n = parseInt(matchBeforeMO[1], 10);
+    if (!isNaN(n)) return n;
+  }
+
+  // Prioritas 2: Format bagian dipisah "/" -> INV / ROMAWI / TAHUN / NOMOR_URUT / ...
+  const parts = str.split('/').map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 4 && /^INV$/i.test(parts[0])) {
+    const seqCandidate = parts[3].replace(/\D/g, '');
+    if (seqCandidate) {
+      const n = parseInt(seqCandidate, 10);
+      if (!isNaN(n)) return n;
+    }
+  }
+
+  // Prioritas 3: Ambil grup angka terakhir pada string
+  const allNumbers = str.match(/\d+/g);
+  if (allNumbers && allNumbers.length > 0) {
+    const lastNum = parseInt(allNumbers[allNumbers.length - 1], 10);
+    if (!isNaN(lastNum)) return lastNum;
+  }
+
+  return 0;
+}
+
+/**
+ * Mengekstrak tahun & bulan dari kode Nomor Invoice (sebagai tie-breaker jika nomor urut sama)
+ */
+function extractYearAndMonthFromInvoiceCode(nomorInvoice?: string | null): { year: number; month: number } {
+  if (!nomorInvoice) return { year: 0, month: 0 };
+  const parts = String(nomorInvoice).trim().split('/').map(p => p.trim());
+  let month = 0;
+  let year = 0;
+
+  if (parts.length >= 3) {
+    const rom = parts[1]?.toUpperCase();
+    const foundMonth = ALL_MONTHS.find(m => m.romawi === rom);
+    if (foundMonth) month = foundMonth.no;
+
+    const rawYear = parseInt(parts[2], 10);
+    if (!isNaN(rawYear)) {
+      year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    }
+  }
+  return { year, month };
+}
+
+/**
+ * Comparator standar untuk mengurutkan Invoice dari Nomor Urut Terkecil hingga Terbesar
+ * (contoh: 292 -> 293 -> 294 dst). Tidak menggunakan createdAt/updatedAt agar posisi
+ * tidak berubah/naik ke atas saat di-edit.
+ */
+export function compareInvoiceBySequenceAsc(
+  a: { nomorInvoice?: string; id?: string; tanggalKirim?: string },
+  b: { nomorInvoice?: string; id?: string; tanggalKirim?: string }
+): number {
+  const codeA = a.nomorInvoice || a.id || '';
+  const codeB = b.nomorInvoice || b.id || '';
+
+  const seqA = extractInvoiceSequenceNumber(codeA);
+  const seqB = extractInvoiceSequenceNumber(codeB);
+
+  if (seqA !== seqB) {
+    return seqA - seqB;
+  }
+
+  const ymA = extractYearAndMonthFromInvoiceCode(codeA);
+  const ymB = extractYearAndMonthFromInvoiceCode(codeB);
+  if (ymA.year !== ymB.year) return ymA.year - ymB.year;
+  if (ymA.month !== ymB.month) return ymA.month - ymB.month;
+
+  return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/**
+ * Comparator standar untuk mengurutkan Pembayaran berdasarkan Nomor Urut Invoice Terkecil hingga Terbesar
+ */
+export function comparePaymentByInvoiceSequenceAsc(
+  a: { invoiceId?: string; noReferensi?: string; id?: string; tanggalBayar?: string },
+  b: { invoiceId?: string; noReferensi?: string; id?: string; tanggalBayar?: string }
+): number {
+  const invCodeA = a.invoiceId || '';
+  const invCodeB = b.invoiceId || '';
+
+  const seqA = invCodeA ? extractInvoiceSequenceNumber(invCodeA) : Number.MAX_SAFE_INTEGER;
+  const seqB = invCodeB ? extractInvoiceSequenceNumber(invCodeB) : Number.MAX_SAFE_INTEGER;
+
+  if (seqA !== seqB) {
+    return seqA - seqB;
+  }
+
+  const refSeqA = extractInvoiceSequenceNumber(a.noReferensi || a.id || '');
+  const refSeqB = extractInvoiceSequenceNumber(b.noReferensi || b.id || '');
+  if (refSeqA !== refSeqB) {
+    return refSeqA - refSeqB;
+  }
+
+  return (invCodeA || a.noReferensi || a.id || '').localeCompare(
+    invCodeB || b.noReferensi || b.id || '',
+    undefined,
+    { numeric: true, sensitivity: 'base' }
+  );
+}
+
+/**
  * Generate Nomor Invoice Baru dengan format:
  * INV/romawi bulan dibuat invoice/angka tahun dibuat invoice/nomor lanjutan/MO
- * Contoh: INV/IX/2026/006/MO
+ * Contoh: INV/IX/25/292/MO -> selanjutnya INV/X/25/293/MO
  */
 export function generateNomorInvoiceBaru(
   existingInvoices: Invoice[],
@@ -63,42 +181,29 @@ export function generateNomorInvoiceBaru(
 ): { nomorInvoice: string; sequence: number; romawi: string; tahun: number } {
   const month = date.getMonth() + 1; // 1-12
   const romawi = getRomawiBulan(month);
-  const tahun = date.getFullYear();
+  const tahunFull = date.getFullYear();
+  const tahunShort = String(tahunFull).slice(-2);
 
   // Cari sequence tertinggi dari nomor invoice yang ada
   let maxSeq = 0;
 
   existingInvoices.forEach((inv) => {
-    const rawId = inv.id || inv.nomorInvoice || '';
-    
-    // Pola 1: INV/romawi/tahun/nomor/MO (e.g. INV/IX/2026/001/MO)
-    const matchMO = rawId.match(/\/(\d+)\/MO$/i);
-    if (matchMO && matchMO[1]) {
-      const num = parseInt(matchMO[1], 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
-      }
-    } else {
-      // Pola 2: fallback format lama (e.g. INV/LZR/2026/09/001 atau sejenisnya)
-      const matchAny = rawId.match(/(\d{3,4})$/);
-      if (matchAny && matchAny[1]) {
-        const num = parseInt(matchAny[1], 10);
-        if (!isNaN(num) && num > maxSeq && num < 1000) {
-          maxSeq = num;
-        }
-      }
+    const rawCode = inv.nomorInvoice || inv.id || '';
+    const num = extractInvoiceSequenceNumber(rawCode);
+    if (!isNaN(num) && num > maxSeq && num < 100000) {
+      maxSeq = num;
     }
   });
 
   const nextSeq = maxSeq + 1;
   const seqFormatted = String(nextSeq).padStart(3, '0');
-  const nomorInvoice = `INV/${romawi}/${tahun}/${seqFormatted}/MO`;
+  const nomorInvoice = `INV/${romawi}/${tahunShort}/${seqFormatted}/MO`;
 
   return {
     nomorInvoice,
     sequence: nextSeq,
     romawi,
-    tahun,
+    tahun: tahunFull,
   };
 }
 

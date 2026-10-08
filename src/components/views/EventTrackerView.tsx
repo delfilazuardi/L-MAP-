@@ -22,11 +22,16 @@ import {
   Settings,
   TrendingUp,
   Star,
-  ClipboardCheck
+  ClipboardCheck,
+  Table2,
+  Download,
+  FileSpreadsheet,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
-import { EventItem, EventKategori, EventStatus } from '../../types';
+import { EventItem, EventKategori, EventStatus, MendakiFormSubmission } from '../../types';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const DEFAULT_EVENT_CATEGORIES: string[] = [
@@ -101,7 +106,158 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
       directCount: directMatches.length,
       avgRating,
       isDirectMatch: directMatches.length > 0,
+      submissions: matchedList,
     };
+  };
+
+  // Real-Time Google Sheet MenDAKI State per Event
+  const [selectedSheetEventId, setSelectedSheetEventId] = useState<string>('ALL');
+  const [modalSheetEvent, setModalSheetEvent] = useState<EventItem | null>(null);
+  const [sheetSearchQuery, setSheetSearchQuery] = useState<string>('');
+  const [copiedSheetToast, setCopiedSheetToast] = useState<string | null>(null);
+  const [editingSheetLinkEventId, setEditingSheetLinkEventId] = useState<string | null>(null);
+  const [tempSheetLinkInput, setTempSheetLinkInput] = useState<string>('');
+  const sheetSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const buildTsvFromSubmissions = (rows: MendakiFormSubmission[]) => {
+    const headers = [
+      'No',
+      'Waktu Isi',
+      'Email',
+      'Nama',
+      'Nama Sekolah',
+      'Event / Kegiatan',
+      'Tema / Topik',
+      'Drop',
+      'Add',
+      'Keep',
+      'Improve',
+      'Hal yang anda sukai dari Kegiatan ini?',
+      'Rating',
+    ];
+    const cleanCell = (val: string | number | undefined) =>
+      String(val ?? '')
+        .replace(/[\t\r\n]+/g, ' ')
+        .trim();
+    const lines = [
+      headers.join('\t'),
+      ...rows.map((r, i) =>
+        [
+          i + 1,
+          cleanCell(r.tanggalIsi || '-'),
+          cleanCell(r.email),
+          cleanCell(r.nama),
+          cleanCell(r.namaSekolah),
+          cleanCell(r.eventKegiatan || r.kategoriEvent),
+          cleanCell(r.temaTopik),
+          cleanCell(r.drop),
+          cleanCell(r.add),
+          cleanCell(r.keep),
+          cleanCell(r.improve),
+          cleanCell(r.halDisukai),
+          `${r.rating || 5}/5`,
+        ].join('\t')
+      ),
+    ];
+    return lines.join('\n');
+  };
+
+  const getDirectGoogleSheetUrl = (evt?: EventItem | null) => {
+    const customLink = evt?.linkGoogleSheet?.trim();
+    if (customLink) {
+      if (customLink.startsWith('http://') || customLink.startsWith('https://')) {
+        return customLink;
+      }
+      return `https://${customLink}`;
+    }
+    return 'https://docs.google.com/spreadsheets/create';
+  };
+
+  const handleCopyDataForGoogleSheets = async (rows: MendakiFormSubmission[], label: string) => {
+    try {
+      const tsv = buildTsvFromSubmissions(rows);
+      await navigator.clipboard.writeText(tsv);
+      setCopiedSheetToast(
+        `Data evaluasi "${label}" (${rows.length} baris) telah disalin! Saat halaman Google Sheets terbuka, cukup tekan Ctrl+V (atau Cmd+V) di sel A1.`
+      );
+      setTimeout(() => setCopiedSheetToast(null), 7000);
+    } catch {
+      // ignore clipboard error
+    }
+  };
+
+  const handleSaveQuickSheetLink = async (evt: EventItem) => {
+    const raw = tempSheetLinkInput.trim();
+    const normalized = !raw
+      ? undefined
+      : raw.startsWith('http://') || raw.startsWith('https://')
+      ? raw
+      : `https://${raw}`;
+    await updateEvent({
+      ...evt,
+      linkGoogleSheet: normalized,
+    });
+    if (modalSheetEvent && modalSheetEvent.id === evt.id) {
+      setModalSheetEvent({
+        ...modalSheetEvent,
+        linkGoogleSheet: normalized,
+      });
+    }
+    setEditingSheetLinkEventId(null);
+  };
+
+  const exportEventSheetToCsv = (rows: MendakiFormSubmission[], eventLabel: string) => {
+    const headers = [
+      'No',
+      'Waktu Isi',
+      'Email',
+      'Nama',
+      'Nama Sekolah',
+      'Event / Kegiatan',
+      'Tema / Topik',
+      'Drop',
+      'Add',
+      'Keep',
+      'Improve',
+      'Hal yang Disukai',
+      'Rating',
+    ];
+    const escapeCsv = (val: string | number | undefined) => {
+      const str = String(val ?? '').replace(/"/g, '""');
+      return `"${str}"`;
+    };
+    const csvLines = [
+      headers.map(escapeCsv).join(','),
+      ...rows.map((r, i) =>
+        [
+          i + 1,
+          r.tanggalIsi || '',
+          r.email || '',
+          r.nama || '',
+          r.namaSekolah || '',
+          r.eventKegiatan || r.kategoriEvent || '',
+          r.temaTopik || '',
+          r.drop || '',
+          r.add || '',
+          r.keep || '',
+          r.improve || '',
+          r.halDisukai || '',
+          r.rating || 5,
+        ]
+          .map(escapeCsv)
+          .join(',')
+      ),
+    ];
+    const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const safeName = eventLabel.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+    link.download = `GoogleSheet_MenDAKI_${safeName}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Dynamic Categories State
@@ -170,6 +326,7 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
   const [formPembicara, setFormPembicara] = useState('');
   const [formFlyerUrl, setFormFlyerUrl] = useState('');
   const [formLinkRegistrasi, setFormLinkRegistrasi] = useState('');
+  const [formLinkGoogleSheet, setFormLinkGoogleSheet] = useState('');
   const [flyerInputMode, setFlyerInputMode] = useState<'upload' | 'url'>('upload');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -238,6 +395,7 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
     setFormPembicara('');
     setFormFlyerUrl('');
     setFormLinkRegistrasi('');
+    setFormLinkGoogleSheet('https://docs.google.com/spreadsheets/create');
     setFlyerInputMode('upload');
     setIsInlineAddingCat(false);
     setNewCatInput('');
@@ -258,6 +416,7 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
     setFormPembicara(evt.pembicara || '');
     setFormFlyerUrl(evt.flyerUrl || '');
     setFormLinkRegistrasi(evt.linkRegistrasi || '');
+    setFormLinkGoogleSheet(evt.linkGoogleSheet || 'https://docs.google.com/spreadsheets/create');
     setFlyerInputMode(evt.flyerUrl && !evt.flyerUrl.startsWith('data:') ? 'url' : 'upload');
     setIsInlineAddingCat(false);
     setNewCatInput('');
@@ -352,6 +511,7 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
           pembicara: formPembicara.trim() || undefined,
           flyerUrl: normalizeLink(formFlyerUrl),
           linkRegistrasi: normalizeLink(formLinkRegistrasi),
+          linkGoogleSheet: normalizeLink(formLinkGoogleSheet) || 'https://docs.google.com/spreadsheets/create',
         });
       } else {
         await addEvent({
@@ -367,6 +527,7 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
           pembicara: formPembicara.trim() || undefined,
           flyerUrl: normalizeLink(formFlyerUrl),
           linkRegistrasi: normalizeLink(formLinkRegistrasi),
+          linkGoogleSheet: normalizeLink(formLinkGoogleSheet) || 'https://docs.google.com/spreadsheets/create',
         });
       }
       setIsModalOpen(false);
@@ -427,6 +588,17 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => {
+              sheetSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer"
+          >
+            <FileSpreadsheet size={15} />
+            <span>Google Sheet MenDAKI (Real-Time)</span>
+          </button>
+
           {isAdmin ? (
             <div className="flex items-center gap-2">
               <button
@@ -635,25 +807,38 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                           </div>
                         </div>
 
-                        {onNavigateToMendaki && (
-                          <div className="flex items-center gap-1.5 pt-0.5">
+                        <div className="flex flex-col gap-1.5 pt-0.5">
+                          {/* Direct Clickable Link to Google Sheets */}
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={getDirectGoogleSheetUrl(evt)}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={() => {
+                                handleCopyDataForGoogleSheets(mendakiStats.submissions, evt.judul);
+                              }}
+                              className="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              title="Klik untuk langsung membuka di Google Sheets (Data otomatis disalin agar siap ditempel)"
+                            >
+                              <FileSpreadsheet size={13} />
+                              <span>Buka di Google Sheets</span>
+                              <ExternalLink size={11} />
+                            </a>
+
                             <button
                               type="button"
-                              onClick={() =>
-                                onNavigateToMendaki({
-                                  eventId: evt.id,
-                                  judul: evt.judul,
-                                  kategori: evt.kategori,
-                                  mode: 'isi-form',
-                                })
-                              }
-                              className="flex-1 py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              onClick={() => {
+                                setSelectedSheetEventId(evt.id);
+                                setModalSheetEvent(evt);
+                              }}
+                              className="py-1.5 px-2.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                              title="Lihat Tabel Sheet Real-Time di Aplikasi"
                             >
-                              <ClipboardCheck size={13} />
-                              <span>Isi Evaluasi MenDAKI</span>
+                              <Table2 size={13} />
+                              <span>Tabel Live</span>
                             </button>
 
-                            {isAdmin && (
+                            {onNavigateToMendaki && (
                               <button
                                 type="button"
                                 onClick={() =>
@@ -661,18 +846,77 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                                     eventId: evt.id,
                                     judul: evt.judul,
                                     kategori: evt.kategori,
-                                    mode: 'kelola-form',
+                                    mode: 'isi-form',
                                   })
                                 }
-                                className="py-1.5 px-2.5 rounded-lg bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                                title="Lihat Sheet Hasil Evaluasi MenDAKI untuk Event ini"
+                                className="py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                                title="Isi Formulir Evaluasi MenDAKI untuk Event ini"
                               >
-                                <TrendingUp size={12} />
-                                <span>Hasil Sheet</span>
+                                <ClipboardCheck size={13} />
+                                <span>Isi Form</span>
                               </button>
                             )}
                           </div>
-                        )}
+
+                          {/* Clickable URL display */}
+                          <div className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white/85 border border-emerald-200/80 text-[10px]">
+                            <a
+                              href={getDirectGoogleSheetUrl(evt)}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={() => {
+                                handleCopyDataForGoogleSheets(mendakiStats.submissions, evt.judul);
+                              }}
+                              className="text-emerald-700 hover:text-emerald-900 font-mono underline truncate flex items-center gap-1"
+                              title="Klik link ini untuk langsung membuka Google Sheets"
+                            >
+                              <Link2 size={11} className="shrink-0 text-emerald-600" />
+                              <span className="truncate">{getDirectGoogleSheetUrl(evt)}</span>
+                            </a>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSheetLinkEventId(
+                                    editingSheetLinkEventId === evt.id ? null : evt.id
+                                  );
+                                  setTempSheetLinkInput(
+                                    evt.linkGoogleSheet || 'https://docs.google.com/spreadsheets/create'
+                                  );
+                                }}
+                                className="text-[10px] font-bold text-slate-500 hover:text-emerald-700 shrink-0 cursor-pointer"
+                                title="Atur / ganti link Google Sheet event ini"
+                              >
+                                Atur Link
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Inline Quick Edit Link Google Sheet for Admin */}
+                          {isAdmin && editingSheetLinkEventId === evt.id && (
+                            <div className="p-2 rounded-lg bg-white border border-emerald-300 space-y-1.5">
+                              <label className="block text-[10px] font-bold text-emerald-900">
+                                Tautan Google Sheet Event (docs.google.com/spreadsheets/...):
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={tempSheetLinkInput}
+                                  onChange={(e) => setTempSheetLinkInput(e.target.value)}
+                                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                                  className="flex-1 px-2 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveQuickSheetLink(evt)}
+                                  className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer"
+                                >
+                                  Simpan
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })()}
@@ -759,6 +1003,569 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
           ))
         )}
       </div>
+
+      {/* =====================================================================
+          GOOGLE SHEET REAL-TIME MENDAKI PADA SETIAP EVENT
+         ===================================================================== */}
+      {(() => {
+        const activeSheetEvt =
+          selectedSheetEventId === 'ALL'
+            ? null
+            : baseEventList.find(e => e.id === selectedSheetEventId) || null;
+
+        const rawRows = activeSheetEvt
+          ? getEventMendakiStats(activeSheetEvt).submissions
+          : baseMendakiSubmissions;
+
+        const filteredSheetRows = rawRows.filter(row => {
+          const q = sheetSearchQuery.trim().toLowerCase();
+          if (!q) return true;
+          return (
+            row.nama?.toLowerCase().includes(q) ||
+            row.email?.toLowerCase().includes(q) ||
+            row.namaSekolah?.toLowerCase().includes(q) ||
+            row.eventKegiatan?.toLowerCase().includes(q) ||
+            row.temaTopik?.toLowerCase().includes(q) ||
+            row.drop?.toLowerCase().includes(q) ||
+            row.add?.toLowerCase().includes(q) ||
+            row.keep?.toLowerCase().includes(q) ||
+            row.improve?.toLowerCase().includes(q) ||
+            row.halDisukai?.toLowerCase().includes(q)
+          );
+        });
+
+        const avgSheetRating =
+          filteredSheetRows.length > 0
+            ? Number(
+                (
+                  filteredSheetRows.reduce((acc, r) => acc + (r.rating || 0), 0) /
+                  filteredSheetRows.length
+                ).toFixed(1)
+              )
+            : 0;
+
+        return (
+          <div
+            ref={sheetSectionRef}
+            className="bg-white rounded-3xl border border-emerald-200 shadow-sm overflow-hidden"
+          >
+            {/* Google Sheets Style Top Bar */}
+            <div className="bg-gradient-to-r from-[#0f9d58] via-emerald-700 to-teal-800 px-5 py-4 text-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0 shadow-xs">
+                  <FileSpreadsheet size={22} className="text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-black tracking-tight text-white">
+                      Google Sheet Real-Time: Evaluasi MenDAKI per Event
+                    </h3>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 border border-white/30 text-[10px] font-black uppercase tracking-wider text-emerald-50">
+                      <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping" />
+                      <span>LIVE REAL-TIME</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-50/90 mt-0.5">
+                    Pilih tab event di bawah untuk melihat sheet hasil evaluasi MenDAKI (Drop, Add, Keep, Improve, Hal Disukai, & Rating) secara langsung
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-100" />
+                  <input
+                    type="text"
+                    value={sheetSearchQuery}
+                    onChange={(e) => setSheetSearchQuery(e.target.value)}
+                    placeholder="Cari di dalam sheet..."
+                    className="pl-8 pr-3 py-1.5 rounded-xl bg-white/15 border border-white/25 text-xs text-white placeholder-emerald-100/80 focus:outline-none focus:bg-white/25"
+                  />
+                </div>
+
+                <a
+                  href={getDirectGoogleSheetUrl(activeSheetEvt)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() =>
+                    handleCopyDataForGoogleSheets(
+                      filteredSheetRows,
+                      activeSheetEvt ? activeSheetEvt.judul : 'Semua Event MenDAKI'
+                    )
+                  }
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Klik untuk langsung membuka di Google Sheets (data otomatis disalin ke clipboard)"
+                >
+                  <FileSpreadsheet size={14} />
+                  <span>Buka Langsung di Google Sheets</span>
+                  <ExternalLink size={13} />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopyDataForGoogleSheets(
+                      filteredSheetRows,
+                      activeSheetEvt ? activeSheetEvt.judul : 'Semua Event MenDAKI'
+                    )
+                  }
+                  className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Salin seluruh baris tabel untuk ditempel (Ctrl+V) di Google Sheets"
+                >
+                  <Copy size={13} />
+                  <span>Salin Data Sheet</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    exportEventSheetToCsv(
+                      filteredSheetRows,
+                      activeSheetEvt ? activeSheetEvt.judul : 'Semua_Event'
+                    )
+                  }
+                  className="px-3.5 py-1.5 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download size={14} />
+                  <span>Unduh Sheet (.CSV)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Toast Notification when data is copied for Google Sheets */}
+            {copiedSheetToast && (
+              <div className="bg-emerald-900 text-emerald-50 px-5 py-2.5 text-xs font-bold flex items-center justify-between gap-3 border-b border-emerald-700">
+                <div className="flex items-center gap-2">
+                  <Check size={15} className="text-emerald-300 shrink-0" />
+                  <span>{copiedSheetToast}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCopiedSheetToast(null)}
+                  className="text-emerald-200 hover:text-white cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* Event Worksheet Tabs Bar (Seperti Tab Sheet di Google Sheets) */}
+            <div className="bg-slate-100 border-b border-slate-200 px-3 pt-2 flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
+              <button
+                type="button"
+                onClick={() => setSelectedSheetEventId('ALL')}
+                className={`px-3.5 py-2 rounded-t-xl text-xs font-bold border-t border-x transition flex items-center gap-2 shrink-0 cursor-pointer ${
+                  selectedSheetEventId === 'ALL'
+                    ? 'bg-white text-emerald-800 border-slate-300 shadow-2xs'
+                    : 'bg-slate-200/70 text-slate-600 border-transparent hover:bg-slate-200'
+                }`}
+              >
+                <Table2 size={13} className={selectedSheetEventId === 'ALL' ? 'text-emerald-600' : 'text-slate-500'} />
+                <span>Semua Event</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-black">
+                  {baseMendakiSubmissions.length}
+                </span>
+              </button>
+
+              {baseEventList.map((evt) => {
+                const stats = getEventMendakiStats(evt);
+                const isSelected = selectedSheetEventId === evt.id;
+                return (
+                  <button
+                    key={`sheet-tab-${evt.id}`}
+                    type="button"
+                    onClick={() => setSelectedSheetEventId(evt.id)}
+                    className={`px-3.5 py-2 rounded-t-xl text-xs font-bold border-t border-x transition flex items-center gap-2 shrink-0 cursor-pointer max-w-[260px] ${
+                      isSelected
+                        ? 'bg-white text-emerald-800 border-slate-300 shadow-2xs'
+                        : 'bg-slate-200/70 text-slate-600 border-transparent hover:bg-slate-200'
+                    }`}
+                  >
+                    <FileSpreadsheet
+                      size={13}
+                      className={`shrink-0 ${isSelected ? 'text-emerald-600' : 'text-slate-500'}`}
+                    />
+                    <span className="truncate">{evt.judul}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-black shrink-0 ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-300 text-slate-700'
+                      }`}
+                    >
+                      {stats.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active Event Summary Bar inside Sheet */}
+            <div className="px-5 py-3 bg-emerald-50/50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">
+                  fx
+                </span>
+                {activeSheetEvt ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-extrabold text-slate-900">{activeSheetEvt.judul}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      {activeSheetEvt.kategori}
+                    </span>
+                    <span className="text-slate-500">• {activeSheetEvt.tanggal}</span>
+                    {activeSheetEvt.pembicara && (
+                      <span className="text-purple-700 font-semibold">
+                        • Narasumber: {activeSheetEvt.pembicara}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="font-bold text-slate-700">
+                    Menampilkan Rekapitulasi Real-Time Seluruh Event ({filteredSheetRows.length} Baris Evaluasi)
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5 flex-wrap self-end sm:self-auto">
+                <a
+                  href={getDirectGoogleSheetUrl(activeSheetEvt)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() =>
+                    handleCopyDataForGoogleSheets(
+                      filteredSheetRows,
+                      activeSheetEvt ? activeSheetEvt.judul : 'Semua Event MenDAKI'
+                    )
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                  title="Klik untuk membuka link Google Sheet di tab baru"
+                >
+                  <Link2 size={12} />
+                  <span className="underline">
+                    Link Google Sheet: {getDirectGoogleSheetUrl(activeSheetEvt)}
+                  </span>
+                  <ExternalLink size={11} />
+                </a>
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold">
+                  Total Responden: <strong className="text-emerald-700">{filteredSheetRows.length}</strong>
+                </span>
+                {avgSheetRating > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 font-black">
+                    <Star size={12} className="fill-amber-400 text-amber-500" />
+                    <span>{avgSheetRating} / 5</span>
+                  </span>
+                )}
+                {activeSheetEvt && onNavigateToMendaki && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigateToMendaki({
+                        eventId: activeSheetEvt.id,
+                        judul: activeSheetEvt.judul,
+                        kategori: activeSheetEvt.kategori,
+                        mode: 'isi-form',
+                      })
+                    }
+                    className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    <span>Isi Evaluasi Event Ini</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Real-Time Google Sheet Grid (Ke Samping) */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs min-w-[1600px]">
+                <thead>
+                  {/* Spreadsheet Column Letters (A - M) */}
+                  <tr className="bg-slate-100 text-slate-400 font-mono text-[10px] text-center border-b border-slate-300 select-none">
+                    <th className="py-1 px-2 border-r border-slate-300 w-10 sticky left-0 bg-slate-100 z-10">#</th>
+                    <th className="py-1 px-2 border-r border-slate-300">A</th>
+                    <th className="py-1 px-2 border-r border-slate-300">B</th>
+                    <th className="py-1 px-2 border-r border-slate-300">C</th>
+                    <th className="py-1 px-2 border-r border-slate-300">D</th>
+                    <th className="py-1 px-2 border-r border-slate-300">E</th>
+                    <th className="py-1 px-2 border-r border-slate-300">F</th>
+                    <th className="py-1 px-2 border-r border-slate-300">G</th>
+                    <th className="py-1 px-2 border-r border-slate-300">H</th>
+                    <th className="py-1 px-2 border-r border-slate-300">I</th>
+                    <th className="py-1 px-2 border-r border-slate-300">J</th>
+                    <th className="py-1 px-2 border-r border-slate-300">K</th>
+                    <th className="py-1 px-2">L</th>
+                  </tr>
+                  {/* Column Titles */}
+                  <tr className="bg-[#f8fafc] text-slate-800 font-extrabold text-[11px] border-b-2 border-emerald-600">
+                    <th className="py-2.5 px-3 border-r border-slate-200 text-center w-10 sticky left-0 bg-[#f8fafc] z-10">No</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[110px]">Waktu Isi</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[165px]">Email</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[145px]">Nama</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[155px]">Nama Sekolah</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[175px]">Event / Kegiatan</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[185px]">Tema / Topik</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-rose-50 text-rose-900">Drop</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-sky-50 text-sky-900">Add</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-emerald-50 text-emerald-900">Keep</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-amber-50 text-amber-900">Improve</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 min-w-[210px] bg-purple-50 text-purple-900">Hal yang anda sukai dari Kegiatan ini?</th>
+                    <th className="py-2.5 px-3 text-center min-w-[110px]">Rating</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {filteredSheetRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={13} className="py-10 text-center text-slate-400 italic">
+                        Belum ada data evaluasi MenDAKI yang masuk untuk event ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSheetRows.map((row, idx) => (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-emerald-50/40 transition align-top odd:bg-white even:bg-slate-50/40"
+                      >
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono text-slate-400 bg-slate-50 sticky left-0 z-10">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-500">
+                          {row.tanggalIsi || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 break-all">
+                          {row.email}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 font-bold text-slate-900">
+                          {row.nama}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200">
+                          <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-100">
+                            {row.namaSekolah}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 font-semibold text-indigo-800">
+                          {row.eventKegiatan || row.kategoriEvent}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-800">
+                          {row.temaTopik}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-rose-50/15 leading-relaxed">
+                          {row.drop}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-sky-50/15 leading-relaxed">
+                          {row.add}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-emerald-50/15 leading-relaxed">
+                          {row.keep}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-amber-50/15 leading-relaxed">
+                          {row.improve}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-200 text-slate-800 bg-purple-50/15 leading-relaxed font-medium">
+                          {row.halDisukai}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-black">
+                            <Star size={11} className="fill-amber-400 text-amber-500" />
+                            <span>{row.rating}/5</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL POPUP: GOOGLE SHEET REAL-TIME KHUSUS EVENT TERPILIH */}
+      {modalSheetEvent && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-6xl w-full overflow-hidden border border-emerald-200 flex flex-col max-h-[92vh]">
+            {(() => {
+              const evtStats = getEventMendakiStats(modalSheetEvent);
+              const modalRows = evtStats.submissions;
+              return (
+                <>
+                  {/* Modal Header */}
+                  <div className="bg-gradient-to-r from-[#0f9d58] via-emerald-700 to-teal-800 px-5 py-4 text-white flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+                        <FileSpreadsheet size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm sm:text-base font-black text-white truncate">
+                            Google Sheet Real-Time MenDAKI — {modalSheetEvent.judul}
+                          </h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-black uppercase">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
+                            <span>LIVE</span>
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-100 truncate">
+                          Kategori: {modalSheetEvent.kategori} • Tanggal: {modalSheetEvent.tanggal} • Total Evaluasi: {modalRows.length} Responden
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <a
+                        href={getDirectGoogleSheetUrl(modalSheetEvent)}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() =>
+                          handleCopyDataForGoogleSheets(modalRows, modalSheetEvent.judul)
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        title="Klik untuk membuka langsung di Google Sheets"
+                      >
+                        <FileSpreadsheet size={13} />
+                        <span>Buka di Google Sheets</span>
+                        <ExternalLink size={12} />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => exportEventSheetToCsv(modalRows, modalSheetEvent.judul)}
+                        className="px-3 py-1.5 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Download size={13} />
+                        <span className="hidden sm:inline">Unduh CSV</span>
+                      </button>
+                      {onNavigateToMendaki && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const target = modalSheetEvent;
+                            setModalSheetEvent(null);
+                            onNavigateToMendaki({
+                              eventId: target.id,
+                              judul: target.judul,
+                              kategori: target.kategori,
+                              mode: 'isi-form',
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <ClipboardCheck size={13} />
+                          <span className="hidden sm:inline">Isi Evaluasi</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setModalSheetEvent(null)}
+                        className="p-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Modal Spreadsheet Body */}
+                  <div className="overflow-auto flex-1">
+                    <table className="w-full border-collapse text-left text-xs min-w-[1550px]">
+                      <thead className="sticky top-0 z-20">
+                        <tr className="bg-slate-100 text-slate-400 font-mono text-[10px] text-center border-b border-slate-300">
+                          <th className="py-1 px-2 border-r border-slate-300 w-10">#</th>
+                          <th className="py-1 px-2 border-r border-slate-300">A</th>
+                          <th className="py-1 px-2 border-r border-slate-300">B</th>
+                          <th className="py-1 px-2 border-r border-slate-300">C</th>
+                          <th className="py-1 px-2 border-r border-slate-300">D</th>
+                          <th className="py-1 px-2 border-r border-slate-300">E</th>
+                          <th className="py-1 px-2 border-r border-slate-300">F</th>
+                          <th className="py-1 px-2 border-r border-slate-300">G</th>
+                          <th className="py-1 px-2 border-r border-slate-300">H</th>
+                          <th className="py-1 px-2 border-r border-slate-300">I</th>
+                          <th className="py-1 px-2 border-r border-slate-300">J</th>
+                          <th className="py-1 px-2 border-r border-slate-300">K</th>
+                          <th className="py-1 px-2">L</th>
+                        </tr>
+                        <tr className="bg-[#f8fafc] text-slate-800 font-extrabold text-[11px] border-b-2 border-emerald-600">
+                          <th className="py-2.5 px-3 border-r border-slate-200 text-center w-10">No</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[110px]">Waktu Isi</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[165px]">Email</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[145px]">Nama</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[155px]">Nama Sekolah</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[175px]">Event / Kegiatan</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[185px]">Tema / Topik</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-rose-50 text-rose-900">Drop</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-sky-50 text-sky-900">Add</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-emerald-50 text-emerald-900">Keep</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[195px] bg-amber-50 text-amber-900">Improve</th>
+                          <th className="py-2.5 px-3 border-r border-slate-200 min-w-[210px] bg-purple-50 text-purple-900">Hal yang anda sukai dari Kegiatan ini?</th>
+                          <th className="py-2.5 px-3 text-center min-w-[100px]">Rating</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {modalRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={13} className="py-12 text-center text-slate-400 italic">
+                              Belum ada data evaluasi MenDAKI yang masuk untuk event "{modalSheetEvent.judul}".
+                            </td>
+                          </tr>
+                        ) : (
+                          modalRows.map((row, idx) => (
+                            <tr
+                              key={row.id}
+                              className="hover:bg-emerald-50/40 transition align-top odd:bg-white even:bg-slate-50/40"
+                            >
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono text-slate-400 bg-slate-50">
+                                {idx + 1}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 font-mono text-[11px] text-slate-500">
+                                {row.tanggalIsi || '-'}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 break-all">
+                                {row.email}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 font-bold text-slate-900">
+                                {row.nama}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200">
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-100">
+                                  {row.namaSekolah}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 font-semibold text-indigo-800">
+                                {row.eventKegiatan || row.kategoriEvent}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-800">
+                                {row.temaTopik}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-rose-50/15 leading-relaxed">
+                                {row.drop}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-sky-50/15 leading-relaxed">
+                                {row.add}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-emerald-50/15 leading-relaxed">
+                                {row.keep}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-700 bg-amber-50/15 leading-relaxed">
+                                {row.improve}
+                              </td>
+                              <td className="py-2.5 px-3 border-r border-slate-200 text-slate-800 bg-purple-50/15 leading-relaxed font-medium">
+                                {row.halDisukai}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-black">
+                                  <Star size={11} className="fill-amber-400 text-amber-500" />
+                                  <span>{row.rating}/5</span>
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Tambah / Edit Event */}
       {isModalOpen && (
@@ -917,6 +1724,24 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
                   Sekolah mitra akan langsung diarahkan ke tautan formulir ini saat mengklik tombol registrasi.
+                </p>
+              </div>
+
+              {/* Link Google Sheet MenDAKI */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                  <FileSpreadsheet size={14} className="text-emerald-600" />
+                  <span>Link Google Sheet Evaluasi MenDAKI (Bisa Diklik Langsung ke Google Sheets)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formLinkGoogleSheet}
+                  onChange={(e) => setFormLinkGoogleSheet(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/... atau https://docs.google.com/spreadsheets/create"
+                  className="w-full p-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Saat link ini diklik pada kartu event atau tabel, halaman Google Sheets akan langsung terbuka di tab baru dan data evaluasi otomatis disalin.
                 </p>
               </div>
 
