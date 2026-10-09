@@ -75,8 +75,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     ? 0
     : filteredInvoices
         .filter(i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId, { date: i.tanggalKirim, tahunAjaran: i.tahunAjaran })))
-        .filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo')
-        .reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
+        .reduce((acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0);
 
   const pendingLaporanCount = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
   const approvedLaporanCount = filteredLaporan.filter(l => l.status === 'Disetujui' || l.status === 'Diterima').length;
@@ -86,7 +85,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     ? eventList.filter(e => !e.isDemo)
     : eventList.filter(e => e.isDemo || e.sekolahId === mySchoolId || e.mitra === 'Semua Sekolah Mitra');
   const upcomingEventsCount = effectiveEvents.filter(e => e.status === 'Direncanakan' || e.status === 'Berjalan').length;
-  const activeRequestsCount = filteredPermintaan.filter(r => r.status === 'Diajukan' || r.status === 'Diproses' || r.status === 'Dikirim').length;
+  const activeRequestsCount = filteredPermintaan.filter(r => r.status !== 'Selesai' && r.status !== 'Ditolak').length;
 
   const realPerformanceList = performanceList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA');
   const avgMenDaki = realPerformanceList.length > 0 

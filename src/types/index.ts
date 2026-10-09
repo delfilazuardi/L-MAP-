@@ -174,8 +174,27 @@ export interface EventItem {
   isDemo?: boolean;
 }
 
-export type PermintaanKategori = 'Seragam' | 'Dokumen Cetak' | 'Merchandise & Lainnya';
-export type PermintaanStatus = 'Diajukan' | 'Diproses' | 'Dikirim' | 'Selesai' | 'Ditolak';
+export type PermintaanKategori = 'Seragam' | 'Dokumen Cetak' | 'Merchandise & Lainnya' | string;
+export type PermintaanStatus =
+  | 'Pengajuan'
+  | 'DP'
+  | 'Proses'
+  | 'Pelunasan'
+  | 'Biaya Kirim'
+  | 'Pengiriman'
+  | 'Selesai'
+  | 'Diajukan'
+  | 'Diproses'
+  | 'Dikirim'
+  | 'Ditolak';
+
+export interface PermintaanLampiran {
+  namaFile: string;
+  ukuranFile?: number;
+  tipeFile?: string; // e.g. application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  dataUrl: string; // Base64 atau tautan dokumen
+  uploadedAt?: string;
+}
 
 export interface PermintaanMitra {
   id: string;
@@ -190,8 +209,12 @@ export interface PermintaanMitra {
   tanggalPengajuan: string;
   status: PermintaanStatus;
   noResi?: string;
+  biayaKirim?: number;
+  nominalDP?: number;
+  nominalPelunasan?: number;
   estimasiSelesai?: string;
   catatanAdmin?: string;
+  lampiranDokumen?: PermintaanLampiran[];
   isDemo?: boolean;
 }
 

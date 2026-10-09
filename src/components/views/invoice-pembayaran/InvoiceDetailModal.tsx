@@ -20,7 +20,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const realisasi = invoice.tagihanRealisasi || invoice.nominal || 0;
   const dibayar = invoice.nominalPembayaran || 0;
   const isPelaporan = Boolean(invoice.isPelaporanSaja);
-  const sisa = isPelaporan ? 0 : Math.max(0, realisasi - dibayar);
+  // Nominal piutang adalah pengurangan dari Tagihan Full dan Pembayaran
+  const sisa = isPelaporan ? 0 : Math.max(0, tagihanFull - dibayar);
 
   const handlePrint = () => {
     window.print();
@@ -153,7 +154,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   {isPelaporan
                     ? 'Khusus pelaporan tagihan (Bebas kewajiban pembayaran)'
                     : sisa > 0
-                    ? `Sisa kewajiban: Realisasi (${formatRupiah(realisasi)}) − Telah Bayar (${formatRupiah(dibayar)})`
+                    ? `Sisa piutang: Tagihan Full (${formatRupiah(tagihanFull)}) − Pembayaran (${formatRupiah(dibayar)})`
                     : 'Kewajiban telah lunas 100%'}
                 </span>
               </div>

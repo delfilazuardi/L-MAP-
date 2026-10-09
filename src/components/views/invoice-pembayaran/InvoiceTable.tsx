@@ -210,9 +210,11 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
               tahunAjaran: inv.tahunAjaran,
             });
 
+            const fullTagihan = inv.tagihanFull || inv.nominal || 0;
             const realisasi = inv.tagihanRealisasi || inv.nominal || 0;
             const dibayar = inv.nominalPembayaran || 0;
-            const sisa = Math.max(0, realisasi - dibayar);
+            // Nominal Piutang adalah pengurangan dari Tagihan Full dan Pembayaran
+            const sisa = Math.max(0, fullTagihan - dibayar);
             const seqNumber = extractInvoiceSequenceNumber(inv.nomorInvoice || inv.id);
             const isCheckedPaid = dibayar > 0 || inv.status === 'Lunas' || inv.status === 'Sebagian';
             const isRowOpen = openPaymentRowId === inv.id;
@@ -465,9 +467,9 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
 
                       <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100">
                         <div className="text-xs text-slate-600">
-                          Sisa Piutang:{' '}
-                          <strong className={formTagihanRealisasi - formNominalBayar > 0 ? 'text-rose-600 font-mono' : 'text-emerald-600 font-mono'}>
-                            {formatRupiah(Math.max(0, formTagihanRealisasi - formNominalBayar))}
+                          Sisa Piutang (Tagihan Full − Pembayaran):{' '}
+                          <strong className={formTagihanFull - formNominalBayar > 0 ? 'text-rose-600 font-mono' : 'text-emerald-600 font-mono'}>
+                            {formatRupiah(Math.max(0, formTagihanFull - formNominalBayar))}
                           </strong>
                         </div>
                         <div className="flex items-center gap-2">

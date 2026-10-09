@@ -317,13 +317,13 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
                 </div>
               </div>
 
-              {/* Ringkasan Sisa */}
+              {/* Ringkasan Sisa Piutang */}
               <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs">
-                <span className="font-bold text-slate-600">Sisa Tagihan (Realisasi − Nominal Bayar):</span>
+                <span className="font-bold text-slate-600">Nominal Piutang (Tagihan Full − Pembayaran):</span>
                 <span className={`font-mono font-black text-sm ${
-                  nominalRealisasi - jumlah > 0 ? 'text-rose-600' : 'text-emerald-600'
+                  nominalTagihan - jumlah > 0 ? 'text-rose-600' : 'text-emerald-600'
                 }`}>
-                  {formatRupiah(Math.max(0, nominalRealisasi - jumlah))}
+                  {formatRupiah(Math.max(0, nominalTagihan - jumlah))}
                 </span>
               </div>
             </div>

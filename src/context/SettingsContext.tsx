@@ -19,7 +19,15 @@ export interface AppSettings {
   notifikasiLaporanMasuk: boolean;
   notifikasiProgramMitra: boolean;
   temaWarna: 'blue' | 'emerald' | 'indigo' | 'purple';
+  daftarKategoriPermintaan?: string[];
 }
+
+export const DEFAULT_KATEGORI_PERMINTAAN: string[] = [
+  'Seragam Siswa & Guru',
+  'Dokumen Cetak & Sertifikat',
+  'Buku & Modul Kurikulum',
+  'Merchandise & Atribut Sekolah',
+];
 
 export const DEFAULT_SETTINGS: AppSettings = {
   logoUrl: '/lmap-logo.jpg',
@@ -40,6 +48,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifikasiLaporanMasuk: true,
   notifikasiProgramMitra: true,
   temaWarna: 'blue',
+  daftarKategoriPermintaan: DEFAULT_KATEGORI_PERMINTAAN,
 };
 
 const SETTINGS_STORAGE_KEY = 'lmap_app_settings';

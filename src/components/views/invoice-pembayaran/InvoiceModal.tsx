@@ -402,35 +402,35 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               )}
             </div>
 
-            {/* Sisa Tagihan (Otomatis) */}
+            {/* Sisa Tagihan (Otomatis: Tagihan Full − Pembayaran) */}
             <div className={`p-3.5 rounded-xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-              tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0
+              tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0
                 ? 'bg-rose-50/80 border-rose-200 text-rose-950'
                 : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
             }`}>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black uppercase tracking-wider">
-                    Sisa Piutang
+                    Nominal Piutang (Sisa Piutang)
                   </span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0
+                    tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0
                       ? 'bg-rose-200 text-rose-800'
                       : 'bg-emerald-200 text-emerald-800'
                   }`}>
-                    {tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'Belum Lunas' : '✓ Lunas'}
+                    {tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'Ada Piutang' : '✓ Lunas'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600">
-                  Realisasi ({formatRupiah(tagihanRealisasi)}) − Nominal Bayar ({formatRupiah(isBayarChecked ? nominalPembayaran : 0)})
+                  Tagihan Full ({formatRupiah(tagihanFull)}) − Pembayaran ({formatRupiah(isBayarChecked ? nominalPembayaran : 0)})
                 </p>
               </div>
 
               <div className="text-left sm:text-right shrink-0">
                 <div className={`font-mono text-lg sm:text-xl font-black tracking-tight ${
-                  tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'text-rose-600' : 'text-emerald-700'
+                  tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'text-rose-600' : 'text-emerald-700'
                 }`}>
-                  {formatRupiah(Math.max(0, tagihanRealisasi - (isBayarChecked ? nominalPembayaran : 0)))}
+                  {formatRupiah(Math.max(0, tagihanFull - (isBayarChecked ? nominalPembayaran : 0)))}
                 </div>
               </div>
             </div>
