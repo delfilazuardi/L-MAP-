@@ -4,13 +4,15 @@ import {
   CheckCircle2, 
   Edit3, 
   Trash2, 
-  ChevronDown
+  ChevronDown,
+  School
 } from 'lucide-react';
 import { Pembayaran, PembayaranStatus } from '../../../types';
 import { formatRupiah } from './types';
 import {
   extractInvoiceSequenceNumber,
   comparePaymentByInvoiceSequenceAsc,
+  isAfiliasiTanpaInvoice
 } from '../../../lib/invoiceUtils';
 
 interface PembayaranTableProps {
@@ -82,12 +84,30 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
         </thead>
         <tbody className="divide-y divide-slate-100 text-xs">
           {sortedPayments.map((pay) => {
+            const isTanpaInvoice = Boolean(
+              pay.isPendataanAfiliasi ||
+              !pay.invoiceId ||
+              isAfiliasiTanpaInvoice(pay.mitraId, {
+                date: pay.tanggalBayar,
+                tahunAjaran: pay.tahunAjaran,
+              })
+            );
             const invSeq = pay.invoiceId ? extractInvoiceSequenceNumber(pay.invoiceId) : 0;
             return (
             <tr key={pay.id} className="hover:bg-blue-50/30 transition-colors">
               {/* Tautan Invoice */}
               <td className="py-3.5 px-4">
-                {pay.invoiceId ? (
+                {isTanpaInvoice ? (
+                  <div className="flex flex-col gap-1 items-start">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 border border-purple-200 font-extrabold text-[11px] shadow-2xs">
+                      <School size={12} className="text-purple-700" />
+                      <span>Pendataan Afiliasi (Tanpa Invoice)</span>
+                    </span>
+                    <span className="text-[10px] text-purple-600 font-mono font-medium">
+                      Ref: {pay.noReferensi || pay.id}
+                    </span>
+                  </div>
+                ) : pay.invoiceId ? (
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {invSeq > 0 && (
                       <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200 font-mono text-[10px] font-black">

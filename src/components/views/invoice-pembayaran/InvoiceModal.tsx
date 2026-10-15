@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Sparkles, AlertCircle, School, CheckCircle2 } from 'lucide-react';
 import { Invoice, InvoiceStatus, InvoiceOperationalStatus, SekolahMitra } from '../../../types';
 import { RuangKategoriId, formatRupiah } from './types';
-import { generateNomorInvoiceBaru, NAMA_BULAN_LIST } from '../../../lib/invoiceUtils';
+import { generateNomorInvoiceBaru, NAMA_BULAN_LIST, isAfiliasiTanpaInvoice } from '../../../lib/invoiceUtils';
 import { NominalInput } from './NominalInput';
 
 interface InvoiceModalProps {
@@ -40,11 +40,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [keterangan, setKeterangan] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Periksa apakah sekolah dan tahun yang dipilih termasuk Sekolah Afiliasi (tanpa nomor invoice)
+  const isTanpaInvoice = isAfiliasiTanpaInvoice(mitraId, {
+    date: tanggalKirim,
+    tahunAjaran,
+    tahun: parseInt(tanggalKirim?.slice(0, 4) || '2026', 10),
+    sekolahList,
+  });
+
   useEffect(() => {
     if (!isOpen) return;
 
     if (editingInvoice) {
-      setNomorInvoice(editingInvoice.nomorInvoice || editingInvoice.id);
+      setNomorInvoice(editingInvoice.nomorInvoice || '');
       setMitraId(editingInvoice.mitraId);
       setKategori((editingInvoice.kategori as RuangKategoriId) || defaultKategori);
       setBulan(editingInvoice.bulan || 'September');
@@ -110,10 +118,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       finalStatus = 'Belum Bayar';
     }
 
+    const effectiveId = editingInvoice 
+      ? editingInvoice.id 
+      : isTanpaInvoice 
+      ? `DATA-AFILIASI-${mitraId}-${Date.now().toString().slice(-6)}` 
+      : nomorInvoice;
+
     try {
       await onSave({
-        id: editingInvoice ? editingInvoice.id : nomorInvoice,
-        nomorInvoice,
+        id: effectiveId,
+        nomorInvoice: isTanpaInvoice ? undefined : nomorInvoice,
         mitraId,
         namaSekolah,
         kategori,
@@ -128,7 +142,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         nominalPembayaran: effectivePaid,
         statusInvoice,
         status: finalStatus,
-        keterangan,
+        isPelaporanSaja: isTanpaInvoice || editingInvoice?.isPelaporanSaja,
+        isPendataanAfiliasi: isTanpaInvoice,
+        keterangan: keterangan || (isTanpaInvoice ? `Pendataan Kemitraan Afiliasi ${namaSekolah}` : `Tagihan ${kategori} ${namaSekolah}`),
         createdAt: editingInvoice ? editingInvoice.createdAt : new Date().toISOString(),
       });
       onClose();
@@ -142,11 +158,22 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-10">
           <div>
-            <h3 className="text-lg font-black text-slate-900">
-              {editingInvoice ? 'Edit Data Invoice' : `Buat Invoice Baru: ${kategori}`}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-black text-slate-900">
+                {editingInvoice 
+                  ? (isTanpaInvoice ? 'Edit Pendataan Afiliasi' : 'Edit Data Invoice') 
+                  : (isTanpaInvoice ? `Pendataan Kemitraan Afiliasi: ${kategori}` : `Buat Invoice Baru: ${kategori}`)}
+              </h3>
+              {isTanpaInvoice && (
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                  Mode Pendataan
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Penerbitan tagihan resmi untuk sekolah mitra Lazuardi
+              {isTanpaInvoice 
+                ? 'Pencatatan data kemitraan sekolah afiliasi tanpa penerbitan nomor invoice' 
+                : 'Penerbitan tagihan resmi untuk sekolah mitra Lazuardi'}
             </p>
           </div>
           <button
@@ -158,6 +185,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Banner Informasi Khusus Sekolah Afiliasi (Hanya Pendataan, Tanpa Invoice) */}
+          {isTanpaInvoice && (
+            <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-start gap-3 shadow-2xs">
+              <div className="p-2 rounded-xl bg-purple-200 text-purple-800 shrink-0 mt-0.5">
+                <School size={18} />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-xs text-purple-950 block">
+                    Sekolah Afiliasi: Khusus Pendataan Kemitraan (Bebas Nomor Invoice)
+                  </span>
+                </div>
+                <p className="text-[11px] text-purple-700 leading-relaxed">
+                  Sesuai ketentuan, sekolah afiliasi tidak memerlukan nomor invoice resmi. Data ini dicatat sebagai pendataan/laporan kemitraan Lazuardi tanpa ada nomor invoice yang harus diisi.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Ruang / Kategori */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -181,40 +227,29 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
           </div>
 
-          {/* Nomor Invoice & Sekolah */}
+          {/* Sekolah Mitra & Nomor Invoice */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Nomor Invoice Resmi
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  required
-                  value={nomorInvoice}
-                  onChange={(e) => setNomorInvoice(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {!editingInvoice && (
-                  <button
-                    type="button"
-                    onClick={handleGenerateNumber}
-                    className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition shrink-0 cursor-pointer"
-                    title="Generate Nomor Baru"
-                  >
-                    <Sparkles size={18} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Sekolah Mitra Tujuan
+                Sekolah Tujuan
               </label>
               <select
                 value={mitraId}
-                onChange={(e) => setMitraId(e.target.value)}
+                onChange={(e) => {
+                  const newMitraId = e.target.value;
+                  setMitraId(newMitraId);
+                  // Jika ganti ke sekolah reguler dan nomorInvoice kosong, auto-generate nomor invoice
+                  const willBeTanpaInvoice = isAfiliasiTanpaInvoice(newMitraId, {
+                    date: tanggalKirim,
+                    tahunAjaran,
+                    tahun: parseInt(tanggalKirim?.slice(0, 4) || '2026', 10),
+                    sekolahList,
+                  });
+                  if (!willBeTanpaInvoice && !nomorInvoice) {
+                    const gen = generateNomorInvoiceBaru(existingInvoices);
+                    setNomorInvoice(gen.nomorInvoice);
+                  }
+                }}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {sekolahList.map((s) => (
@@ -223,6 +258,54 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Nomor Invoice Resmi
+                </label>
+                {isTanpaInvoice ? (
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                    Tidak Perlu Diisi
+                  </span>
+                ) : null}
+              </div>
+
+              {isTanpaInvoice ? (
+                <div>
+                  <input
+                    type="text"
+                    disabled
+                    value="[Tanpa Invoice — Pendataan Afiliasi]"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-purple-200 bg-purple-50/60 text-sm font-mono font-bold text-purple-800 cursor-not-allowed select-none"
+                  />
+                  <p className="text-[10px] text-purple-700 font-semibold mt-1">
+                    ✓ Otomatis tanpa nomor invoice (hanya pendataan saja).
+                  </p>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={nomorInvoice}
+                    onChange={(e) => setNomorInvoice(e.target.value)}
+                    placeholder="INV/romawi/tahun/nomor/MO"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {!editingInvoice && (
+                    <button
+                      type="button"
+                      onClick={handleGenerateNumber}
+                      className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition shrink-0 cursor-pointer"
+                      title="Generate Nomor Baru"
+                    >
+                      <Sparkles size={18} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

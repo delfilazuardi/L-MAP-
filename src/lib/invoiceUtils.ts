@@ -128,8 +128,21 @@ export function compareInvoiceBySequenceAsc(
   const seqA = extractInvoiceSequenceNumber(codeA);
   const seqB = extractInvoiceSequenceNumber(codeB);
 
-  if (seqA !== seqB) {
-    return seqA - seqB;
+  // Jika kedua item memiliki nomor urut invoice valid (> 0)
+  if (seqA > 0 && seqB > 0) {
+    if (seqA !== seqB) {
+      return seqA - seqB;
+    }
+  } else if (seqA > 0 && seqB === 0) {
+    // Invoice bernomor diletakkan berurutan
+    return -1;
+  } else if (seqA === 0 && seqB > 0) {
+    return 1;
+  }
+
+  // Jika sama-sama non-invoice (pendataan afiliasi) atau urutan sama:
+  if (a.tanggalKirim && b.tanggalKirim && a.tanggalKirim !== b.tanggalKirim) {
+    return a.tanggalKirim.localeCompare(b.tanggalKirim);
   }
 
   const ymA = extractYearAndMonthFromInvoiceCode(codeA);
@@ -223,24 +236,93 @@ export const SEKOLAH_AFILIASI_3 = [
     id: 'MO011',
     namaSekolah: 'SMA Lazuardi',
     kota: 'Depok',
-    keterangan: 'Khusus pelaporan tagihan resmi (Bebas kewajiban pembayaran)',
+    keterangan: 'Sekolah Afiliasi (Khusus Pendataan Kemitraan Saja, Tanpa Invoice)',
     badge: 'SMA GCS'
   },
   {
     id: 'MO010',
     namaSekolah: 'Lazuardi Kamila',
     kota: 'Solo',
-    keterangan: 'Khusus pelaporan tagihan resmi (Bebas kewajiban pembayaran)',
+    keterangan: 'Sekolah Afiliasi (Khusus Pendataan Kemitraan Saja, Tanpa Invoice)',
     badge: 'Kamila Solo'
   },
   {
     id: 'MO013',
     namaSekolah: 'Lazuardi Athaillah',
     kota: 'Makassar',
-    keterangan: 'Sekolah Afiliasi per Juli 2024 (Bebas kewajiban pembayaran)',
+    keterangan: 'Sekolah Mitra ber-Invoice s/d 2024; Mulai 2025 dst beralih menjadi Afiliasi (Khusus Pendataan, Tanpa Invoice)',
     badge: 'Afiliasi Makassar'
   },
 ];
+
+/**
+  * Memeriksa apakah suatu sekolah & konteks tahun merupakan Sekolah Afiliasi
+  * yang TIDAK PERLU menggunakan nomor invoice (hanya pendataan saja).
+  *
+  * Aturan spesifik:
+  * 1. Sekolah Afiliasi tidak perlu pakai nomor invoice (hanya pendataan saja).
+  * 2. PENGECUALIAN: Lazuardi Athaillah (MO013) hingga tahun 2024 (<= 2024 / TA 2022-2024)
+  *    masih menggunakan nomor invoice resmi kemitraan.
+  * 3. Untuk tahun-tahun berikutnya (setelah 2024, yaitu 2025 ke atas / TA 2025/2026 dst),
+  *    data Lazuardi Athaillah juga beralih menjadi HANYA PENDATAAN SAJA tanpa nomor invoice yang harus diisi.
+  * 4. Sekolah afiliasi lainnya (SMA Lazuardi, Lazuardi Kamila) sepanjang masa hanya pendataan saja (tanpa nomor invoice).
+  */
+export function isAfiliasiTanpaInvoice(
+  sekolahIdOrName?: string | null,
+  context?: {
+    date?: string;
+    tahunAjaran?: string;
+    tahun?: number;
+    sekolahList?: { id: string; statusKerjasama?: string; kategoriSekolah?: string }[];
+  }
+): boolean {
+  if (!sekolahIdOrName) return false;
+  const norm = String(sekolahIdOrName).toLowerCase();
+
+  // 1. Cek apakah entitas ini termasuk sekolah afiliasi
+  const isKnownAfiliasi = isSekolahAfiliasiTab(sekolahIdOrName);
+  const isListAfiliasi = context?.sekolahList?.some(
+    s =>
+      (s.id.toLowerCase() === norm || s.id === sekolahIdOrName) &&
+      (s.statusKerjasama === 'Afiliasi' || s.kategoriSekolah === 'Sekolah Afiliasi' || s.kategoriSekolah === 'Khusus Pelaporan')
+  );
+
+  if (!isKnownAfiliasi && !isListAfiliasi) {
+    return false; // Bukan sekolah afiliasi -> tetap menggunakan nomor invoice
+  }
+
+  // 2. Jika Lazuardi Athaillah Makassar (MO013):
+  const isAthaillah = norm.includes('mo013') || norm.includes('athaillah');
+  if (isAthaillah) {
+    // Tentukan tahun
+    let year = context?.tahun;
+    if (!year && context?.date) {
+      const parsedYear = parseInt(context.date.slice(0, 4), 10);
+      if (!isNaN(parsedYear)) year = parsedYear;
+    }
+    if (!year && context?.tahunAjaran) {
+      const match = context.tahunAjaran.match(/(\d{4})/);
+      if (match) year = parseInt(match[1], 10);
+    }
+
+    // Hingga tahun 2024 (<= 2024): Athaillah MASIH MENGGUNAKAN NOMOR INVOICE
+    if (year && year <= 2024) {
+      return false;
+    }
+
+    // Tanggal spesifik: jika sebelum 2025-01-01
+    if (context?.date && context.date < '2025-01-01') {
+      return false;
+    }
+
+    // Tahun-tahun berikutnya (2025 ke atas): HANYA PENDATAAN SAJA (tanpa nomor invoice)
+    return true;
+  }
+
+  // 3. Untuk sekolah afiliasi lainnya (SMA Lazuardi, Lazuardi Kamila, dll):
+  // Sepanjang masa tidak perlu pakai invoice, hanya pendataan saja.
+  return true;
+}
 
 /**
  * Memeriksa apakah suatu sekolah masuk ke dalam 3 Sekolah Afiliasi / Khusus Pelaporan

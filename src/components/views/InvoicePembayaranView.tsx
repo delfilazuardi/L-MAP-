@@ -732,7 +732,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-purple-200 mt-0.5">
-                  Menghitung <strong>khusus 3 sekolah afiliasi</strong> untuk pelaporan tagihan resmi Lazuardi (tanpa beban piutang).
+                  Menghitung <strong>khusus 3 sekolah afiliasi</strong> untuk pelaporan tagihan resmi Lazuardi (bebas piutang). <strong>Ketentuan Invoice:</strong> Sekolah afiliasi tidak memerlukan nomor invoice (hanya pendataan saja), kecuali Lazuardi Athaillah hingga tahun 2024 yang masih ber-invoice. Mulai tahun 2025 ke atas, seluruh data sekolah afiliasi dicatat sebagai pendataan langsung tanpa nomor invoice.
                 </p>
               </div>
             </div>
@@ -776,8 +776,8 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
                   <div className="mt-3 pt-2.5 border-t border-white/15 space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-purple-300 text-[11px]">Invoice Terbit:</span>
-                      <strong className="text-white font-bold">{schInvoices.length} Invoice</strong>
+                      <span className="text-purple-300 text-[11px]">Data Tercatat:</span>
+                      <strong className="text-white font-bold">{schInvoices.length} Data (Pendataan)</strong>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-purple-300 text-[11px]">Tagihan Realisasi:</span>

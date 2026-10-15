@@ -3,6 +3,7 @@ import { X, Printer, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Invoice } from '../../../types';
 import { formatRupiah } from './types';
 import { useSettings } from '../../../context/SettingsContext';
+import { isAfiliasiTanpaInvoice } from '../../../lib/invoiceUtils';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice | null;
@@ -19,7 +20,15 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const tagihanFull = invoice.tagihanFull || invoice.nominal || 0;
   const realisasi = invoice.tagihanRealisasi || invoice.nominal || 0;
   const dibayar = invoice.nominalPembayaran || 0;
-  const isPelaporan = Boolean(invoice.isPelaporanSaja);
+  const isTanpaInvoice = Boolean(
+    invoice.isPendataanAfiliasi ||
+    !invoice.nomorInvoice ||
+    isAfiliasiTanpaInvoice(invoice.mitraId, {
+      date: invoice.tanggalKirim,
+      tahunAjaran: invoice.tahunAjaran,
+    })
+  );
+  const isPelaporan = isTanpaInvoice || Boolean(invoice.isPelaporanSaja);
   // Nominal piutang adalah pengurangan dari Tagihan Full dan Pembayaran
   const sisa = isPelaporan ? 0 : Math.max(0, tagihanFull - dibayar);
 
@@ -33,9 +42,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
         {/* Modal Top Bar (hidden on print) */}
         <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 print:hidden">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800 text-sm">Pratinjau Kuitansi / Invoice Resmi</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
-              {invoice.kategori || 'Invoice'}
+            <span className="font-bold text-slate-800 text-sm">
+              {isTanpaInvoice ? 'Pratinjau Lembar Pendataan Afiliasi' : 'Pratinjau Kuitansi / Invoice Resmi'}
+            </span>
+            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+              isTanpaInvoice ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+            }`}>
+              {isTanpaInvoice ? 'Pendataan Afiliasi' : (invoice.kategori || 'Invoice')}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -79,11 +92,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             </div>
 
             <div className="text-right">
-              <span className="text-xs font-black text-blue-700 uppercase tracking-widest block">
-                SURAT TAGIHAN RESMI
+              <span className={`text-xs font-black uppercase tracking-widest block ${
+                isTanpaInvoice ? 'text-purple-700' : 'text-blue-700'
+              }`}>
+                {isTanpaInvoice ? 'LEMBAR PENDATAAN AFILIASI' : 'SURAT TAGIHAN RESMI'}
               </span>
               <span className="font-mono text-base font-black text-slate-900 block mt-1">
-                {invoice.nomorInvoice || invoice.id}
+                {isTanpaInvoice ? (invoice.nomorInvoice || 'Tanpa No. Invoice (Afiliasi)') : (invoice.nomorInvoice || invoice.id)}
               </span>
               <span className="text-xs text-slate-500 block">
                 Tanggal: {invoice.tanggalKirim || '-'}

@@ -123,6 +123,7 @@ export interface Invoice {
   statusInvoice?: InvoiceOperationalStatus; // Status penerbitan invoice
   status: InvoiceStatus; // Status pembayaran invoice (Lunas, Belum Bayar, dll)
   isPelaporanSaja?: boolean; // Khusus sekolah tanpa kewajiban pembayaran (hanya pelaporan)
+  isPendataanAfiliasi?: boolean; // Khusus sekolah afiliasi: hanya pendataan saja, tanpa nomor invoice
   keterangan?: string;
   createdAt?: string; // Timestamp ISO pembuatan/input invoice
   updatedAt?: string; // Timestamp ISO update invoice
@@ -138,14 +139,15 @@ export interface Pembayaran {
   mitraId: string;
   namaSekolah: string;
   kategori: PembayaranKategori;
-  tahunAjaran?: string; // e.g. "2026/2027", "2025/2026", "2022/2023"
+  tahunAjaran?: string;
   jumlah: number;
   tanggalBayar: string;
-  metodeBayar: string;
-  noReferensi: string;
-  buktiUrl: string;
+  metodeBayar?: string;
+  noReferensi?: string;
+  buktiUrl?: string;
   status: PembayaranStatus;
   catatan?: string;
+  isPendataanAfiliasi?: boolean; // Khusus pendataan afiliasi tanpa invoice
   isDemo?: boolean;
 }
 
@@ -176,13 +178,18 @@ export interface EventItem {
 
 export type PermintaanKategori = 'Seragam' | 'Dokumen Cetak' | 'Merchandise & Lainnya' | string;
 export type PermintaanStatus =
+  | 'Validasi Mitra Office'
+  | 'DP (Opsional)'
+  | 'Konfirmasi'
+  | 'Info Vendor'
+  | 'Produksi'
+  | 'Pelunasan'
+  | 'Pengiriman'
+  | 'Selesai'
   | 'Pengajuan'
   | 'DP'
   | 'Proses'
-  | 'Pelunasan'
   | 'Biaya Kirim'
-  | 'Pengiriman'
-  | 'Selesai'
   | 'Diajukan'
   | 'Diproses'
   | 'Dikirim'
@@ -200,18 +207,27 @@ export interface PermintaanMitra {
   id: string;
   mitraId: string;
   namaSekolah: string;
+  noPo?: string; // Nomor Purchase Order (PO)
+  tanggalPo?: string; // Tanggal PO diterbitkan
+  isPoDiterima?: boolean; // Status klik Terima PO oleh admin
+  tanggalTerimaPo?: string; // Tanggal PO diterima sistem oleh Admin
+  diterimaOleh?: string; // Nama Admin/Petugas yang menerima PO
   kategori: PermintaanKategori;
   itemDetail?: string;
-  namaItem?: string;
-  spesifikasi?: string;
+  namaItem?: string; // Item permintaan
+  spesifikasi?: string; // Spesifikasi / ukuran / varian
   catatan?: string;
   jumlah: number;
+  satuan?: string; // Pcs, Buku, Set, Paket, dll.
   tanggalPengajuan: string;
   status: PermintaanStatus;
   noResi?: string;
+  kurir?: string; // Ekspedisi: JNE, J&T, SiCepat, Kurir Lazuardi, dll.
   biayaKirim?: number;
   nominalDP?: number;
+  isDpDilewati?: boolean; // Jika DP dilewati (karena opsional)
   nominalPelunasan?: number;
+  vendorNama?: string; // Nama vendor rekanan
   estimasiSelesai?: string;
   catatanAdmin?: string;
   lampiranDokumen?: PermintaanLampiran[];

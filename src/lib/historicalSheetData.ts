@@ -1,5 +1,5 @@
 import { Invoice, Pembayaran, InvoiceKategori, InvoiceStatus, PembayaranStatus, InvoiceOperationalStatus } from '../types';
-import { isSchoolPelaporanSaja } from './invoiceUtils';
+import { isSchoolPelaporanSaja, isAfiliasiTanpaInvoice } from './invoiceUtils';
 
 export interface SheetRowInvoicePayment {
   nomorInvoice: string;
@@ -464,7 +464,7 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     keterangan: 'Renewal Lisensi Tahunan TA 2025/2026 Haura Bogor',
   },
   {
-    nomorInvoice: 'INV/IX/2025/005/MO',
+    nomorInvoice: '',
     namaSekolah: 'Lazuardi Kamila Solo',
     kodeMitra: 'MO010',
     bulan: 'September',
@@ -478,10 +478,10 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     nominalPembayaran: 0,
     statusInvoice: 'Terkirim',
     status: 'Lunas',
-    keterangan: 'Pelaporan Tagihan Saja: Renewal Lisensi Tahunan TA 2025/2026 Kamila Solo (Bebas Kewajiban Bayar)',
+    keterangan: 'Pendataan Afiliasi: Renewal Lisensi Tahunan TA 2025/2026 Kamila Solo (Tanpa Invoice Resmi)',
   },
   {
-    nomorInvoice: 'INV/X/2025/006/MO',
+    nomorInvoice: '',
     namaSekolah: 'SMA Lazuardi GCS',
     kodeMitra: 'MO011',
     bulan: 'Oktober',
@@ -495,10 +495,10 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     nominalPembayaran: 0,
     statusInvoice: 'Terkirim',
     status: 'Lunas',
-    keterangan: 'Pelaporan Tagihan Saja: Modul Cambridge & Portofolio Siswa SMA Lazuardi GCS',
+    keterangan: 'Pendataan Afiliasi: Modul Cambridge & Portofolio Siswa SMA Lazuardi GCS (Tanpa Invoice Resmi)',
   },
   {
-    nomorInvoice: 'INV/VIII/2025/007/MO',
+    nomorInvoice: '',
     namaSekolah: 'Lazuardi Athaillah Makassar',
     kodeMitra: 'MO013',
     bulan: 'Agustus',
@@ -511,7 +511,7 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     nominalPembayaran: 0,
     statusInvoice: 'Terkirim',
     status: 'Lunas',
-    keterangan: 'Pelaporan Tagihan Saja: Pembinaan Sekolah Afiliasi Athaillah Makassar (Bebas Kewajiban Bayar)',
+    keterangan: 'Pendataan Afiliasi: Pembinaan Sekolah Afiliasi Athaillah Makassar TA 2025/2026 (Tanpa Invoice Resmi)',
   },
 
   // --- TAHUN 2026 (TA 2026/2027) ---
@@ -535,7 +535,7 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     keterangan: 'Franchise Fee Pengembangan Jenjang Baru Sekolah Dasar (SD) Lazuardi Ideal',
   },
   {
-    nomorInvoice: 'INV/VII/2026/002/MO',
+    nomorInvoice: '',
     namaSekolah: 'Lazuardi Kamila Solo',
     kodeMitra: 'MO010',
     bulan: 'Juli',
@@ -548,10 +548,10 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     nominalPembayaran: 0,
     statusInvoice: 'Terkirim',
     status: 'Lunas',
-    keterangan: 'Pelaporan Tagihan Saja: Franchise Fee termin awal kemitraan cabang Solo (Bebas Kewajiban Bayar)',
+    keterangan: 'Pendataan Afiliasi: Franchise Fee termin awal kemitraan cabang Solo (Tanpa Invoice Resmi)',
   },
   {
-    nomorInvoice: 'INV/VII/2026/007/MO',
+    nomorInvoice: '',
     namaSekolah: 'SMA Lazuardi GCS',
     kodeMitra: 'MO011',
     bulan: 'Juli',
@@ -564,10 +564,10 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     nominalPembayaran: 0,
     statusInvoice: 'Terkirim',
     status: 'Lunas',
-    keterangan: 'Pelaporan Tagihan Saja: Pendampingan Kurikulum SMA Lazuardi GCS',
+    keterangan: 'Pendataan Afiliasi: Pendampingan Kurikulum SMA Lazuardi GCS (Tanpa Invoice Resmi)',
   },
   {
-    nomorInvoice: 'INV/VIII/2026/008/MO',
+    nomorInvoice: '',
     namaSekolah: 'Lazuardi Athaillah Makassar',
     kodeMitra: 'MO013',
     bulan: 'Agustus',
@@ -580,7 +580,7 @@ export const HISTORICAL_TRANSACTIONS_SINCE_2022: SheetRowInvoicePayment[] = [
     nominalPembayaran: 0,
     statusInvoice: 'Terkirim',
     status: 'Lunas',
-    keterangan: 'Pelaporan Tagihan Saja: Afiliasi Lazuardi Athaillah Makassar TA 2026/2027',
+    keterangan: 'Pendataan Afiliasi: Afiliasi Lazuardi Athaillah Makassar TA 2026/2027 (Tanpa Invoice Resmi)',
   },
   {
     nomorInvoice: 'INV/VIII/2026/003/MO',
@@ -722,9 +722,19 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
       ? 'Franchise Fee'
       : 'Renewal Fee';
 
+    const isAfiliasiNoInvoice = isAfiliasiTanpaInvoice(row.kodeMitra, {
+      date: row.tanggalKirim,
+      tahunAjaran: row.tahunAjaran,
+      tahun: row.tahun,
+    }) || !row.nomorInvoice;
+
+    const generatedId = row.nomorInvoice 
+      ? row.nomorInvoice 
+      : `DATA-AFILIASI-${row.kodeMitra}-${(row.tahunAjaran || '').replace('/', '-')}-${idx + 1}`;
+
     const inv: Invoice = {
-      id: row.nomorInvoice,
-      nomorInvoice: row.nomorInvoice,
+      id: generatedId,
+      nomorInvoice: row.nomorInvoice || undefined,
       mitraId: row.kodeMitra,
       namaSekolah: row.namaSekolah,
       bulan: row.bulan,
@@ -740,11 +750,12 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
       jatuhTempo: `${row.tahun}-${row.bulan === 'Juli' ? '08-10' : row.bulan === 'Agustus' ? '09-15' : row.bulan === 'September' ? '10-15' : '11-15'}`,
       statusInvoice: row.statusInvoice,
       status: row.status,
-      isPelaporanSaja: isSchoolPelaporanSaja(row.kodeMitra, {
+      isPelaporanSaja: isAfiliasiNoInvoice || isSchoolPelaporanSaja(row.kodeMitra, {
         date: row.tanggalKirim,
         tahunAjaran: row.tahunAjaran,
         tahun: row.tahun,
       }),
+      isPendataanAfiliasi: isAfiliasiNoInvoice,
       keterangan: row.keterangan || `Tagihan ${row.namaSekolah}`,
     };
     invoices.push(inv);
@@ -754,7 +765,7 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
       const payStatus: PembayaranStatus = row.status === 'Menunggu Konfirmasi' ? 'Menunggu Verifikasi' : 'Terverifikasi';
       const pay: Pembayaran = {
         id: `PAY-${row.tahun}${String(idx + 1).padStart(3, '0')}`,
-        invoiceId: row.nomorInvoice,
+        invoiceId: row.nomorInvoice || undefined,
         mitraId: row.kodeMitra,
         namaSekolah: row.namaSekolah,
         kategori: kategoriNorm,
@@ -765,6 +776,7 @@ export function processHistoricalDataToEntities(data: SheetRowInvoicePayment[]):
         noReferensi: row.noReferensi || `REF-${row.tahun}-${idx + 100}`,
         buktiUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=60',
         status: payStatus,
+        isPendataanAfiliasi: isAfiliasiNoInvoice,
         catatan: `Pembayaran ${kategoriNorm} ${row.tahunAjaran} via sheet sinkronisasi`,
       };
       pembayaran.push(pay);

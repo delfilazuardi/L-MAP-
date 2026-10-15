@@ -10,7 +10,8 @@ import {
   Eye,
   ChevronDown,
   Check,
-  X
+  X,
+  School
 } from 'lucide-react';
 import { Invoice, InvoiceStatus, InvoiceOperationalStatus } from '../../../types';
 import { formatRupiah } from './types';
@@ -20,6 +21,7 @@ import {
   getSchoolObligationBadgeInfo,
   extractInvoiceSequenceNumber,
   compareInvoiceBySequenceAsc,
+  isAfiliasiTanpaInvoice
 } from '../../../lib/invoiceUtils';
 
 interface InvoiceTableProps {
@@ -218,6 +220,14 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             const seqNumber = extractInvoiceSequenceNumber(inv.nomorInvoice || inv.id);
             const isCheckedPaid = dibayar > 0 || inv.status === 'Lunas' || inv.status === 'Sebagian';
             const isRowOpen = openPaymentRowId === inv.id;
+            const isTanpaInvoice = Boolean(
+              inv.isPendataanAfiliasi ||
+              !inv.nomorInvoice ||
+              isAfiliasiTanpaInvoice(inv.mitraId, {
+                date: inv.tanggalKirim,
+                tahunAjaran: inv.tahunAjaran,
+              })
+            );
 
             return (
               <React.Fragment key={inv.id}>
@@ -226,18 +236,30 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
               >
                 {/* No. Invoice & Tanggal sesuai urutan nomor */}
                 <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {seqNumber > 0 && (
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200 font-mono text-[10px] font-black">
-                        #{seqNumber}
+                  {isTanpaInvoice ? (
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-100 text-purple-900 border border-purple-200 font-extrabold text-[11px] shadow-2xs">
+                        <School size={12} className="text-purple-700" />
+                        <span>Pendataan Afiliasi (Tanpa Invoice)</span>
                       </span>
-                    )}
-                    <span className="font-mono font-bold text-blue-900 text-xs block">
-                      {inv.nomorInvoice || inv.id}
-                    </span>
-                  </div>
+                      <span className="text-[10px] text-purple-600 font-mono font-medium">
+                        {inv.id}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {seqNumber > 0 && (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200 font-mono text-[10px] font-black">
+                          #{seqNumber}
+                        </span>
+                      )}
+                      <span className="font-mono font-bold text-blue-900 text-xs block">
+                        {inv.nomorInvoice || inv.id}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
-                    <span>Kirim: {inv.tanggalKirim || '-'}</span>
+                    <span>Kirim/Catat: {inv.tanggalKirim || '-'}</span>
                     {inv.tanggalDibayar && (
                       <span className="text-emerald-600 font-semibold">• Bayar: {inv.tanggalDibayar}</span>
                     )}

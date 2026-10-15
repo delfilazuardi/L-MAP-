@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2 } from 'lucide-react';
+import { X, CheckCircle2, School } from 'lucide-react';
 import { Pembayaran, Invoice, SekolahMitra, InvoiceStatus } from '../../../types';
 import { RuangKategoriId, formatRupiah } from './types';
 import { NominalInput } from './NominalInput';
-import { getTahunAjaranFromDate, compareInvoiceBySequenceAsc } from '../../../lib/invoiceUtils';
+import { getTahunAjaranFromDate, compareInvoiceBySequenceAsc, isAfiliasiTanpaInvoice } from '../../../lib/invoiceUtils';
 
 interface PembayaranModalProps {
   isOpen: boolean;
@@ -93,6 +93,12 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Periksa apakah sekolah yang dipilih termasuk Sekolah Afiliasi (tanpa nomor invoice)
+  const isTanpaInvoice = isAfiliasiTanpaInvoice(mitraId, {
+    date: tanggalBayar,
+    sekolahList,
+  });
+
   // Filter invoices for selected school and sort from smallest to largest invoice sequence
   const relevantInvoices = [...invoiceList]
     .filter(i => i.mitraId === mitraId)
@@ -112,7 +118,7 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
       await onSave(
         {
           id: editingPembayaran ? editingPembayaran.id : `PAY-${Date.now()}`,
-          invoiceId: invoiceId || undefined,
+          invoiceId: isTanpaInvoice ? undefined : (invoiceId || undefined),
           mitraId,
           namaSekolah,
           kategori,
@@ -123,7 +129,10 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
           noReferensi: editingPembayaran?.noReferensi || `BYR-${Date.now().toString().slice(-6)}`,
           buktiUrl: editingPembayaran?.buktiUrl || '',
           status: 'Terverifikasi',
-          catatan: `Tagihan: ${formatRupiah(nominalTagihan)} | Realisasi: ${formatRupiah(nominalRealisasi)}`,
+          isPendataanAfiliasi: isTanpaInvoice,
+          catatan: isTanpaInvoice 
+            ? `Pendataan Kemitraan Afiliasi: ${formatRupiah(nominalTagihan)} (Tanpa Invoice)` 
+            : `Tagihan: ${formatRupiah(nominalTagihan)} | Realisasi: ${formatRupiah(nominalRealisasi)}`,
         },
         invoiceId
           ? {
@@ -186,9 +195,16 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Nomor Invoice
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  {isTanpaInvoice ? 'Tautan Pendataan / Invoice' : 'Nomor Invoice'}
+                </label>
+                {isTanpaInvoice && (
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                    Mode Pendataan
+                  </span>
+                )}
+              </div>
               <select
                 value={invoiceId}
                 onChange={(e) => {
@@ -205,15 +221,30 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
                     if (selected.tanggalDibayar) setTanggalBayar(selected.tanggalDibayar);
                   }
                 }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  isTanpaInvoice ? 'border-purple-200 bg-purple-50/40 text-purple-900' : 'border-slate-300 font-mono font-bold'
+                }`}
               >
-                <option value="">-- Pilih Nomor Invoice --</option>
-                {relevantInvoices.map((inv) => (
-                  <option key={inv.id} value={inv.nomorInvoice || inv.id}>
-                    {inv.nomorInvoice || inv.id} ({inv.bulan || '-'})
-                  </option>
-                ))}
+                <option value="">
+                  {isTanpaInvoice ? '-- Tanpa Invoice (Pendataan Afiliasi Bebas Invoice) --' : '-- Pilih Nomor Invoice --'}
+                </option>
+                {relevantInvoices.map((inv) => {
+                  const isInvTanpaInvoice = inv.isPendataanAfiliasi || !inv.nomorInvoice;
+                  const label = isInvTanpaInvoice 
+                    ? `[Pendataan Afiliasi] ${inv.bulan || '-'} (${inv.tahunAjaran || '2026/2027'})`
+                    : `${inv.nomorInvoice || inv.id} (${inv.bulan || '-'})`;
+                  return (
+                    <option key={inv.id} value={inv.nomorInvoice || inv.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
+              {isTanpaInvoice && (
+                <p className="text-[10px] text-purple-700 mt-1">
+                  Sekolah afiliasi tidak memerlukan nomor invoice resmi. Pembayaran/pelaporan dapat dicatat tanpa nomor invoice.
+                </p>
+              )}
             </div>
           </div>
 
