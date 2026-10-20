@@ -296,8 +296,26 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                 </td>
 
                 {/* Nominal Bayar */}
-                <td className="py-3.5 px-4 text-right font-bold text-emerald-600">
-                  {isPelaporan ? '-' : formatRupiah(dibayar)}
+                <td className="py-3.5 px-4 text-right">
+                  {isPelaporan ? (
+                    <span className="text-slate-400">-</span>
+                  ) : (
+                    <div>
+                      <span className={`font-bold block ${dibayar > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {formatRupiah(dibayar)}
+                      </span>
+                      {dibayar > 0 && dibayar < fullTagihan && (
+                        <span className="text-[10px] font-semibold text-amber-700 block">
+                          Dicicil Sebagian
+                        </span>
+                      )}
+                      {dibayar >= fullTagihan && fullTagihan > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-700 block">
+                          ✓ Lunas
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </td>
 
                 {/* Sisa Piutang */}
@@ -306,6 +324,11 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                     <div>
                       <span className="font-bold text-slate-400">Rp 0</span>
                       <span className="text-[9px] font-semibold text-purple-700 block">Bebas Bayar</span>
+                    </div>
+                  ) : sisa === 0 && fullTagihan > 0 ? (
+                    <div>
+                      <span className="font-black text-emerald-600 block">Rp 0</span>
+                      <span className="text-[9px] font-bold text-emerald-700 block">✓ Lunas</span>
                     </div>
                   ) : (
                     <span className="font-black text-rose-600">{formatRupiah(sisa)}</span>

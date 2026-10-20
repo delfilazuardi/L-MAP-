@@ -7,7 +7,9 @@ import {
   Clock, 
   AlertCircle,
   TrendingUp,
-  Percent
+  Percent,
+  CalendarRange,
+  Sparkles
 } from 'lucide-react';
 import { RuangConfig, formatRupiah } from './types';
 
@@ -27,6 +29,7 @@ interface RuangReportCardProps {
   pendingPaymentsCount: number;
   onAddInvoice: () => void;
   onAddPembayaran: () => void;
+  onOpenCicilan?: () => void;
   activeView: 'invoices' | 'payments';
   onChangeView: (view: 'invoices' | 'payments') => void;
 }
@@ -47,6 +50,7 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
   pendingPaymentsCount,
   onAddInvoice,
   onAddPembayaran,
+  onOpenCicilan,
   activeView,
   onChangeView,
 }) => {
@@ -80,7 +84,18 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
 
           {/* Action buttons on report (Admin only) */}
           {isAdmin && (
-            <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+            <div className="flex items-center gap-2 self-start md:self-center shrink-0 flex-wrap">
+              {config.id === 'Piutang Lampau' && onOpenCicilan && (
+                <button
+                  type="button"
+                  onClick={onOpenCicilan}
+                  className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-black shadow-md shadow-amber-500/20 transition flex items-center gap-1.5 cursor-pointer"
+                  title="Buka Rencana Cicilan Rekonsiliasi (e.g. 40 Juta dicicil 4 Juta/bulan x 10 kali)"
+                >
+                  <CalendarRange size={14} className="text-slate-900 font-bold" />
+                  <span>Rencana Cicilan (Rekonsiliasi)</span>
+                </button>
+              )}
               <button
                 onClick={onAddInvoice}
                 className="px-3.5 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer"

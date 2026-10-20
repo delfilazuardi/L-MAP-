@@ -17,11 +17,12 @@ import {
   Sparkles,
   Building2,
   BookmarkCheck,
-  Eye
+  Eye,
+  CalendarRange
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
-import { Invoice, Pembayaran, PembayaranStatus } from '../../types';
+import { Invoice, Pembayaran, PembayaranStatus, SekolahMitra } from '../../types';
 import { 
   isSchoolPelaporanSaja, 
   getSchoolObligationBadgeInfo,
@@ -29,7 +30,8 @@ import {
   SEKOLAH_AFILIASI_3,
   getTahunAjaranFromDate,
   compareInvoiceBySequenceAsc,
-  comparePaymentByInvoiceSequenceAsc
+  comparePaymentByInvoiceSequenceAsc,
+  CicilanAllocationResult
 } from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
@@ -45,6 +47,7 @@ import { InvoiceModal } from './invoice-pembayaran/InvoiceModal';
 import { PembayaranModal } from './invoice-pembayaran/PembayaranModal';
 import { InvoiceDetailModal } from './invoice-pembayaran/InvoiceDetailModal';
 import { BuktiPreviewModal } from './invoice-pembayaran/BuktiPreviewModal';
+import { RencanaCicilanModal } from './invoice-pembayaran/RencanaCicilanModal';
 import { InputSheetInvoicePembayaranModal } from '../modals/InputSheetInvoicePembayaranModal';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
@@ -99,6 +102,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [previewBuktiUrl, setPreviewBuktiUrl] = useState<string | null>(null);
   const [isSheetModalOpen, setIsSheetModalOpen] = useState(false);
+  const [isCicilanModalOpen, setIsCicilanModalOpen] = useState(false);
 
   // Active anchor highlighting
   const [activeAnchor, setActiveAnchor] = useState<string>('all');
@@ -134,6 +138,11 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     if (tabKewajiban === 'AFILIASI') return afiliasiSekolahList;
     return sekolahList;
   }, [tabKewajiban, mitraSekolahList, afiliasiSekolahList, sekolahList]);
+
+  const filteredSchoolObj = useMemo(() => {
+    if (filterSekolah === 'ALL') return null;
+    return sekolahList.find(s => s.id === filterSekolah) || null;
+  }, [sekolahList, filterSekolah]);
 
   // List of Available Tahun Ajaran options (e.g. 2026/2027, 2025/2026, 2024/2025, 2023/2024, 2022/2023)
   const availableTahunAjaran = useMemo(() => {
@@ -465,6 +474,39 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     }
   };
 
+  const handleExecuteCicilanPayment = async (
+    school: SekolahMitra,
+    amount: number,
+    paymentMeta: {
+      tanggalBayar: string;
+      metodeBayar: string;
+      noReferensi: string;
+      catatan: string;
+    },
+    allocationResult: CicilanAllocationResult
+  ) => {
+    if (!isAdmin) return;
+
+    // 1. Tambahkan pembayaran cicilan rekonsiliasi
+    await addPembayaran({
+      mitraId: school.id,
+      namaSekolah: school.namaSekolah,
+      kategori: 'Piutang Lampau',
+      tahunAjaran: getTahunAjaranFromDate(paymentMeta.tanggalBayar),
+      jumlah: amount,
+      tanggalBayar: paymentMeta.tanggalBayar,
+      metodeBayar: paymentMeta.metodeBayar,
+      noReferensi: paymentMeta.noReferensi,
+      status: 'Terverifikasi',
+      catatan: paymentMeta.catatan,
+    });
+
+    // 2. Update setiap invoice yang dialokasikan (FIFO)
+    for (const item of allocationResult.updatedInvoices) {
+      await updateInvoice(item.invoice);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-16">
       {/* 1. TOP HEADER & COMPREHENSIVE OVERVIEW */}
@@ -501,6 +543,17 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                     <FileSpreadsheet size={16} className="text-emerald-400" />
                     <span className="hidden sm:inline">Input Sheet Transaksi</span>
                     <span className="sm:hidden">Sheet</span>
+                  </button>
+
+                  <button
+                    id="btn-global-cicilan-rekonsiliasi"
+                    onClick={() => setIsCicilanModalOpen(true)}
+                    className="px-3.5 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 hover:text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs"
+                    title="Rencana Cicilan & Rekonsiliasi Tagihan Lintas Invoice (e.g. 40 Juta dicicil 4 Juta/bulan x 10 kali)"
+                  >
+                    <CalendarRange size={16} className="text-amber-300" />
+                    <span className="hidden sm:inline">Rencana Cicilan (Rekonsiliasi)</span>
+                    <span className="sm:hidden">Cicilan</span>
                   </button>
 
                   <button
@@ -709,6 +762,19 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                   ? 'Rp 0 (Bebas Biaya / Pelaporan)' 
                   : `${grandTotals.totalUnpaidInvoices} invoice belum lunas`}
               </span>
+
+              {tabKewajiban !== 'AFILIASI' && grandTotals.totalSisaPiutang > 0 && isAdmin && (
+                <button
+                  type="button"
+                  id="btn-cicilan-piutang-card"
+                  onClick={() => setIsCicilanModalOpen(true)}
+                  className="mt-2.5 w-full py-1.5 px-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="Klik untuk membuka pembayaran cicilan rekonsiliasi piutang berjalan"
+                >
+                  <CalendarRange size={13} className="text-slate-950 font-bold" />
+                  <span>⚡ Klik Cicilan Pembayaran</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -963,6 +1029,56 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         </div>
       </div>
 
+      {/* BANNER KHUSUS SISA PIUTANG BERJALAN & CICILAN PEMBAYARAN SAAT FILTERING SEKOLAH */}
+      {filterSekolah !== 'ALL' && filteredSchoolObj && tabKewajiban !== 'AFILIASI' && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-amber-50/70 to-blue-50 border-2 border-amber-300 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md shadow-amber-500/20 shrink-0">
+              <CalendarRange size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-md border border-amber-300">
+                  Piutang Berjalan: {filteredSchoolObj.id}
+                </span>
+                <span className="font-extrabold text-slate-900 text-base sm:text-lg">
+                  {filteredSchoolObj.namaSekolah}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Skema pembayaran cicilan fleksibel: Sekolah dapat mencicil berkala (misal Rp 10.000.000 di Januari, Rp 8.000.000 bulan depan). Sistem otomatis memotong tagihan tertua (FIFO, misal September 2025 Rp 3.000.000) dan sisanya berlanjut ke bulan berikutnya, langsung tercermin di sheet tabel bawah.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 shrink-0 self-stretch md:self-auto justify-between md:justify-end">
+            <div className="text-left md:text-right">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Total Sisa Piutang Berjalan:
+              </span>
+              <strong className="text-lg sm:text-2xl font-black font-mono text-rose-600">
+                {formatRupiah(grandTotals.totalSisaPiutang)}
+              </strong>
+              <span className="text-[11px] text-slate-500 block">
+                {grandTotals.totalUnpaidInvoices} invoice belum lunas
+              </span>
+            </div>
+
+            {isAdmin && (
+              <button
+                type="button"
+                id="btn-cicilan-sekolah-terfilter"
+                onClick={() => setIsCicilanModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+              >
+                <Sparkles size={16} />
+                <span>⚡ Klik Cicilan Pembayaran</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 3. THE 4 ITEM RUANG (SEPARATED & CONTINUOUSLY SCROLLABLE WITH REPORT ON TOP OF EACH) */}
       <div className="space-y-12">
         {RUANG_CONFIGS.map((config) => {
@@ -1031,6 +1147,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 pendingPaymentsCount={pendingPaymentsCount}
                 onAddInvoice={() => handleOpenAddInvoice(config.id)}
                 onAddPembayaran={() => handleOpenAddPayment(config.id)}
+                onOpenCicilan={() => setIsCicilanModalOpen(true)}
                 activeView={currentSubView}
                 onChangeView={(view) => setRoomActiveView(prev => ({ ...prev, [config.id]: view }))}
               />
@@ -1105,6 +1222,19 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         <InputSheetInvoicePembayaranModal
           isOpen={isSheetModalOpen}
           onClose={() => setIsSheetModalOpen(false)}
+        />
+      )}
+
+      {/* Rencana Cicilan & Rekonsiliasi Multi-Invoice Modal */}
+      {isCicilanModalOpen && (
+        <RencanaCicilanModal
+          isOpen={isCicilanModalOpen}
+          onClose={() => setIsCicilanModalOpen(false)}
+          sekolahList={availableSchoolsForFilter.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA')}
+          invoices={baseInvoices}
+          payments={basePayments}
+          defaultSekolahId={filterSekolah !== 'ALL' ? filterSekolah : undefined}
+          onExecutePayment={handleExecuteCicilanPayment}
         />
       )}
 

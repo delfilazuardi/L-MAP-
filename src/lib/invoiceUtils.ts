@@ -1,4 +1,4 @@
-import { Invoice } from '../types';
+import { Invoice, InvoiceStatus } from '../types';
 
 export const ROMAWI_BULAN: Record<number, string> = {
   1: 'I',
@@ -461,6 +461,193 @@ export function isDemoSchool(sekolahIdOrName?: string | null): boolean {
   if (!sekolahIdOrName) return false;
   const s = sekolahIdOrName.toLowerCase();
   return s === 'mo-demo' || s === 'demo-mitra' || s.includes('demo');
+}
+
+export interface CicilanAllocationItem {
+  invoice: Invoice;
+  allocatedAmount: number;
+  previousPaid: number;
+  newPaid: number;
+  previousRemaining: number;
+  newRemaining: number;
+  newStatus: InvoiceStatus;
+}
+
+export interface CicilanAllocationResult {
+  updatedInvoices: CicilanAllocationItem[];
+  totalAllocated: number;
+  remainingInstallment: number;
+  totalDebtBefore: number;
+  totalDebtAfter: number;
+}
+
+/**
+ * Mengambil tanggal efektif untuk pengurutan invoice tertua (FIFO).
+ */
+export function getInvoiceEffectiveSortDate(inv: {
+  tanggalKirim?: string;
+  tanggalTerbit?: string;
+  tahunAjaran?: string;
+  bulan?: string;
+  nomorInvoice?: string;
+}): string {
+  if (inv.tanggalKirim) return inv.tanggalKirim;
+  if (inv.tanggalTerbit) return inv.tanggalTerbit;
+
+  const monthMap: Record<string, string> = {
+    'Juli': '07', 'Agustus': '08', 'September': '09', 'Oktober': '10', 'November': '11', 'Desember': '12',
+    'Januari': '01', 'Februari': '02', 'Maret': '03', 'April': '04', 'Mei': '05', 'Juni': '06'
+  };
+  const m = inv.bulan ? monthMap[inv.bulan] : '01';
+  let year = '2026';
+  if (inv.tahunAjaran) {
+    const parts = inv.tahunAjaran.split('/');
+    if (['07', '08', '09', '10', '11', '12'].includes(m || '')) {
+      year = parts[0] || '2025';
+    } else {
+      year = parts[1] || parts[0] || '2026';
+    }
+  }
+  return `${year}-${m || '01'}-01`;
+}
+
+/**
+ * Mengalokasikan dana cicilan (misal Rp 10.000.000 atau Rp 8.000.000) secara otomatis ke invoice-invoice
+ * yang belum lunas milik sekolah tersebut berdasarkan urutan invoice terlama (FIFO).
+ */
+export function allocateCicilanToInvoices(
+  schoolInvoices: Invoice[],
+  installmentAmount: number,
+  paymentDate?: string
+): CicilanAllocationResult {
+  // Ambil hanya invoice yang belum lunas dan masih memiliki sisa piutang > 0
+  const payableInvoices = [...schoolInvoices]
+    .filter(inv => {
+      if (inv.status === 'Lunas') return false;
+      const full = inv.tagihanFull || inv.nominal || 0;
+      const paid = inv.nominalPembayaran || 0;
+      return (full - paid) > 0;
+    })
+    .sort((a, b) => {
+      // Prioritaskan Piutang Lampau terlebih dahulu jika ada
+      const isLampauA = a.kategori === 'Piutang Lampau' || (a.kategori as string)?.toLowerCase().includes('lampau');
+      const isLampauB = b.kategori === 'Piutang Lampau' || (b.kategori as string)?.toLowerCase().includes('lampau');
+      if (isLampauA && !isLampauB) return -1;
+      if (!isLampauA && isLampauB) return 1;
+
+      // Urutkan berdasarkan tanggal periode tertua (FIFO)
+      const dateA = getInvoiceEffectiveSortDate(a);
+      const dateB = getInvoiceEffectiveSortDate(b);
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+
+      return compareInvoiceBySequenceAsc(a, b);
+    });
+
+  let fundsToAllocate = installmentAmount;
+  const updatedInvoices: CicilanAllocationItem[] = [];
+  let totalDebtBefore = 0;
+  let totalDebtAfter = 0;
+  const payDate = paymentDate || new Date().toISOString().split('T')[0];
+
+  payableInvoices.forEach(inv => {
+    const full = inv.tagihanFull || inv.nominal || 0;
+    const previousPaid = inv.nominalPembayaran || 0;
+    const remainingBefore = Math.max(0, full - previousPaid);
+    totalDebtBefore += remainingBefore;
+
+    if (fundsToAllocate <= 0) {
+      totalDebtAfter += remainingBefore;
+      return;
+    }
+
+    const allocation = Math.min(fundsToAllocate, remainingBefore);
+    const newPaid = previousPaid + allocation;
+    const newRemaining = Math.max(0, full - newPaid);
+    fundsToAllocate -= allocation;
+    totalDebtAfter += newRemaining;
+
+    const newStatus: InvoiceStatus = newRemaining === 0 
+      ? 'Lunas' 
+      : (newPaid > 0 ? 'Sebagian' : 'Belum Bayar');
+
+    const updatedInv: Invoice = {
+      ...inv,
+      nominalPembayaran: newPaid,
+      status: newStatus,
+      tanggalDibayar: payDate,
+      updatedAt: new Date().toISOString(),
+    };
+
+    updatedInvoices.push({
+      invoice: updatedInv,
+      allocatedAmount: allocation,
+      previousPaid,
+      newPaid,
+      previousRemaining: remainingBefore,
+      newRemaining,
+      newStatus,
+    });
+  });
+
+  return {
+    updatedInvoices,
+    totalAllocated: installmentAmount - fundsToAllocate,
+    remainingInstallment: fundsToAllocate,
+    totalDebtBefore,
+    totalDebtAfter,
+  };
+}
+
+export interface JadwalCicilanTermin {
+  terminKe: number;
+  totalTermin: number;
+  jatuhTempo: string; // YYYY-MM-DD
+  nominalCicilan: number;
+  sisaHutangSetelahBayar: number;
+  status: 'Lunas' | 'Jatuh Tempo' | 'Menunggu';
+}
+
+/**
+ * Menghasilkan simulasi jadwal cicilan termin bulanan berdasarkan total hutang dan jumlah termin
+ * Contoh: Total Rp 40.000.000, 10 termin -> Rp 4.000.000 per bulan
+ */
+export function generateJadwalCicilan(
+  totalHutang: number,
+  jumlahTermin: number,
+  tanggalMulai: string = new Date().toISOString().split('T')[0],
+  existingPaidCount: number = 0
+): JadwalCicilanTermin[] {
+  if (jumlahTermin <= 0 || totalHutang <= 0) return [];
+  const baseCicilan = Math.floor(totalHutang / jumlahTermin);
+  const remainder = totalHutang - (baseCicilan * jumlahTermin);
+
+  const startDate = new Date(tanggalMulai);
+  const result: JadwalCicilanTermin[] = [];
+  let sisa = totalHutang;
+
+  for (let i = 1; i <= jumlahTermin; i++) {
+    const nominal = i === jumlahTermin ? baseCicilan + remainder : baseCicilan;
+    sisa = Math.max(0, sisa - nominal);
+
+    const d = new Date(startDate);
+    d.setMonth(d.getMonth() + (i - 1));
+    const jatuhTempo = d.toISOString().split('T')[0];
+
+    const isPaid = i <= existingPaidCount;
+
+    result.push({
+      terminKe: i,
+      totalTermin: jumlahTermin,
+      jatuhTempo,
+      nominalCicilan: nominal,
+      sisaHutangSetelahBayar: sisa,
+      status: isPaid ? 'Lunas' : 'Menunggu',
+    });
+  }
+
+  return result;
 }
 
 
