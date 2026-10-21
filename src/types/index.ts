@@ -120,8 +120,11 @@ export interface Invoice {
   tanggalKirim: string; // Tanggal Kirim invoice
   tanggalDibayar?: string; // Tanggal Pembayaran diterima/lunas
   jatuhTempo: string;
+  status?: InvoiceStatus; // Status pembayaran invoice (Lunas, Belum Bayar, Jatuh Tempo, Sebagian)
+  statusBayar?: InvoiceStatus; // Alias status pembayaran
   statusInvoice?: InvoiceOperationalStatus; // Status penerbitan invoice
-  status: InvoiceStatus; // Status pembayaran invoice (Lunas, Belum Bayar, dll)
+  buktiBayarUrl?: string; // File/URL slip bukti transfer pembayaran
+  kwitansiUrl?: string; // File/URL tanda terima kwitansi pembayaran
   isPelaporanSaja?: boolean; // Khusus sekolah tanpa kewajiban pembayaran (hanya pelaporan)
   isPendataanAfiliasi?: boolean; // Khusus sekolah afiliasi: hanya pendataan saja, tanpa nomor invoice
   keterangan?: string;
@@ -145,6 +148,8 @@ export interface Pembayaran {
   metodeBayar?: string;
   noReferensi?: string;
   buktiUrl?: string;
+  kwitansiUrl?: string; // File/URL tanda terima kwitansi pembayaran
+  kwitansiNomor?: string; // Nomor Kwitansi
   status: PembayaranStatus;
   catatan?: string;
   isPendataanAfiliasi?: boolean; // Khusus pendataan afiliasi tanpa invoice
@@ -432,12 +437,12 @@ export interface MendakiFormSubmission {
   isDemo?: boolean;
 }
 
-export type ProgramMitraJenis = 'Visitasi' | 'Magang';
+export type ProgramMitraJenis = 'Visitasi' | 'Magang' | 'Training of Trainers';
 export type ProgramMitraStatus = 'Diajukan' | 'Disetujui' | 'Sedang Berjalan' | 'Selesai' | 'Perlu Revisi';
 
 export interface ProgramMitraItem {
   id: string; // e.g. PRG-2026-001
-  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang'
+  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang' | 'Training of Trainers'
   judul: string;
   mitraId: string;
   namaSekolah: string;
@@ -463,7 +468,7 @@ export interface ProgramMitraItem {
 
 export interface ProgramMitraTemplate {
   id: string;
-  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang'
+  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang' | 'Training of Trainers'
   nama: string;
   deskripsi: string;
   tipeFormat: 'Docs' | 'Sheet' | 'PDF' | 'Canva';

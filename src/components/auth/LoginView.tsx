@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { useSettings } from '../../context/SettingsContext';
 import { INITIAL_SEKOLAH } from '../../lib/initialData';
 import { DEMO_SEKOLAH, DEMO_SEKOLAH_ID } from '../../lib/demoData';
 import { LMapLogo } from '../common/LMapLogo';
@@ -27,6 +28,7 @@ import { LMapLogo } from '../common/LMapLogo';
 export const LoginView: React.FC = () => {
   const { login, loginGuruWithGoogle, updatePassword, resetPassword, guruList, recentGoogleAccounts } = useAuth();
   const { sekolahList } = useData();
+  const { settings, setBahasa } = useSettings();
   
   // Tab: 'admin' | 'sekolah' | 'guru'
   const [activeTab, setActiveTab] = useState<'admin' | 'sekolah' | 'guru'>('admin');
@@ -266,6 +268,44 @@ export const LoginView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#050a18] text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden selection:bg-amber-500 selection:text-slate-950">
+      {/* Top Right Floating Language Switcher */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30">
+        <div 
+          className="flex items-center bg-[#0b1329]/90 border border-blue-900/60 p-0.5 rounded-xl shadow-lg backdrop-blur-md"
+          role="group"
+          aria-label="Pilihan Bahasa"
+        >
+          <button
+            id="login-lang-id"
+            type="button"
+            onClick={() => setBahasa('id')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              (settings.bahasa || 'id') === 'id'
+                ? 'bg-blue-600 text-white shadow-xs font-black'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="Ganti ke Bahasa Indonesia"
+          >
+            <span>🇮🇩</span>
+            <span className="text-[11px]">ID</span>
+          </button>
+          <button
+            id="login-lang-en"
+            type="button"
+            onClick={() => setBahasa('en')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              settings.bahasa === 'en'
+                ? 'bg-blue-600 text-white shadow-xs font-black'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="Switch to English"
+          >
+            <span>🇬🇧</span>
+            <span className="text-[11px]">EN</span>
+          </button>
+        </div>
+      </div>
+
       {/* Background Radial Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-900/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-12 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-900/10 rounded-full blur-2xl pointer-events-none" />

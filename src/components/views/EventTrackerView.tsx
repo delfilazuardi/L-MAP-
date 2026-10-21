@@ -55,9 +55,10 @@ interface EventTrackerViewProps {
 }
 
 export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateToMendaki }) => {
-  const { isAdmin, currentUser } = useAuth();
+  const { isAdmin, isSekolahMitra, isGuruMitra, currentUser } = useAuth();
   const { eventList, mendakiSubmissionList, addEvent, updateEvent, deleteEvent } = useData();
 
+  const isGuruOrSekolah = !isAdmin || isSekolahMitra || isGuruMitra;
   const isDemoUser = Boolean(currentUser?.isDemo || currentUser?.sekolahId === 'DEMO-MITRA');
 
   const baseEventList = useMemo(() => {
@@ -588,16 +589,18 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => {
-              sheetSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-            className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer"
-          >
-            <FileSpreadsheet size={15} />
-            <span>Google Sheet MenDAKI (Real-Time)</span>
-          </button>
+          {!isGuruOrSekolah && (
+            <button
+              type="button"
+              onClick={() => {
+                sheetSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer"
+            >
+              <FileSpreadsheet size={15} />
+              <span>Google Sheet MenDAKI (Real-Time)</span>
+            </button>
+          )}
 
           {isAdmin ? (
             <div className="flex items-center gap-2">
@@ -807,37 +810,9 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                           </div>
                         </div>
 
-                        <div className="flex flex-col gap-1.5 pt-0.5">
-                          {/* Direct Clickable Link to Google Sheets */}
-                          <div className="flex items-center gap-1.5">
-                            <a
-                              href={getDirectGoogleSheetUrl(evt)}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={() => {
-                                handleCopyDataForGoogleSheets(mendakiStats.submissions, evt.judul);
-                              }}
-                              className="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                              title="Klik untuk langsung membuka di Google Sheets (Data otomatis disalin agar siap ditempel)"
-                            >
-                              <FileSpreadsheet size={13} />
-                              <span>Buka di Google Sheets</span>
-                              <ExternalLink size={11} />
-                            </a>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedSheetEventId(evt.id);
-                                setModalSheetEvent(evt);
-                              }}
-                              className="py-1.5 px-2.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                              title="Lihat Tabel Sheet Real-Time di Aplikasi"
-                            >
-                              <Table2 size={13} />
-                              <span>Tabel Live</span>
-                            </button>
-
+                        {isGuruOrSekolah ? (
+                          /* KHUSUS GURU & SEKOLAH: CUKUP HANYA ISI FORMULIR EVALUASI SAJA (TANPA SHEET / TABEL LIVE / LINK DOCS) */
+                          <div className="pt-1">
                             {onNavigateToMendaki && (
                               <button
                                 type="button"
@@ -849,74 +824,127 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                                     mode: 'isi-form',
                                   })
                                 }
-                                className="py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                                className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.98]"
                                 title="Isi Formulir Evaluasi MenDAKI untuk Event ini"
                               >
-                                <ClipboardCheck size={13} />
-                                <span>Isi Form</span>
+                                <ClipboardCheck size={15} />
+                                <span>Isi Formulir Evaluasi MenDAKI</span>
                               </button>
                             )}
                           </div>
+                        ) : (
+                          /* KHUSUS ADMINISTRATOR MITRA OFFICE (LENGKAP DENGAN GOOGLE SHEETS & TABEL LIVE) */
+                          <div className="flex flex-col gap-1.5 pt-0.5">
+                            {/* Direct Clickable Link to Google Sheets */}
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={getDirectGoogleSheetUrl(evt)}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => {
+                                  handleCopyDataForGoogleSheets(mendakiStats.submissions, evt.judul);
+                                }}
+                                className="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                                title="Klik untuk langsung membuka di Google Sheets (Data otomatis disalin agar siap ditempel)"
+                              >
+                                <FileSpreadsheet size={13} />
+                                <span>Buka di Google Sheets</span>
+                                <ExternalLink size={11} />
+                              </a>
 
-                          {/* Clickable URL display */}
-                          <div className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white/85 border border-emerald-200/80 text-[10px]">
-                            <a
-                              href={getDirectGoogleSheetUrl(evt)}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={() => {
-                                handleCopyDataForGoogleSheets(mendakiStats.submissions, evt.judul);
-                              }}
-                              className="text-emerald-700 hover:text-emerald-900 font-mono underline truncate flex items-center gap-1"
-                              title="Klik link ini untuk langsung membuka Google Sheets"
-                            >
-                              <Link2 size={11} className="shrink-0 text-emerald-600" />
-                              <span className="truncate">{getDirectGoogleSheetUrl(evt)}</span>
-                            </a>
-                            {isAdmin && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setEditingSheetLinkEventId(
-                                    editingSheetLinkEventId === evt.id ? null : evt.id
-                                  );
-                                  setTempSheetLinkInput(
-                                    evt.linkGoogleSheet || 'https://docs.google.com/spreadsheets/create'
-                                  );
+                                  setSelectedSheetEventId(evt.id);
+                                  setModalSheetEvent(evt);
                                 }}
-                                className="text-[10px] font-bold text-slate-500 hover:text-emerald-700 shrink-0 cursor-pointer"
-                                title="Atur / ganti link Google Sheet event ini"
+                                className="py-1.5 px-2.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                                title="Lihat Tabel Sheet Real-Time di Aplikasi"
                               >
-                                Atur Link
+                                <Table2 size={13} />
+                                <span>Tabel Live</span>
                               </button>
-                            )}
-                          </div>
 
-                          {/* Inline Quick Edit Link Google Sheet for Admin */}
-                          {isAdmin && editingSheetLinkEventId === evt.id && (
-                            <div className="p-2 rounded-lg bg-white border border-emerald-300 space-y-1.5">
-                              <label className="block text-[10px] font-bold text-emerald-900">
-                                Tautan Google Sheet Event (docs.google.com/spreadsheets/...):
-                              </label>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={tempSheetLinkInput}
-                                  onChange={(e) => setTempSheetLinkInput(e.target.value)}
-                                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                                  className="flex-1 px-2 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                                />
+                              {onNavigateToMendaki && (
                                 <button
                                   type="button"
-                                  onClick={() => handleSaveQuickSheetLink(evt)}
-                                  className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer"
+                                  onClick={() =>
+                                    onNavigateToMendaki({
+                                      eventId: evt.id,
+                                      judul: evt.judul,
+                                      kategori: evt.kategori,
+                                      mode: 'isi-form',
+                                    })
+                                  }
+                                  className="py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                                  title="Isi Formulir Evaluasi MenDAKI untuk Event ini"
                                 >
-                                  Simpan
+                                  <ClipboardCheck size={13} />
+                                  <span>Isi Form</span>
                                 </button>
-                              </div>
+                              )}
                             </div>
-                          )}
-                        </div>
+
+                            {/* Clickable URL display */}
+                            <div className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white/85 border border-emerald-200/80 text-[10px]">
+                              <a
+                                href={getDirectGoogleSheetUrl(evt)}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => {
+                                  handleCopyDataForGoogleSheets(mendakiStats.submissions, evt.judul);
+                                }}
+                                className="text-emerald-700 hover:text-emerald-900 font-mono underline truncate flex items-center gap-1"
+                                title="Klik link ini untuk langsung membuka Google Sheets"
+                              >
+                                <Link2 size={11} className="shrink-0 text-emerald-600" />
+                                <span className="truncate">{getDirectGoogleSheetUrl(evt)}</span>
+                              </a>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSheetLinkEventId(
+                                      editingSheetLinkEventId === evt.id ? null : evt.id
+                                    );
+                                    setTempSheetLinkInput(
+                                      evt.linkGoogleSheet || 'https://docs.google.com/spreadsheets/create'
+                                    );
+                                  }}
+                                  className="text-[10px] font-bold text-slate-500 hover:text-emerald-700 shrink-0 cursor-pointer"
+                                  title="Atur / ganti link Google Sheet event ini"
+                                >
+                                  Atur Link
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Inline Quick Edit Link Google Sheet for Admin */}
+                            {isAdmin && editingSheetLinkEventId === evt.id && (
+                              <div className="p-2 rounded-lg bg-white border border-emerald-300 space-y-1.5">
+                                <label className="block text-[10px] font-bold text-emerald-900">
+                                  Tautan Google Sheet Event (docs.google.com/spreadsheets/...):
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={tempSheetLinkInput}
+                                    onChange={(e) => setTempSheetLinkInput(e.target.value)}
+                                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                                    className="flex-1 px-2 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveQuickSheetLink(evt)}
+                                    className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer"
+                                  >
+                                    Simpan
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -924,8 +952,8 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
 
                 {/* Footer Action Area */}
                 <div className="pt-3 border-t border-slate-100 mt-3">
-                  {!isAdmin ? (
-                    /* KHUSUS SEKOLAH MITRA: HANYA BISA KLIK REGISTRASI DENGAN LINK FORM SAJA */
+                  {isGuruOrSekolah ? (
+                    /* KHUSUS SEKOLAH MITRA & GURU: HANYA FORMULIR REGISTRASI SAJA */
                     <div>
                       {evt.linkRegistrasi ? (
                         <a
@@ -935,8 +963,8 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                           rel="noreferrer"
                           className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
                         >
-                          <Link2 size={15} />
-                          <span>Klik Registrasi (Buka Link Formulir)</span>
+                          <ClipboardCheck size={15} />
+                          <span>Isi Formulir Registrasi Kegiatan</span>
                           <ExternalLink size={14} />
                         </a>
                       ) : (
@@ -1005,9 +1033,9 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
       </div>
 
       {/* =====================================================================
-          GOOGLE SHEET REAL-TIME MENDAKI PADA SETIAP EVENT
+          GOOGLE SHEET REAL-TIME MENDAKI PADA SETIAP EVENT (KHUSUS ADMIN MITRA OFFICE)
          ===================================================================== */}
-      {(() => {
+      {!isGuruOrSekolah && (() => {
         const activeSheetEvt =
           selectedSheetEventId === 'ALL'
             ? null
@@ -1379,8 +1407,8 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
         );
       })()}
 
-      {/* MODAL POPUP: GOOGLE SHEET REAL-TIME KHUSUS EVENT TERPILIH */}
-      {modalSheetEvent && (
+      {/* MODAL POPUP: GOOGLE SHEET REAL-TIME KHUSUS EVENT TERPILIH (KHUSUS ADMIN) */}
+      {!isGuruOrSekolah && modalSheetEvent && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl shadow-2xl max-w-6xl w-full overflow-hidden border border-emerald-200 flex flex-col max-h-[92vh]">
             {(() => {
@@ -2082,8 +2110,8 @@ export const EventTrackerView: React.FC<EventTrackerViewProps> = ({ onNavigateTo
                     rel="noreferrer"
                     className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                   >
-                    <Link2 size={14} />
-                    <span>Buka Link Registrasi</span>
+                    <ClipboardCheck size={14} />
+                    <span>Isi Formulir Registrasi</span>
                     <ExternalLink size={12} />
                   </a>
                 )}

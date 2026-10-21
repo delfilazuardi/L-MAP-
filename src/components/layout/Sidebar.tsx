@@ -41,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { currentUser, isAdmin, isSekolahMitra, isGuruMitra, logout } = useAuth();
   const { laporanList, invoiceList, permintaanList, pembayaranList, programMitraList } = useData();
-  const { settings } = useSettings();
+  const { settings, t } = useSettings();
 
   // Filter lists for current school if Sekolah Mitra
   const filteredLaporan = isSekolahMitra && currentUser?.sekolahId
@@ -276,7 +276,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <div className="mt-2.5 pt-2 border-t border-blue-900/50 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400 text-[10px]">Hak Akses:</span>
+            <span className="text-slate-400 text-[10px]">{t('Hak Akses:')}</span>
             <span className={`font-bold px-2 py-0.5 rounded-md text-[10px] tracking-wide ${
               isAdmin 
                 ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' 
@@ -284,7 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ? 'bg-purple-400/20 text-purple-300 border border-purple-400/30'
                 : 'bg-sky-400/20 text-sky-300 border border-sky-400/30'
             }`}>
-              {isGuruMitra ? 'Akses Terbatas Guru' : (currentUser?.akses || 'Akses Terbatas')}
+              {t(isGuruMitra ? 'Akses Terbatas Guru' : (currentUser?.akses || 'Akses Terbatas'))}
             </span>
           </div>
         </div>
@@ -292,7 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-blue-900 scrollbar-track-transparent">
           <div className="px-3 pb-2 text-[10px] font-black uppercase tracking-widest text-blue-300/60 flex items-center justify-between">
-            <span>Menu Platform</span>
+            <span>{t('Menu Platform')}</span>
             <span className="text-[9px] font-mono text-slate-500">v2.6</span>
           </div>
 
@@ -323,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs tracking-tight truncate">{item.label}</span>
+                    <span className="text-xs tracking-tight truncate">{t(item.label)}</span>
                     {item.badge && (
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.badgeColor || 'bg-blue-500/30 text-blue-200'}`}>
                         {item.badge}
@@ -331,7 +331,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     )}
                   </div>
                   <p className={`text-[10px] truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
-                    {item.desc}
+                    {t(item.desc)}
                   </p>
                 </div>
 
@@ -354,10 +354,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               id="sidebar-logout-button"
               onClick={logout}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-rose-300 hover:bg-rose-500/20 hover:text-rose-200 transition border border-rose-500/20"
-              title="Keluar dari sesi"
+              title={t('Keluar dari sesi')}
             >
               <LogOut size={14} />
-              <span>Keluar</span>
+              <span>{t('Keluar')}</span>
             </button>
           </div>
         </div>

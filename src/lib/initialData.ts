@@ -1309,6 +1309,44 @@ export const INITIAL_PROGRAM_MITRA_TEMPLATES: ProgramMitraTemplate[] = [
     linkTemplate: 'https://www.canva.com/design/DAF-portofolio-magang-lazuardi/view',
     diperbarui: '2026-08-28',
   },
+
+  // Templates Training of Trainers (ToT)
+  {
+    id: 'TMPL-TOT-01',
+    jenis: 'Training of Trainers',
+    nama: 'Modul & Panduan Training of Trainers (ToT) Fasilitator Kurikulum',
+    deskripsi: 'Format dokumen acuan ToT untuk mencetak master trainer sekolah mitra dalam implementasi Kurikulum Berkarakter Welas Asih.',
+    tipeFormat: 'Docs',
+    linkTemplate: 'https://docs.google.com/document/d/1lazuardi-panduan-tot-fasilitator/edit?usp=sharing',
+    diperbarui: '2026-09-01',
+  },
+  {
+    id: 'TMPL-TOT-02',
+    jenis: 'Training of Trainers',
+    nama: 'Rubrik Evaluasi & Asesmen Kualifikasi Calon Trainer ToT',
+    deskripsi: 'Sheet matriks penilaian micro-teaching, kompetensi komunikasi, dan sertifikasi instruktur internal sekolah mitra.',
+    tipeFormat: 'Sheet',
+    linkTemplate: 'https://docs.google.com/spreadsheets/d/1lazuardi-rubrik-asesmen-tot/edit?usp=sharing',
+    diperbarui: '2026-09-05',
+  },
+  {
+    id: 'TMPL-TOT-03',
+    jenis: 'Training of Trainers',
+    nama: 'Silabus & Standar Kompetensi Kelulusan Training of Trainers',
+    deskripsi: 'Buku panduan kurikulum ToT, alur sertifikasi trainer, dan materi pedagogi lanjutan Lazuardi.',
+    tipeFormat: 'PDF',
+    linkTemplate: 'https://drive.google.com/file/d/1lazuardi-silabus-tot-trainer.pdf/view',
+    diperbarui: '2026-09-10',
+  },
+  {
+    id: 'TMPL-TOT-04',
+    jenis: 'Training of Trainers',
+    nama: 'Slide Presentasi Master Trainer ToT (Desain Interaktif Canva)',
+    deskripsi: 'Kit presentasi Canva profesional untuk narasumber ToT memfasilitasi workshop pelatihan guru dan staf.',
+    tipeFormat: 'Canva',
+    linkTemplate: 'https://www.canva.com/design/DAF-slide-master-trainer-tot/view',
+    diperbarui: '2026-09-15',
+  },
 ];
 
 export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
@@ -1389,6 +1427,26 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     catatanAdmin: 'Magang selesai dengan hasil evaluasi memuaskan. Sertifikat magang resmi telah diterbitkan.',
     tanggalPengajuan: '2026-08-20',
     updatedAt: '2026-09-15',
+  },
+  {
+    id: 'PRG-2026-005',
+    jenis: 'Training of Trainers',
+    judul: 'Training of Trainers (ToT): Master Trainer Kurikulum Sentra & Compassionate Learning',
+    mitraId: 'MO004',
+    namaSekolah: 'Al-Falah Depok',
+    tanggalMulai: '2026-10-28',
+    tanggalSelesai: '2026-10-30',
+    peserta: 'Hj. Siti Aminah, M.Pd & 3 Guru Inti',
+    jumlahPeserta: 4,
+    deskripsi: 'Pelatihan intensif ToT untuk melatih guru-guru inti menjadi fasilitator dan mentor internal sekolah mitra dalam budaya welas asih dan manajemen sentra.',
+    linkDocs: 'https://docs.google.com/document/d/1tot-kurikulum-sentra-alfalah/edit',
+    linkSheet: 'https://docs.google.com/spreadsheets/d/1tot-evaluasi-kompetensi-trainer/edit',
+    linkPdf: 'https://drive.google.com/file/d/1tot-sertifikat-silabus-trainer.pdf/view',
+    linkCanva: 'https://www.canva.com/design/DAF-tot-slide-modul-master/view',
+    status: 'Disetujui',
+    catatanAdmin: 'Pengajuan ToT telah diverifikasi. Modul pelatihan dan narasumber pusat telah dijadwalkan.',
+    tanggalPengajuan: '2026-09-25',
+    updatedAt: '2026-09-28',
   },
 ];
 

@@ -20,7 +20,9 @@ import {
   Sparkles, 
   Link2, 
   Layers,
-  ArrowRight
+  ArrowRight,
+  GraduationCap,
+  Award
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -47,7 +49,7 @@ export const ProgramMitraView: React.FC = () => {
   } = useData();
 
   // Navigation Subtabs
-  const [activeSubTab, setActiveSubTab] = useState<'semua' | 'visitasi' | 'magang' | 'template'>('semua');
+  const [activeSubTab, setActiveSubTab] = useState<'semua' | 'visitasi' | 'magang' | 'tot' | 'template'>('semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedSekolahFilter, setSelectedSekolahFilter] = useState<string>('ALL');
@@ -115,6 +117,7 @@ export const ProgramMitraView: React.FC = () => {
     // Filter by subtab
     if (activeSubTab === 'visitasi' && item.jenis !== 'Visitasi') return false;
     if (activeSubTab === 'magang' && item.jenis !== 'Magang') return false;
+    if (activeSubTab === 'tot' && item.jenis !== 'Training of Trainers') return false;
 
     // Filter by status
     if (selectedStatus !== 'ALL' && item.status !== selectedStatus) return false;
@@ -136,6 +139,7 @@ export const ProgramMitraView: React.FC = () => {
   const filteredTemplates = programMitraTemplates.filter(tmpl => {
     if (activeSubTab === 'visitasi') return tmpl.jenis === 'Visitasi';
     if (activeSubTab === 'magang') return tmpl.jenis === 'Magang';
+    if (activeSubTab === 'tot') return tmpl.jenis === 'Training of Trainers';
     return true;
   });
 

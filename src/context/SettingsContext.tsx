@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { translateText, translateDOM } from '../lib/i18n';
 
 export interface AppSettings {
   logoUrl: string;
@@ -58,6 +59,8 @@ interface SettingsContextType {
   updateSettings: (newSettings: Partial<AppSettings>) => void;
   resetSettings: () => void;
   resetLogoToDefault: () => void;
+  t: (text: string) => string;
+  setBahasa: (lang: 'id' | 'en') => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -83,8 +86,65 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [settings]);
 
+  // Automatic full-application language translator effect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const currentLang = settings.bahasa || 'id';
+
+    // 1. Immediate translation pass
+    translateDOM(document.body, currentLang);
+
+    // 2. Continuous translation observer for dynamic DOM updates (dialogs, cards, filters)
+    let isTranslating = false;
+    let timeoutId: any = null;
+
+    const observer = new MutationObserver((mutations) => {
+      if (isTranslating) return;
+
+      if (timeoutId) {
+        cancelAnimationFrame(timeoutId);
+      }
+
+      timeoutId = requestAnimationFrame(() => {
+        isTranslating = true;
+        try {
+          // Temporarily disconnect observer to prevent recursion during text replacement
+          observer.disconnect();
+          translateDOM(document.body, currentLang);
+        } finally {
+          isTranslating = false;
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        }
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      observer.disconnect();
+      if (timeoutId) cancelAnimationFrame(timeoutId);
+    };
+  }, [settings.bahasa]);
+
   const updateSettings = (newSettings: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
+  };
+
+  const setBahasa = (lang: 'id' | 'en') => {
+    updateSettings({ bahasa: lang });
+  };
+
+  const t = (text: string): string => {
+    return translateText(text, settings.bahasa || 'id');
   };
 
   const resetSettings = () => {
@@ -107,6 +167,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateSettings,
         resetSettings,
         resetLogoToDefault,
+        t,
+        setBahasa,
       }}
     >
       {children}

@@ -24,7 +24,8 @@ import {
   CicilanAllocationResult,
   JadwalCicilanTermin
 } from '../../../lib/invoiceUtils';
-import { NominalInput } from './NominalInput';
+import { NominalInput, terbilangRupiah, formatNumberToDisplay } from './NominalInput';
+import { FileUploadBox } from './FileUploadBox';
 import { useSettings } from '../../../context/SettingsContext';
 
 interface RencanaCicilanModalProps {
@@ -39,8 +40,10 @@ interface RencanaCicilanModalProps {
     amount: number,
     paymentMeta: {
       tanggalBayar: string;
-      metodeBayar: string;
-      noReferensi: string;
+      metodeBayar?: string;
+      noReferensi?: string;
+      buktiUrl?: string;
+      kwitansiUrl?: string;
       catatan: string;
     },
     allocationResult: CicilanAllocationResult
@@ -88,8 +91,8 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
   const [isExecuting, setIsExecuting] = useState(false);
   const [inputBayarNominal, setInputBayarNominal] = useState<number>(4000000);
   const [inputTanggalBayar, setInputTanggalBayar] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [inputMetodeBayar, setInputMetodeBayar] = useState<string>('Bank Mandiri Transfer');
-  const [inputNoRef, setInputNoRef] = useState<string>(`CICILAN-${Date.now().toString().slice(-6)}`);
+  const [inputBuktiUrl, setInputBuktiUrl] = useState<string>('');
+  const [inputKwitansiUrl, setInputKwitansiUrl] = useState<string>('');
   const [inputCatatan, setInputCatatan] = useState<string>('Cicilan Rekonsiliasi Tagihan Kemitraan (Alokasi FIFO)');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -164,8 +167,10 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
         inputBayarNominal,
         {
           tanggalBayar: inputTanggalBayar,
-          metodeBayar: inputMetodeBayar,
-          noReferensi: inputNoRef || `CICILAN-${Date.now().toString().slice(-6)}`,
+          metodeBayar: 'Pembayaran Rekonsiliasi Cicilan',
+          noReferensi: `CICILAN-${Date.now().toString().slice(-6)}`,
+          buktiUrl: inputBuktiUrl,
+          kwitansiUrl: inputKwitansiUrl,
           catatan: inputCatatan || `Cicilan Rekonsiliasi Tagihan ${selectedSchool.namaSekolah}`,
         },
         allocationSimulation
@@ -174,7 +179,6 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
       setSuccessMessage(
         `Berhasil mengeksekusi cicilan sebesar ${formatRupiah(inputBayarNominal)}! Dana telah dialokasikan otomatis ke ${allocationSimulation.updatedInvoices.length} invoice tertua.`
       );
-      setInputNoRef(`CICILAN-${Date.now().toString().slice(-6)}`);
     } catch (err: any) {
       alert(`Gagal mengeksekusi cicilan: ${err?.message || 'Terjadi kesalahan sistem'}`);
     } finally {
@@ -292,11 +296,11 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                 </span>
               </div>
 
-              {/* 2. Total Hutang Rekonsiliasi */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[11px] font-bold text-blue-200 uppercase tracking-wider">
-                    2. Total Hutang Rekonsiliasi
+              {/* 2. Total Hutang Rekonsiliasi (Format Rp & Titik Pemisah Ribuan) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-black text-amber-300 uppercase tracking-wider">
+                    2. Total Hutang Rekonsiliasi (Rp & Tanda Titik)
                   </label>
                   {customTotalHutang !== null && (
                     <button
@@ -305,9 +309,28 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                       className="text-[10px] text-amber-300 hover:text-white underline cursor-pointer font-bold"
                       title="Kembalikan ke hitungan otomatis sistem"
                     >
-                      Reset Otomatis
+                      Reset Otomatis Sistem
                     </button>
                   )}
+                </div>
+
+                {/* Highlight Tampilan Nominal Terformat Rp & Titik agar tidak terkecoh */}
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-400/20 via-amber-500/15 to-blue-500/10 border-2 border-amber-400 shadow-sm space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-200">
+                      Nominal Terformat:
+                    </span>
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                      Format IDR Standar (Titik Ribuan)
+                    </span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black font-mono text-amber-300 tracking-tight flex items-baseline gap-1">
+                    <span className="text-sm font-extrabold text-amber-400">Rp</span>
+                    <span>{formatNumberToDisplay(effectiveTotalHutang)}</span>
+                  </div>
+                  <div className="text-[10px] text-amber-100/90 font-sans italic leading-tight">
+                    {terbilangRupiah(effectiveTotalHutang)}
+                  </div>
                 </div>
 
                 <NominalInput
@@ -318,9 +341,9 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                   showPreview={false}
                 />
 
-                <div className="flex items-center justify-between text-[10px] mt-1.5 gap-2 flex-wrap">
-                  <span className="text-amber-300 font-semibold">
-                    Tercatat sistem: <strong>{formatRupiah(calculatedTotalDebt)}</strong>
+                <div className="flex items-center justify-between text-[10px] mt-1 gap-2 flex-wrap">
+                  <span className="text-amber-200 font-semibold">
+                    Tercatat sistem: <strong className="text-white font-mono">Rp {formatNumberToDisplay(calculatedTotalDebt)}</strong>
                   </span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button
@@ -456,7 +479,8 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Baris 1: Nominal Bayar & Tanggal Pembayaran */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <NominalInput
                       label="Nominal Cicilan Dibayar"
@@ -518,39 +542,33 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                       type="date"
                       value={inputTanggalBayar}
                       onChange={(e) => setInputTanggalBayar(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
+                    <span className="text-[10px] text-slate-500 block mt-1.5">
+                      Tanggal transaksi penerimaan dana cicilan dari sekolah mitra
+                    </span>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Metode Transfer
-                    </label>
-                    <select
-                      value={inputMetodeBayar}
-                      onChange={(e) => setInputMetodeBayar(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="Bank Mandiri Transfer">Bank Mandiri Transfer</option>
-                      <option value="BCA Transfer">BCA Transfer</option>
-                      <option value="BSI Virtual Account">BSI Virtual Account</option>
-                      <option value="BNI Transfer">BNI Transfer</option>
-                      <option value="BSI Giro / Transfer">BSI Giro / Transfer</option>
-                    </select>
-                  </div>
+                {/* Baris 2: Tempat Upload Bukti Pembayaran & Kwitansi Pembayaran (Menggantikan Metode Transfer & No Ref) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-blue-200/60">
+                  <FileUploadBox
+                    id="upload-bukti-pembayaran-cicilan"
+                    label="Tempat Upload Bukti Pembayaran"
+                    type="bukti"
+                    value={inputBuktiUrl}
+                    onChange={setInputBuktiUrl}
+                    description="Upload slip transfer bank / bukti setoran cicilan (JPG, PNG, PDF)"
+                  />
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      No. Referensi / Bukti
-                    </label>
-                    <input
-                      type="text"
-                      value={inputNoRef}
-                      onChange={(e) => setInputNoRef(e.target.value)}
-                      placeholder="MDR-20261015-001"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                  <FileUploadBox
+                    id="upload-kwitansi-pembayaran-cicilan"
+                    label="Tempat Upload Kwitansi Pembayaran"
+                    type="kwitansi"
+                    value={inputKwitansiUrl}
+                    onChange={setInputKwitansiUrl}
+                    description="Upload kwitansi pembayaran / tanda terima sah Lazuardi (JPG, PNG, PDF)"
+                  />
                 </div>
 
                 {/* Live Breakdown Box: Alokasi Otomatis FIFO ke Tagihan Bulanan */}

@@ -1299,7 +1299,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addProgramMitraTemplate = useCallback(async (templateData: Omit<ProgramMitraTemplate, 'id' | 'diperbarui'> & { id?: string }) => {
     const today = new Date().toISOString().split('T')[0];
-    const prefix = templateData.jenis === 'Magang' ? 'TMPL-MG' : 'TMPL-VS';
+    const prefix = templateData.jenis === 'Magang' 
+      ? 'TMPL-MG' 
+      : templateData.jenis === 'Training of Trainers' 
+      ? 'TMPL-TOT' 
+      : 'TMPL-VS';
     const id = templateData.id || `${prefix}-${Date.now().toString().slice(-4)}`;
     const newTemplate: ProgramMitraTemplate = {
       ...templateData,

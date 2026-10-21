@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { currentUser, isAdmin, switchUser, allUsers, logout, updatePassword, hasCustomPassword } = useAuth();
   const { isFirebaseConnected, isSyncing, lastSyncTime } = useData();
-  const { settings } = useSettings();
+  const { settings, t, setBahasa } = useSettings();
   const [showSwitchDropdown, setShowSwitchDropdown] = useState(false);
 
   // Quick Password Change Modal
@@ -114,24 +114,60 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-              {activeTitle}
+              {t(activeTitle)}
             </h1>
           </div>
         </div>
       </div>
 
-      {/* Right section: Settings button, Switcher, Profile */}
-      <div className="flex items-center gap-2 sm:gap-4">
+      {/* Right section: Language Switcher, Settings button, Switcher, Profile */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Quick Language Switcher (ID / EN) */}
+        <div 
+          className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/90 shadow-2xs"
+          role="group"
+          aria-label="Pilihan Bahasa / Language Options"
+        >
+          <button
+            id="lang-btn-id"
+            type="button"
+            onClick={() => setBahasa('id')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              (settings.bahasa || 'id') === 'id'
+                ? 'bg-white text-blue-900 shadow-xs ring-1 ring-slate-200/80 font-black'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Ganti Bahasa Antarmuka ke Bahasa Indonesia"
+          >
+            <span className="text-sm">🇮🇩</span>
+            <span className="text-[11px] tracking-wide">ID</span>
+          </button>
+          <button
+            id="lang-btn-en"
+            type="button"
+            onClick={() => setBahasa('en')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              settings.bahasa === 'en'
+                ? 'bg-blue-600 text-white shadow-xs font-black'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+            title="Switch Interface Language to English"
+          >
+            <span className="text-sm">🇬🇧</span>
+            <span className="text-[11px] tracking-wide">EN</span>
+          </button>
+        </div>
+
         {/* Tombol Pengaturan Cepat (Hanya Administrator) */}
         {isAdmin && onOpenSettings && (
           <button
             id="header-settings-button"
             onClick={onOpenSettings}
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-400 text-slate-700 hover:text-blue-800 text-xs font-semibold transition cursor-pointer shadow-xs"
-            title="Buka Pengaturan Sistem, Bahasa & Logo"
+            title={t('Buka Pengaturan Sistem, Bahasa & Logo')}
           >
             <SettingsIcon size={14} className="text-slate-500" />
-            <span className="font-bold">Pengaturan</span>
+            <span className="font-bold">{t('Pengaturan')}</span>
           </button>
         )}
 

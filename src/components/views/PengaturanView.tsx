@@ -31,7 +31,7 @@ import { LMapLogo } from '../common/LMapLogo';
 type SettingsTab = 'identitas' | 'bahasa' | 'lembaga' | 'notifikasi' | 'sistem';
 
 export const PengaturanView: React.FC = () => {
-  const { settings, updateSettings, resetSettings, resetLogoToDefault } = useSettings();
+  const { settings, updateSettings, resetSettings, resetLogoToDefault, t, setBahasa } = useSettings();
   const { isAdmin, currentUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('identitas');
@@ -475,14 +475,18 @@ export const PengaturanView: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label 
-                  onClick={() => handleInputChange('bahasa', 'id')}
+                  id="settings-lang-id-card"
+                  onClick={() => {
+                    handleInputChange('bahasa', 'id');
+                    setBahasa('id');
+                  }}
                   className={`p-4 rounded-2xl border-2 flex items-center gap-3.5 cursor-pointer transition ${
                     formData.bahasa === 'id' 
-                      ? 'border-blue-600 bg-blue-50/60 shadow-xs' 
+                      ? 'border-blue-600 bg-blue-50/60 shadow-xs ring-2 ring-blue-500/20' 
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center font-bold text-xs text-red-800 shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center font-black text-xs text-red-800 shrink-0 shadow-2xs">
                     ID
                   </div>
                   <div className="flex-1">
@@ -499,14 +503,18 @@ export const PengaturanView: React.FC = () => {
                 </label>
 
                 <label 
-                  onClick={() => handleInputChange('bahasa', 'en')}
+                  id="settings-lang-en-card"
+                  onClick={() => {
+                    handleInputChange('bahasa', 'en');
+                    setBahasa('en');
+                  }}
                   className={`p-4 rounded-2xl border-2 flex items-center gap-3.5 cursor-pointer transition ${
                     formData.bahasa === 'en' 
-                      ? 'border-blue-600 bg-blue-50/60 shadow-xs' 
+                      ? 'border-blue-600 bg-blue-50/60 shadow-xs ring-2 ring-blue-500/20' 
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center font-bold text-xs text-blue-800 shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center font-black text-xs text-blue-800 shrink-0 shadow-2xs">
                     EN
                   </div>
                   <div className="flex-1">

@@ -479,8 +479,10 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     amount: number,
     paymentMeta: {
       tanggalBayar: string;
-      metodeBayar: string;
-      noReferensi: string;
+      metodeBayar?: string;
+      noReferensi?: string;
+      buktiUrl?: string;
+      kwitansiUrl?: string;
       catatan: string;
     },
     allocationResult: CicilanAllocationResult
@@ -495,15 +497,21 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       tahunAjaran: getTahunAjaranFromDate(paymentMeta.tanggalBayar),
       jumlah: amount,
       tanggalBayar: paymentMeta.tanggalBayar,
-      metodeBayar: paymentMeta.metodeBayar,
-      noReferensi: paymentMeta.noReferensi,
+      metodeBayar: paymentMeta.metodeBayar || 'Pembayaran Cicilan',
+      noReferensi: paymentMeta.noReferensi || `BYR-${Date.now().toString().slice(-6)}`,
+      buktiUrl: paymentMeta.buktiUrl || '',
+      kwitansiUrl: paymentMeta.kwitansiUrl || '',
       status: 'Terverifikasi',
       catatan: paymentMeta.catatan,
     });
 
     // 2. Update setiap invoice yang dialokasikan (FIFO)
     for (const item of allocationResult.updatedInvoices) {
-      await updateInvoice(item.invoice);
+      await updateInvoice({
+        ...item.invoice,
+        buktiBayarUrl: paymentMeta.buktiUrl || item.invoice.buktiBayarUrl,
+        kwitansiUrl: paymentMeta.kwitansiUrl || item.invoice.kwitansiUrl,
+      });
     }
   };
 
