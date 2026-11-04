@@ -31,7 +31,12 @@ import {
   getTahunAjaranFromDate,
   compareInvoiceBySequenceAsc,
   comparePaymentByInvoiceSequenceAsc,
-  CicilanAllocationResult
+  CicilanAllocationResult,
+  STANDARD_TAHUN_AJARAN_LIST,
+  isValidTahunAjaranFormat,
+  normalizeTahunAjaran,
+  getInvoiceTahunAjaran,
+  getPaymentTahunAjaran
 } from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
@@ -144,12 +149,28 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     return sekolahList.find(s => s.id === filterSekolah) || null;
   }, [sekolahList, filterSekolah]);
 
-  // List of Available Tahun Ajaran options (e.g. 2026/2027, 2025/2026, 2024/2025, 2023/2024, 2022/2023)
+  // List of Available Tahun Ajaran options (e.g. 2028/2029, 2027/2028, ..., 2022/2023)
   const availableTahunAjaran = useMemo(() => {
-    const defaults = ['2026/2027', '2025/2026', '2024/2025', '2023/2024', '2022/2023'];
-    const fromInvoices = baseInvoices.map(i => i.tahunAjaran).filter(Boolean);
-    const fromPayments = basePayments.map(p => p.tahunAjaran || getTahunAjaranFromDate(p.tanggalBayar)).filter(Boolean);
-    const set = new Set([...defaults, ...fromInvoices, ...fromPayments]);
+    const set = new Set<string>(STANDARD_TAHUN_AJARAN_LIST);
+
+    // Tambahkan tahun ajaran yang tertera di data invoice (dinormalisasi baku YYYY/YYYY)
+    baseInvoices.forEach(inv => {
+      const ta = getInvoiceTahunAjaran(inv);
+      if (isValidTahunAjaranFormat(ta)) {
+        set.add(ta);
+      }
+    });
+
+    // Tambahkan tahun ajaran yang tertera di data pembayaran (dinormalisasi baku YYYY/YYYY)
+    basePayments.forEach(pay => {
+      const linkedInv = pay.invoiceId ? baseInvoices.find(i => i.id === pay.invoiceId || i.nomorInvoice === pay.invoiceId) : null;
+      const ta = getPaymentTahunAjaran(pay, linkedInv);
+      if (isValidTahunAjaranFormat(ta)) {
+        set.add(ta);
+      }
+    });
+
+    // Urutkan dari tahun ajaran terbaru ke yang terlama
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [baseInvoices, basePayments]);
 
@@ -174,11 +195,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
       const matchSekolah = filterSekolah === 'ALL' || inv.mitraId === filterSekolah;
 
-      const invTA = inv.tahunAjaran || getTahunAjaranFromDate(inv.tanggalKirim || inv.tanggalTerbit || inv.jatuhTempo);
-      const matchTahun = filterTahunAjaran === 'ALL' || 
-        invTA === filterTahunAjaran ||
-        (inv.tahunAjaran && inv.tahunAjaran.includes(filterTahunAjaran)) ||
-        getTahunAjaranFromDate(inv.tanggalKirim) === filterTahunAjaran;
+      // Filter Tahun Ajaran tepat & terstandarisasi
+      const invTA = getInvoiceTahunAjaran(inv);
+      const matchTahun = filterTahunAjaran === 'ALL' || invTA === filterTahunAjaran;
 
       const matchStatus = filterStatus === 'ALL' || inv.status === filterStatus;
 
@@ -207,15 +226,10 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
       const matchSekolah = filterSekolah === 'ALL' || pay.mitraId === filterSekolah;
 
-      const payTA = pay.tahunAjaran || getTahunAjaranFromDate(pay.tanggalBayar);
+      // Filter Tahun Ajaran tepat & terstandarisasi
       const linkedInv = pay.invoiceId ? baseInvoices.find(i => i.id === pay.invoiceId || i.nomorInvoice === pay.invoiceId) : null;
-      const linkedTA = linkedInv?.tahunAjaran;
-
-      const matchTahun = filterTahunAjaran === 'ALL' || 
-        payTA === filterTahunAjaran ||
-        (pay.tahunAjaran && pay.tahunAjaran.includes(filterTahunAjaran)) ||
-        (linkedTA && (linkedTA === filterTahunAjaran || linkedTA.includes(filterTahunAjaran))) ||
-        (pay.catatan && pay.catatan.includes(filterTahunAjaran));
+      const payTA = getPaymentTahunAjaran(pay, linkedInv);
+      const matchTahun = filterTahunAjaran === 'ALL' || payTA === filterTahunAjaran;
 
       const matchStatus = filterStatus === 'ALL' || pay.status === filterStatus;
 
@@ -461,7 +475,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           mitraId: inv.mitraId,
           namaSekolah: inv.namaSekolah,
           kategori: normalizeRuang(inv.kategori),
-          tahunAjaran: inv.tahunAjaran,
+          tahunAjaran: getInvoiceTahunAjaran(inv),
           jumlah: paid,
           tanggalBayar: values.tanggalDibayar,
           metodeBayar: 'Transfer Bank',

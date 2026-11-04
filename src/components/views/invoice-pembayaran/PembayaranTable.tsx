@@ -12,7 +12,9 @@ import { formatRupiah } from './types';
 import {
   extractInvoiceSequenceNumber,
   comparePaymentByInvoiceSequenceAsc,
-  isAfiliasiTanpaInvoice
+  isAfiliasiTanpaInvoice,
+  normalizeTahunAjaran,
+  getTahunAjaranFromDate
 } from '../../../lib/invoiceUtils';
 
 interface PembayaranTableProps {
@@ -136,7 +138,10 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
 
               {/* Tanggal Pembayaran */}
               <td className="py-3.5 px-4 font-semibold text-slate-700">
-                {pay.tanggalBayar}
+                <span>{pay.tanggalBayar}</span>
+                <span className="text-[10px] text-slate-400 block font-normal">
+                  TA {normalizeTahunAjaran(pay.tahunAjaran) || getTahunAjaranFromDate(pay.tanggalBayar)}
+                </span>
               </td>
 
               {/* Nominal Bayar */}

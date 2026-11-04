@@ -3,7 +3,7 @@ import { X, CheckCircle2, School } from 'lucide-react';
 import { Pembayaran, Invoice, SekolahMitra, InvoiceStatus } from '../../../types';
 import { RuangKategoriId, formatRupiah } from './types';
 import { NominalInput } from './NominalInput';
-import { getTahunAjaranFromDate, compareInvoiceBySequenceAsc, isAfiliasiTanpaInvoice } from '../../../lib/invoiceUtils';
+import { getTahunAjaranFromDate, compareInvoiceBySequenceAsc, isAfiliasiTanpaInvoice, normalizeTahunAjaran } from '../../../lib/invoiceUtils';
 
 interface PembayaranModalProps {
   isOpen: boolean;
@@ -111,7 +111,7 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
     const school = sekolahList.find(s => s.id === mitraId);
     const namaSekolah = school ? school.namaSekolah : 'Sekolah Mitra';
     const selectedInv = invoiceList.find(i => i.id === invoiceId || i.nomorInvoice === invoiceId);
-    const derivedTA = selectedInv?.tahunAjaran || getTahunAjaranFromDate(tanggalBayar);
+    const derivedTA = normalizeTahunAjaran(selectedInv?.tahunAjaran) || getTahunAjaranFromDate(tanggalBayar);
     const finalPaid = isBayarChecked ? Number(jumlah) : 0;
 
     try {

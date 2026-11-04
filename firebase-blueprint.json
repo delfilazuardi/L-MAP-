@@ -182,6 +182,58 @@
         "tanggalPenilaian": { "type": "string", "description": "Tanggal input evaluasi" }
       },
       "required": ["id", "mitraId", "namaSekolah", "periode", "totalSkor", "predikat"]
+    },
+    "ProgramMitraItem": {
+      "title": "ProgramMitraItem",
+      "description": "Pengajuan program mitra (Visitasi, Magang, Training of Trainers) dan berkas dokumen",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik agenda program" },
+        "jenis": { "type": "string", "description": "Jenis program", "enum": ["Visitasi", "Magang", "Training of Trainers"] },
+        "judul": { "type": "string", "description": "Judul atau topik program" },
+        "mitraId": { "type": "string", "description": "ID Sekolah Mitra pengaju" },
+        "namaSekolah": { "type": "string", "description": "Nama sekolah mitra" },
+        "tanggalMulai": { "type": "string", "description": "Tanggal mulai kegiatan" },
+        "tanggalSelesai": { "type": "string", "description": "Tanggal selesai kegiatan" },
+        "peserta": { "type": "string", "description": "Nama dan peran peserta" },
+        "jumlahPeserta": { "type": "number", "description": "Jumlah peserta" },
+        "deskripsi": { "type": "string", "description": "Deskripsi atau tujuan kegiatan" },
+        "linkDocs": { "type": "string", "description": "Link Google Docs" },
+        "linkSheet": { "type": "string", "description": "Link Google Sheet" },
+        "linkPdf": { "type": "string", "description": "Link PDF atau Drive" },
+        "linkCanva": { "type": "string", "description": "Link Canva Slide" },
+        "fileUploadedName": { "type": "string", "description": "Nama berkas lampiran" },
+        "fileUploadedData": { "type": "string", "description": "Data berkas" },
+        "fileUploadedType": { "type": "string", "description": "Tipe MIME berkas" },
+        "flyerUrl": { "type": "string", "description": "Tautan poster / flyer promosi kegiatan (Canva / Drive / Gambar)" },
+        "flyerCaption": { "type": "string", "description": "Keterangan / headline flyer kegiatan" },
+        "flyerFileName": { "type": "string", "description": "Nama file gambar flyer" },
+        "flyerFileData": { "type": "string", "description": "Data base64 file gambar flyer" },
+        "dokumenSekolah": { "type": "array", "description": "Dokumen resmi milik sekolah (MoU, Surat Tugas, Sertifikat Kemitraan, Panduan)" },
+        "pesertaMagang": { "type": "array", "description": "Daftar guru / staf peserta magang beserta dokumen pribadi masing-masing (Sertifikat individu, logbook, portofolio)" },
+        "laporanProgram": { "type": "array", "description": "Laporan hasil visitasi / magang / evaluasi mitra" },
+        "agendaGapAnalysis": { "type": "array", "description": "Agenda dan matriks gap analysis kurikulum/fasilitas/SDM sekolah mitra" },
+        "status": { "type": "string", "description": "Status pengajuan", "enum": ["Diajukan", "Disetujui", "Sedang Berjalan", "Selesai", "Perlu Revisi"] },
+        "catatanAdmin": { "type": "string", "description": "Catatan review dari Mitra Office" },
+        "tanggalPengajuan": { "type": "string", "description": "Tanggal diajukan" },
+        "updatedAt": { "type": "string", "description": "Tanggal update terakhir" }
+      },
+      "required": ["id", "jenis", "judul", "mitraId", "namaSekolah", "tanggalMulai", "status", "tanggalPengajuan"]
+    },
+    "ProgramMitraTemplate": {
+      "title": "ProgramMitraTemplate",
+      "description": "Template dokumen resmi program mitra (Visitasi, Magang, ToT)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID template dokumen" },
+        "jenis": { "type": "string", "description": "Jenis program", "enum": ["Visitasi", "Magang", "Training of Trainers"] },
+        "nama": { "type": "string", "description": "Nama template" },
+        "deskripsi": { "type": "string", "description": "Penjelasan kegunaan template" },
+        "tipeFormat": { "type": "string", "description": "Tipe format berkas", "enum": ["Docs", "Sheet", "PDF", "Canva"] },
+        "linkTemplate": { "type": "string", "description": "Tautan dokumen template" },
+        "diperbarui": { "type": "string", "description": "Tanggal update template" }
+      },
+      "required": ["id", "jenis", "nama", "tipeFormat", "linkTemplate"]
     }
   },
   "firestore": {
@@ -224,6 +276,14 @@
     "/performance_mendaki/{evalId}": {
       "schema": "PerformanceMenDAKI",
       "description": "Data penilaian framework MenDAKI Lazuardi"
+    },
+    "/program_mitra/{programId}": {
+      "schema": "ProgramMitraItem",
+      "description": "Data agenda dan dokumen kegiatan program mitra (Visitasi, Magang, ToT)"
+    },
+    "/program_mitra_templates/{tplId}": {
+      "schema": "ProgramMitraTemplate",
+      "description": "Katalog template resmi program mitra"
     }
   }
 }

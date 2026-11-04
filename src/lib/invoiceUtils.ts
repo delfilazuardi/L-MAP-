@@ -438,6 +438,27 @@ export function getSchoolObligationBadgeInfo(
 }
 
 /**
+ * Daftar baku Tahun Ajaran resmi untuk dropdown dan filter
+ */
+export const STANDARD_TAHUN_AJARAN_LIST = [
+  '2028/2029',
+  '2027/2028',
+  '2026/2027',
+  '2025/2026',
+  '2024/2025',
+  '2023/2024',
+  '2022/2023',
+] as const;
+
+/**
+ * Cek apakah string memiliki format baku Tahun Ajaran "YYYY/YYYY" (contoh: 2024/2025)
+ */
+export function isValidTahunAjaranFormat(str?: string | null): boolean {
+  if (!str) return false;
+  return /^\d{4}\/\d{4}$/.test(str.trim());
+}
+
+/**
  * Mendapatkan Tahun Ajaran (misal 2026/2027) dari string tanggal (YYYY-MM-DD atau ISO)
  * Di Indonesia tahun ajaran baru dimulai bulan Juli (bulan ke-7)
  */
@@ -452,6 +473,101 @@ export function getTahunAjaranFromDate(dateInput?: string | Date): string {
   } else {
     return `${year - 1}/${year}`;
   }
+}
+
+/**
+ * Menormalisasi string Tahun Ajaran menjadi format baku "YYYY/YYYY" (contoh: "2024/2025").
+ * Menangani berbagai format masukan:
+ * - "2024/2025" -> "2024/2025"
+ * - "2024-2025" -> "2024/2025"
+ * - "TA 2024/2025" -> "2024/2025"
+ * - "2024" -> "2024/2025"
+ * - "24/25" -> "2024/2025"
+ * Jika raw kosong/tidak valid dan fallbackDate diberikan, akan dihitung dari fallbackDate.
+ */
+export function normalizeTahunAjaran(raw?: string | null, fallbackDate?: string | Date): string {
+  if (raw) {
+    const cleaned = String(raw).trim();
+    // 1. Cek pattern 4 digit / 4 digit dengan berbagai pemisah (/ - _)
+    const matchDoubleYear = cleaned.match(/(\d{4})\s*[\/\-_]\s*(\d{4})/);
+    if (matchDoubleYear) {
+      const y1 = parseInt(matchDoubleYear[1], 10);
+      const y2 = parseInt(matchDoubleYear[2], 10);
+      if (y1 >= 2000 && y2 >= 2000) {
+        return `${y1}/${y2}`;
+      }
+    }
+
+    // 2. Cek pattern 2 digit / 2 digit, misal "24/25" atau "24-25"
+    const matchShortDouble = cleaned.match(/\b(\d{2})\s*[\/\-_]\s*(\d{2})\b/);
+    if (matchShortDouble) {
+      const y1 = 2000 + parseInt(matchShortDouble[1], 10);
+      const y2 = 2000 + parseInt(matchShortDouble[2], 10);
+      return `${y1}/${y2}`;
+    }
+
+    // 3. Cek single 4-digit year, misal "2024" -> asumsi "2024/2025"
+    const matchSingleYear = cleaned.match(/\b(20\d{2})\b/);
+    if (matchSingleYear) {
+      const y = parseInt(matchSingleYear[1], 10);
+      return `${y}/${y + 1}`;
+    }
+  }
+
+  // 4. Jika ada fallbackDate valid
+  if (fallbackDate) {
+    return getTahunAjaranFromDate(fallbackDate);
+  }
+
+  return '';
+}
+
+/**
+ * Mengambil Tahun Ajaran terstandarisasi (YYYY/YYYY) untuk sebuah invoice.
+ * Mengevaluasi inv.tahunAjaran, dan jika tidak ada, fallback ke tanggalKirim / tanggalTerbit / jatuhTempo / createdAt.
+ */
+export function getInvoiceTahunAjaran(inv: {
+  tahunAjaran?: string;
+  tanggalKirim?: string;
+  tanggalTerbit?: string;
+  jatuhTempo?: string;
+  createdAt?: string;
+}): string {
+  const normalized = normalizeTahunAjaran(inv.tahunAjaran);
+  if (normalized) return normalized;
+  const dateCandidate = inv.tanggalKirim || inv.tanggalTerbit || inv.jatuhTempo || inv.createdAt;
+  if (dateCandidate) return getTahunAjaranFromDate(dateCandidate);
+  return '2026/2027';
+}
+
+/**
+ * Mengambil Tahun Ajaran terstandarisasi (YYYY/YYYY) untuk sebuah pembayaran.
+ * Prioritas:
+ * 1. Tahun Ajaran dari linked invoice (jika ada)
+ * 2. pay.tahunAjaran (dinormalisasi)
+ * 3. Tahun ajaran dari pay.tanggalBayar / pay.createdAt
+ */
+export function getPaymentTahunAjaran(
+  pay: {
+    tahunAjaran?: string;
+    tanggalBayar?: string;
+    createdAt?: string;
+  },
+  linkedInvoice?: {
+    tahunAjaran?: string;
+    tanggalKirim?: string;
+    tanggalTerbit?: string;
+  } | null
+): string {
+  if (linkedInvoice) {
+    const invTA = getInvoiceTahunAjaran(linkedInvoice);
+    if (invTA) return invTA;
+  }
+  const normalized = normalizeTahunAjaran(pay.tahunAjaran);
+  if (normalized) return normalized;
+  const dateCandidate = pay.tanggalBayar || pay.createdAt;
+  if (dateCandidate) return getTahunAjaranFromDate(dateCandidate);
+  return '2026/2027';
 }
 
 /**

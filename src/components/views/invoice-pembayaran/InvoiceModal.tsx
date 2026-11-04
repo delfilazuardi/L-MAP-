@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Sparkles, AlertCircle, School, CheckCircle2 } from 'lucide-react';
 import { Invoice, InvoiceStatus, InvoiceOperationalStatus, SekolahMitra } from '../../../types';
 import { RuangKategoriId, formatRupiah } from './types';
-import { generateNomorInvoiceBaru, NAMA_BULAN_LIST, isAfiliasiTanpaInvoice } from '../../../lib/invoiceUtils';
+import { 
+  generateNomorInvoiceBaru, 
+  NAMA_BULAN_LIST, 
+  isAfiliasiTanpaInvoice,
+  STANDARD_TAHUN_AJARAN_LIST,
+  normalizeTahunAjaran,
+  getTahunAjaranFromDate
+} from '../../../lib/invoiceUtils';
 import { NominalInput } from './NominalInput';
 
 interface InvoiceModalProps {
@@ -40,6 +47,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [keterangan, setKeterangan] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // List opsi Tahun Ajaran resmi yang bersih dan terstandarisasi untuk dropdown
+  const availableTahunAjaranOptions = useMemo(() => {
+    const set = new Set<string>(STANDARD_TAHUN_AJARAN_LIST);
+    if (tahunAjaran) {
+      const norm = normalizeTahunAjaran(tahunAjaran);
+      if (norm) set.add(norm);
+    }
+    existingInvoices.forEach(inv => {
+      const norm = normalizeTahunAjaran(inv.tahunAjaran);
+      if (norm) set.add(norm);
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [existingInvoices, tahunAjaran]);
+
   // Periksa apakah sekolah dan tahun yang dipilih termasuk Sekolah Afiliasi (tanpa nomor invoice)
   const isTanpaInvoice = isAfiliasiTanpaInvoice(mitraId, {
     date: tanggalKirim,
@@ -56,7 +77,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setMitraId(editingInvoice.mitraId);
       setKategori((editingInvoice.kategori as RuangKategoriId) || defaultKategori);
       setBulan(editingInvoice.bulan || 'September');
-      setTahunAjaran(editingInvoice.tahunAjaran || '2026/2027');
+      setTahunAjaran(normalizeTahunAjaran(editingInvoice.tahunAjaran, editingInvoice.tanggalKirim) || '2026/2027');
       setTanggalKirim(editingInvoice.tanggalKirim || new Date().toISOString().split('T')[0]);
       setTagihanFull(editingInvoice.tagihanFull || editingInvoice.nominal || 0);
       setTagihanRealisasi(editingInvoice.tagihanRealisasi || editingInvoice.nominal || 0);
@@ -73,9 +94,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setMitraId(sekolahList[0]?.id || 'MO004');
       setKategori(defaultKategori);
       setBulan('September');
-      setTahunAjaran('2026/2027');
       const today = new Date();
-      setTanggalKirim(today.toISOString().split('T')[0]);
+      const todayStr = today.toISOString().split('T')[0];
+      setTanggalKirim(todayStr);
+      setTahunAjaran(getTahunAjaranFromDate(today));
 
       // Set default nominal based on category
       const defaultNom = defaultKategori === 'Franchise Fee' ? 75000000 :
@@ -132,7 +154,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         namaSekolah,
         kategori,
         bulan,
-        tahunAjaran,
+        tahunAjaran: normalizeTahunAjaran(tahunAjaran, tanggalKirim) || '2026/2027',
         tanggalKirim,
         tanggalDibayar: isBayarChecked ? tanggalDibayar : undefined,
         jatuhTempo: editingInvoice?.jatuhTempo || '',
@@ -330,13 +352,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Tahun Ajaran (TA)
               </label>
-              <input
-                type="text"
+              <select
                 value={tahunAjaran}
                 onChange={(e) => setTahunAjaran(e.target.value)}
-                placeholder="2026/2027"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {availableTahunAjaranOptions.map((ta) => (
+                  <option key={ta} value={ta}>
+                    TA {ta}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -349,7 +375,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               type="date"
               required
               value={tanggalKirim}
-              onChange={(e) => setTanggalKirim(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setTanggalKirim(val);
+                if (!editingInvoice && val) {
+                  const derived = getTahunAjaranFromDate(val);
+                  if (derived) setTahunAjaran(derived);
+                }
+              }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

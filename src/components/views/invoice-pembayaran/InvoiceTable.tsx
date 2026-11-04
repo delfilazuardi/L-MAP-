@@ -21,7 +21,8 @@ import {
   getSchoolObligationBadgeInfo,
   extractInvoiceSequenceNumber,
   compareInvoiceBySequenceAsc,
-  isAfiliasiTanpaInvoice
+  isAfiliasiTanpaInvoice,
+  getInvoiceTahunAjaran
 } from '../../../lib/invoiceUtils';
 
 interface InvoiceTableProps {
@@ -282,7 +283,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                 {/* Periode */}
                 <td className="py-3.5 px-4">
                   <span className="font-semibold text-slate-700 block">{inv.bulan || '-'}</span>
-                  <span className="text-[10px] text-slate-400">{inv.tahunAjaran || '2026/2027'}</span>
+                  <span className="text-[10px] text-slate-400">TA {getInvoiceTahunAjaran(inv)}</span>
                 </td>
 
                 {/* Nominal Tagihan */}

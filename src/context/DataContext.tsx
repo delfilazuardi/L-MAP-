@@ -56,7 +56,14 @@ import {
   compareInvoiceBySequenceAsc,
   comparePaymentByInvoiceSequenceAsc,
 } from '../lib/invoiceUtils';
-import { db, testConnection, sanitizeForFirestore, toFirestoreDocId } from '../lib/firebase';
+import { 
+  db, 
+  testConnection, 
+  sanitizeForFirestore, 
+  toFirestoreDocId,
+  handleFirestoreError,
+  OperationType 
+} from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 
 interface DataContextType {
@@ -143,15 +150,55 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const getInitialCollectionState = <T,>(collectionName: string, defaultItems: T[]): T[] => {
+  const getDeletedIds = (key: string): Set<string> => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return new Set(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
+    return new Set();
+  };
+
+  const addDeletedId = (key: string, id: string) => {
+    try {
+      const set = getDeletedIds(key);
+      set.add(id);
+      set.add(toFirestoreDocId(id));
+      localStorage.setItem(key, JSON.stringify(Array.from(set)));
+    } catch {
+      // ignore
+    }
+  };
+
+  const getInitialCollectionState = <T extends { id?: string },>(collectionName: string, defaultItems: T[]): T[] => {
     try {
       const raw = localStorage.getItem(`lmap_backup_${collectionName}`);
-      if (raw) {
+      if (raw !== null) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          if (collectionName === 'program_mitra') {
+            const deleted = getDeletedIds('lmap_deleted_pm_ids');
+            return parsed.filter(item => item?.id && !deleted.has(item.id) && !deleted.has(toFirestoreDocId(item.id)));
+          }
+          if (collectionName === 'program_mitra_templates') {
+            const deleted = getDeletedIds('lmap_deleted_pm_template_ids');
+            return parsed.filter(item => item?.id && !deleted.has(item.id) && !deleted.has(toFirestoreDocId(item.id)));
+          }
+          return parsed;
+        }
       }
     } catch {
       // ignore
+    }
+
+    if (collectionName === 'program_mitra') {
+      const deleted = getDeletedIds('lmap_deleted_pm_ids');
+      return defaultItems.filter(item => item?.id && !deleted.has(item.id) && !deleted.has(toFirestoreDocId(item.id)));
+    }
+    if (collectionName === 'program_mitra_templates') {
+      const deleted = getDeletedIds('lmap_deleted_pm_template_ids');
+      return defaultItems.filter(item => item?.id && !deleted.has(item.id) && !deleted.has(toFirestoreDocId(item.id)));
     }
     return defaultItems;
   };
@@ -285,9 +332,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const unsubscribe = onSnapshot(
         collection(db, collectionName),
         (snapshot) => {
-          if (snapshot.empty && fallbackData && fallbackData.length > 0 && !bootstrappedRef.current.has(collectionName)) {
-            // First time bootstrap: collection is completely empty in Firestore
+          const isBootstrappedAlready = 
+            bootstrappedRef.current.has(collectionName) || 
+            localStorage.getItem(`lmap_bootstrapped_${collectionName}`) === 'true';
+
+          if (snapshot.empty && fallbackData && fallbackData.length > 0 && !isBootstrappedAlready) {
+            // First time bootstrap: collection is completely empty in Firestore and never bootstrapped before
             bootstrappedRef.current.add(collectionName);
+            try {
+              localStorage.setItem(`lmap_bootstrapped_${collectionName}`, 'true');
+            } catch {
+              // ignore
+            }
             setter(fallbackData);
             fallbackData.forEach((item) => {
               const safeId = toFirestoreDocId(item.id);
@@ -298,6 +354,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             // Firestore is the Single Source of Truth: exact documents currently stored in Firestore
             bootstrappedRef.current.add(collectionName);
+            try {
+              localStorage.setItem(`lmap_bootstrapped_${collectionName}`, 'true');
+            } catch {
+              // ignore
+            }
+
             const docs = snapshot.docs.map((d) => {
               const data = d.data() as T;
               return {
@@ -305,21 +367,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: (data as any).id || d.id,
               };
             });
-            setter(prev => {
-              const prevDemo = prev.filter(isDemoEntity);
-              let demoFallback: T[] = [];
-              if (collectionName === 'mitra') demoFallback = [DEMO_SEKOLAH as unknown as T];
-              else if (collectionName === 'laporan_bulanan') demoFallback = DEMO_LAPORAN as unknown as T[];
-              else if (collectionName === 'invoices') demoFallback = DEMO_INVOICES as unknown as T[];
-              else if (collectionName === 'pembayaran') demoFallback = DEMO_PEMBAYARAN as unknown as T[];
-              else if (collectionName === 'events') demoFallback = DEMO_EVENTS as unknown as T[];
-              else if (collectionName === 'permintaan_mitra') demoFallback = DEMO_PERMINTAAN as unknown as T[];
-              else if (collectionName === 'performance_mendaki') demoFallback = DEMO_PERFORMANCE as unknown as T[];
-              else if (collectionName === 'mendaki_submissions') demoFallback = DEMO_MENDAKI_SUBMISSIONS as unknown as T[];
-              else if (collectionName === 'program_mitra') demoFallback = DEMO_PROGRAM_MITRA as unknown as T[];
 
-              const demoItemsToKeep = prevDemo.length > 0 ? prevDemo : demoFallback;
-              let nextItems = [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+            setter(prev => {
+              let nextItems: T[] = [];
+
+              if (collectionName === 'program_mitra') {
+                const deletedPmIds = getDeletedIds('lmap_deleted_pm_ids');
+                nextItems = docs.filter(
+                  item => item.id && !deletedPmIds.has(item.id) && !deletedPmIds.has(toFirestoreDocId(item.id))
+                );
+              } else if (collectionName === 'program_mitra_templates') {
+                const deletedTmplIds = getDeletedIds('lmap_deleted_pm_template_ids');
+                nextItems = docs.filter(
+                  item => item.id && !deletedTmplIds.has(item.id) && !deletedTmplIds.has(toFirestoreDocId(item.id))
+                );
+              } else {
+                const prevDemo = prev.filter(isDemoEntity);
+                let demoFallback: T[] = [];
+                if (collectionName === 'mitra') demoFallback = [DEMO_SEKOLAH as unknown as T];
+                else if (collectionName === 'laporan_bulanan') demoFallback = DEMO_LAPORAN as unknown as T[];
+                else if (collectionName === 'invoices') demoFallback = DEMO_INVOICES as unknown as T[];
+                else if (collectionName === 'pembayaran') demoFallback = DEMO_PEMBAYARAN as unknown as T[];
+                else if (collectionName === 'events') demoFallback = DEMO_EVENTS as unknown as T[];
+                else if (collectionName === 'permintaan_mitra') demoFallback = DEMO_PERMINTAAN as unknown as T[];
+                else if (collectionName === 'performance_mendaki') demoFallback = DEMO_PERFORMANCE as unknown as T[];
+                else if (collectionName === 'mendaki_submissions') demoFallback = DEMO_MENDAKI_SUBMISSIONS as unknown as T[];
+
+                const demoItemsToKeep = prevDemo.length > 0 ? prevDemo : demoFallback;
+                nextItems = [...docs.filter(d => !isDemoEntity(d)), ...demoItemsToKeep];
+              }
+
               if (collectionName === 'invoices') {
                 nextItems = [...nextItems].sort(compareInvoiceBySequenceAsc as any);
               } else if (collectionName === 'pembayaran') {
@@ -1243,11 +1320,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // ==========================================
-  // PROGRAM MITRA (VISITASI & MAGANG) CRUD
+  // PROGRAM MITRA (VISITASI, MAGANG, TRAINING OF TRAINERS) CRUD
   // ==========================================
   const addProgramMitra = useCallback(async (itemData: Omit<ProgramMitraItem, 'id' | 'tanggalPengajuan'> & { id?: string }) => {
     const today = new Date().toISOString().split('T')[0];
-    const isDemo = isDemoEntity(itemData.mitraId) || isDemoEntity(itemData.id);
+    const isDemo = Boolean(isDemoEntity(itemData.mitraId) || isDemoEntity(itemData.id));
     const id = itemData.id || (isDemo ? `PRG-DEMO-${Date.now().toString().slice(-4)}` : `PRG-${Date.now().toString().slice(-6)}`);
     const newItem: ProgramMitraItem = {
       ...itemData,
@@ -1257,15 +1334,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isDemo: isDemo || undefined,
     };
 
+    if (newItem.fileUploadedData && newItem.fileUploadedData.length > 600 * 1024) {
+      console.warn('fileUploadedData exceeds 600KB, storing filename only to respect Firestore limits.');
+      newItem.fileUploadedData = undefined;
+    }
+
+    const safeId = toFirestoreDocId(id);
+    const sanitized = sanitizeForFirestore(newItem);
+
+    // Persist directly to Firebase Firestore
+    try {
+      await setDoc(doc(db, 'program_mitra', safeId), sanitized);
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.error('Failed to create program mitra in Firestore:', err);
+      handleFirestoreError(err, OperationType.CREATE, `program_mitra/${safeId}`);
+    }
+
     setProgramMitraList(prev => {
-      const next = [newItem, ...prev.filter(p => p.id !== id)];
+      const next = [newItem, ...prev.filter(p => p.id !== id && p.id !== safeId)];
       saveLocalBackup('program_mitra', next);
       return next;
     });
-
-    if (isDemo) return;
-
-    await safeFirestoreSet('program_mitra', id, newItem);
   }, []);
 
   const updateProgramMitra = useCallback(async (item: ProgramMitraItem) => {
@@ -1275,26 +1366,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: today,
     };
 
+    if (withUpdate.fileUploadedData && withUpdate.fileUploadedData.length > 600 * 1024) {
+      console.warn('fileUploadedData exceeds 600KB, storing filename only to respect Firestore limits.');
+      withUpdate.fileUploadedData = undefined;
+    }
+
+    const safeId = toFirestoreDocId(item.id);
+    const sanitized = sanitizeForFirestore(withUpdate);
+
+    // Persist directly to Firebase Firestore
+    try {
+      await setDoc(doc(db, 'program_mitra', safeId), sanitized);
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.error('Failed to update program mitra in Firestore:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `program_mitra/${safeId}`);
+    }
+
     setProgramMitraList(prev => {
-      const next = prev.map(p => p.id === item.id ? withUpdate : p);
+      const next = prev.map(p => (p.id === item.id || p.id === safeId) ? withUpdate : p);
       saveLocalBackup('program_mitra', next);
       return next;
     });
-
-    if (isDemoEntity(item)) return;
-
-    await safeFirestoreSet('program_mitra', item.id, withUpdate);
   }, []);
 
   const deleteProgramMitra = useCallback(async (id: string) => {
+    const safeId = toFirestoreDocId(id);
+    addDeletedId('lmap_deleted_pm_ids', id);
+    addDeletedId('lmap_deleted_pm_ids', safeId);
+
+    // Delete unconditionally from Firebase Firestore
+    try {
+      await deleteDoc(doc(db, 'program_mitra', safeId));
+      if (safeId !== id) {
+        await deleteDoc(doc(db, 'program_mitra', id)).catch(() => {});
+      }
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.error(`Failed to delete program mitra [${safeId}] in Firestore:`, err);
+      handleFirestoreError(err, OperationType.DELETE, `program_mitra/${safeId}`);
+    }
+
     setProgramMitraList(prev => {
-      const next = prev.filter(p => p.id !== id);
+      const next = prev.filter(p => p.id !== id && p.id !== safeId);
       saveLocalBackup('program_mitra', next);
       return next;
     });
-    if (isDemoEntity(id)) return;
-
-    await safeFirestoreDelete('program_mitra', id);
   }, []);
 
   const addProgramMitraTemplate = useCallback(async (templateData: Omit<ProgramMitraTemplate, 'id' | 'diperbarui'> & { id?: string }) => {
@@ -1311,13 +1430,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       diperbarui: today,
     };
 
+    const safeId = toFirestoreDocId(id);
+    const sanitized = sanitizeForFirestore(newTemplate);
+
+    try {
+      await setDoc(doc(db, 'program_mitra_templates', safeId), sanitized);
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.error('Failed to create template in Firestore:', err);
+      handleFirestoreError(err, OperationType.CREATE, `program_mitra_templates/${safeId}`);
+    }
+
     setProgramMitraTemplates(prev => {
-      const next = [...prev.filter(t => t.id !== id), newTemplate];
+      const next = [...prev.filter(t => t.id !== id && t.id !== safeId), newTemplate];
       saveLocalBackup('program_mitra_templates', next);
       return next;
     });
-
-    await safeFirestoreSet('program_mitra_templates', id, newTemplate);
   }, []);
 
   const updateProgramMitraTemplate = useCallback(async (template: ProgramMitraTemplate) => {
@@ -1327,24 +1456,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       diperbarui: today,
     };
 
+    const safeId = toFirestoreDocId(template.id);
+    const sanitized = sanitizeForFirestore(withDate);
+
+    try {
+      await setDoc(doc(db, 'program_mitra_templates', safeId), sanitized);
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.error('Failed to update template in Firestore:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `program_mitra_templates/${safeId}`);
+    }
+
     setProgramMitraTemplates(prev => {
-      const exists = prev.some(t => t.id === template.id);
-      const next = exists ? prev.map(t => t.id === template.id ? withDate : t) : [...prev, withDate];
+      const exists = prev.some(t => t.id === template.id || t.id === safeId);
+      const next = exists ? prev.map(t => (t.id === template.id || t.id === safeId) ? withDate : t) : [...prev, withDate];
       saveLocalBackup('program_mitra_templates', next);
       return next;
     });
-
-    await safeFirestoreSet('program_mitra_templates', template.id, withDate);
   }, []);
 
   const deleteProgramMitraTemplate = useCallback(async (id: string) => {
+    const safeId = toFirestoreDocId(id);
+    addDeletedId('lmap_deleted_pm_template_ids', id);
+    addDeletedId('lmap_deleted_pm_template_ids', safeId);
+
+    try {
+      await deleteDoc(doc(db, 'program_mitra_templates', safeId));
+      if (safeId !== id) {
+        await deleteDoc(doc(db, 'program_mitra_templates', id)).catch(() => {});
+      }
+      setLastSyncTime(new Date());
+      setIsFirebaseConnected(true);
+    } catch (err) {
+      console.error(`Failed to delete template [${safeId}] in Firestore:`, err);
+      handleFirestoreError(err, OperationType.DELETE, `program_mitra_templates/${safeId}`);
+    }
+
     setProgramMitraTemplates(prev => {
-      const next = prev.filter(t => t.id !== id);
+      const next = prev.filter(t => t.id !== id && t.id !== safeId);
       saveLocalBackup('program_mitra_templates', next);
       return next;
     });
-
-    await safeFirestoreDelete('program_mitra_templates', id);
   }, []);
 
   // ==========================================

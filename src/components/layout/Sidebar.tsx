@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Briefcase,
       badge: pendingProgram > 0 ? pendingProgram : null,
       badgeColor: 'bg-sky-100 text-sky-800',
-      desc: 'Visitasi & Magang Guru',
+      desc: 'Visitasi, Magang & ToT',
     },
     {
       id: 'data-mitra' as ActiveNavTab,

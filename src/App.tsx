@@ -76,7 +76,7 @@ function MainApp() {
       case 'permintaan-mitra':
         return 'Permintaan Logistik Mitra';
       case 'program-mitra':
-        return 'Program Mitra: Visitasi & Magang Guru';
+        return 'Program Mitra';
       case 'data-mitra':
         return 'Direktori Data Sekolah Mitra';
       case 'staff-activity':

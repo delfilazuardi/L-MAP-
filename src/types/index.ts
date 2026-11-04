@@ -437,15 +437,89 @@ export interface MendakiFormSubmission {
   isDemo?: boolean;
 }
 
-export type ProgramMitraJenis = 'Visitasi' | 'Magang' | 'Training of Trainers';
+export type ProgramMitraJenis = 
+  | 'Visitasi' 
+  | 'LATOF' 
+  | 'Training of Trainers' 
+  | 'Magang' 
+  | 'Pendampingan' 
+  | 'Workshop' 
+  | string;
 export type ProgramMitraStatus = 'Diajukan' | 'Disetujui' | 'Sedang Berjalan' | 'Selesai' | 'Perlu Revisi';
+
+export interface DokumenMitraSekolah {
+  id: string;
+  nama: string;
+  tipe: 'MoU' | 'Surat Tugas' | 'Panduan' | 'Sertifikat Sekolah' | 'Materi' | 'Lainnya';
+  url?: string;
+  tanggal?: string;
+  fileData?: string;
+  fileName?: string;
+  keterangan?: string;
+  uploadedBy?: 'admin' | 'sekolah' | string;
+}
+
+export interface DokumenPribadiPeserta {
+  id: string;
+  nama: string;
+  tipe: 'Sertifikat' | 'Surat Tugas' | 'Logbook' | 'Penilaian' | 'Portofolio' | 'Laporan' | 'Lainnya';
+  url?: string;
+  tanggal?: string;
+  fileData?: string;
+  fileName?: string;
+  keterangan?: string;
+  uploadedBy?: 'admin' | 'peserta' | string;
+}
+
+export interface PesertaMagangItem {
+  id: string;
+  nama: string;
+  peran?: string;
+  email?: string;
+  telepon?: string;
+  sekolahId?: string;
+  namaSekolah?: string;
+  dokumenPribadi?: DokumenPribadiPeserta[];
+}
+
+export interface LaporanProgramMitra {
+  id: string;
+  judul: string;
+  tipe: 'Laporan Visitasi' | 'Laporan Akhir Magang' | 'Laporan ToT' | 'Evaluasi Mitra' | string;
+  penulis?: string;
+  tanggal: string;
+  ringkasan?: string;
+  url?: string;
+  fileData?: string;
+  fileName?: string;
+  status: 'Draft' | 'Final' | 'Disetujui';
+}
+
+export interface AgendaGapAnalysis {
+  id: string;
+  topik: string;
+  aspek: 'Kurikulum & Pembelajaran' | 'Sarana & Fasilitas' | 'SDM & Guru' | 'Tata Kelola' | 'Inklusi & Welas Asih' | string;
+  tanggal: string;
+  kondisiAwal: string;
+  standarLazuardi: string;
+  gapSelisih: string;
+  rencanaAksi: string;
+  pic?: string;
+  targetSelesai?: string;
+  status: 'Belum Selesai' | 'Dalam Proses' | 'Terpenuhi';
+  dokumenUrl?: string;
+  catatan?: string;
+}
 
 export interface ProgramMitraItem {
   id: string; // e.g. PRG-2026-001
-  jenis: ProgramMitraJenis; // 'Visitasi' | 'Magang' | 'Training of Trainers'
-  judul: string;
+  jenis: ProgramMitraJenis; // 'Visitasi' | 'LATOF' | 'Training of Trainers' | 'Magang' | etc.
+  judul: string; // Nama program
+  tahunAjaran?: string; // e.g. '2026/2027'
   mitraId: string;
   namaSekolah: string;
+  sasaranSekolahIds?: string[]; // Daftar ID sekolah mitra sasaran
+  sasaranSekolahNama?: string; // e.g. 'Semua Sekolah Mitra' atau nama sekolah
   tanggalMulai: string;
   tanggalSelesai?: string;
   peserta?: string; // Nama guru / staff peserta
@@ -459,6 +533,18 @@ export interface ProgramMitraItem {
   fileUploadedName?: string; // Nama file fisik yang diupload
   fileUploadedData?: string; // Base64 data file lokal
   fileUploadedType?: string;
+  // Flyer Program / Kegiatan (Khusus Admin yang dapat mengunggah/mengedit)
+  flyerUrl?: string; // URL Flyer kegiatan (Google Drive / Canva / Web Image)
+  flyerCaption?: string; // Keterangan flyer promosi kegiatan
+  flyerFileName?: string;
+  flyerFileData?: string; // Base64 gambar flyer
+  // Dokumen Milik Sekolah & Dokumen Pribadi Peserta
+  dokumenSekolah?: DokumenMitraSekolah[];
+  pesertaMagang?: PesertaMagangItem[];
+  // Akses Laporan Program
+  laporanProgram?: LaporanProgramMitra[];
+  // Agenda & Matriks Gap Analysis Masing-Masing
+  agendaGapAnalysis?: AgendaGapAnalysis[];
   status: ProgramMitraStatus;
   catatanAdmin?: string;
   tanggalPengajuan: string;

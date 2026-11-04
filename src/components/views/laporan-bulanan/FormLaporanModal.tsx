@@ -9,7 +9,12 @@ import {
   CheckCircle2,
   CalendarDays,
   Plus,
-  Check
+  Check,
+  Trash2,
+  Link2,
+  AlignLeft,
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 import { SekolahMitra, LaporanBulanan, LaporanStatus, SheetPerhitunganData } from '../../../types';
 
@@ -52,6 +57,7 @@ interface FormLaporanModalProps {
   isAdmin: boolean;
   currentUserSchoolId?: string;
   onSave: (data: Omit<LaporanBulanan, 'id' | 'tanggalDiajukan'>, editId?: string) => Promise<void>;
+  onDelete?: (laporan: LaporanBulanan) => void;
   onOpenSheetModal?: (sheetData: SheetPerhitunganData | null, onSaveSheet: (s: SheetPerhitunganData) => void) => void;
 }
 
@@ -66,7 +72,8 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
   existingTahunAjaranList,
   isAdmin,
   currentUserSchoolId,
-  onSave
+  onSave,
+  onDelete
 }) => {
   const [sekolahId, setSekolahId] = useState<string>('');
   const [bulan, setBulan] = useState<string>('September');
@@ -75,6 +82,9 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
     new Date().toISOString().split('T')[0]
   );
   const [statusLaporan, setStatusLaporan] = useState<LaporanStatus>('Diajukan');
+  const [ringkasan, setRingkasan] = useState<string>('');
+  const [linkDokumen, setLinkDokumen] = useState<string>('');
+  const [catatanAdmin, setCatatanAdmin] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Dynamic academic year list starting from 2022/2023 + user added
@@ -131,6 +141,9 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
       });
       setTanggalKirim(initialData.tanggalKirim || initialData.tanggalDiajukan || new Date().toISOString().split('T')[0]);
       setStatusLaporan(initialData.status);
+      setRingkasan(initialData.ringkasan || '');
+      setLinkDokumen(initialData.linkDokumen || '');
+      setCatatanAdmin(initialData.catatanAdmin || '');
       setIsCustomTAMode(false);
     } else {
       const initialSchId = defaultSekolahId || (currentUserSchoolId ? currentUserSchoolId : sekolahList[0]?.id || 'MO004');
@@ -139,6 +152,9 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
       setTahunAjaran(defaultTahunAjaran);
       setTanggalKirim(new Date().toISOString().split('T')[0]);
       setStatusLaporan('Diajukan');
+      setRingkasan('');
+      setLinkDokumen('');
+      setCatatanAdmin('');
       setIsCustomTAMode(false);
     }
   }, [initialData, defaultSekolahId, defaultBulan, defaultTahunAjaran, currentUserSchoolId, sekolahList]);
@@ -223,10 +239,11 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
         tanggalKirim,
         status: statusLaporan,
         kategori: initialData?.kategori || 'Komprehensif',
-        ringkasan: initialData?.ringkasan || `Laporan Bulanan periode ${bulan} ${calculatedYear} TA ${finalTahunAjaran}`,
+        ringkasan: ringkasan.trim() || `Laporan Bulanan periode ${bulan} ${calculatedYear} TA ${finalTahunAjaran}`,
         kendala: initialData?.kendala || '',
         solusi: initialData?.solusi || '',
-        linkDokumen: initialData?.linkDokumen || '',
+        linkDokumen: linkDokumen.trim() || undefined,
+        catatanAdmin: catatanAdmin.trim() || undefined,
         sheetPerhitungan: initialData?.sheetPerhitungan,
       }, initialData?.id);
 
@@ -267,6 +284,19 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
 
         {/* Modal Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5 text-xs">
+          {/* Admin Notice Banner if editing an existing report */}
+          {initialData && isAdmin && (
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+              <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-bold text-amber-950 block">Opsi Admin: Koreksi Data atau Batalkan Laporan</span>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Jika sekolah ini ternyata <strong>belum mengirimkan</strong> laporan namun tertulis sudah kirim, Anda dapat mengubah tanggal/status atau mengklik tombol <strong>Hapus / Batalkan Laporan</strong> di bawah untuk mengembalikan status bulan ini menjadi &quot;Belum Kirim&quot;.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* 1. Nama Sekolah Mitra */}
           <div className="space-y-1.5">
             <label className="flex items-center gap-1.5 font-bold text-slate-700 text-xs">
@@ -460,23 +490,93 @@ export const FormLaporanModal: React.FC<FormLaporanModalProps> = ({
             </div>
           </div>
 
+          {/* 4. Tautan Dokumen (Google Drive / Docs) */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 font-bold text-slate-700 text-xs">
+              <Link2 size={14} className="text-blue-600" />
+              <span>Tautan Dokumen / File Laporan (Google Drive / Docs / PDF)</span>
+            </label>
+            <input
+              id="form-link-dokumen"
+              type="url"
+              value={linkDokumen}
+              onChange={(e) => setLinkDokumen(e.target.value)}
+              placeholder="https://docs.google.com/... atau https://drive.google.com/..."
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+            />
+            <span className="text-[10px] text-slate-400 block">
+              Opsional. Masukkan tautan berkas laporan asli jika sudah dikirimkan oleh sekolah.
+            </span>
+          </div>
+
+          {/* 5. Ringkasan / Keterangan Pelaporan */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 font-bold text-slate-700 text-xs">
+              <AlignLeft size={14} className="text-blue-600" />
+              <span>Ringkasan / Keterangan Singkat</span>
+            </label>
+            <textarea
+              id="form-ringkasan"
+              rows={2}
+              value={ringkasan}
+              onChange={(e) => setRingkasan(e.target.value)}
+              placeholder="Misal: Laporan kegiatan bulanan, kurikulum MenDAKI, dan rekapitulasi data siswa"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-xs"
+            />
+          </div>
+
+          {/* 6. Catatan Admin Mitra Office (Khusus Admin) */}
+          {isAdmin && (
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 font-bold text-blue-900 text-xs">
+                <Sparkles size={14} className="text-blue-600" />
+                <span>Catatan / Umpan Balik Mitra Office</span>
+              </label>
+              <textarea
+                id="form-catatan-admin"
+                rows={2}
+                value={catatanAdmin}
+                onChange={(e) => setCatatanAdmin(e.target.value)}
+                placeholder="Catatan peninjauan, catatan revisi, atau instruksi tindak lanjut..."
+                className="w-full px-3.5 py-2 bg-blue-50/50 border border-blue-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-xs"
+              />
+            </div>
+          )}
+
           {/* Modal Actions */}
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold transition cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold shadow-md shadow-blue-600/30 transition flex items-center gap-2 cursor-pointer disabled:opacity-60"
-            >
-              <Send size={14} />
-              <span>{initialData ? 'Simpan Perubahan' : 'Kirim Laporan'}</span>
-            </button>
+          <div className="flex items-center justify-between gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
+            {initialData && isAdmin && onDelete ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onDelete(initialData);
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-200 transition flex items-center gap-1.5 cursor-pointer text-xs active:scale-95"
+                title="Hapus atau batalkan data laporan ini jika sekolah ternyata belum kirim"
+              >
+                <Trash2 size={14} />
+                <span>Hapus / Batalkan Laporan</span>
+              </button>
+            ) : <div />}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold shadow-md shadow-blue-600/30 transition flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                <Send size={14} />
+                <span>{initialData ? 'Simpan Perubahan' : 'Kirim Laporan'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

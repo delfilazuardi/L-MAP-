@@ -3,6 +3,7 @@
  */
 import { UserAccount, UserRole, UserAccess, SekolahMitra, Invoice, Pembayaran, InvoiceKategori, InvoiceStatus, InvoiceOperationalStatus, PembayaranStatus } from '../types';
 import { HISTORICAL_TRANSACTIONS_SINCE_2022, convertHistoricalToCSV } from './historicalSheetData';
+import { normalizeTahunAjaran } from './invoiceUtils';
 
 export interface SheetSyncResult {
   success: boolean;
@@ -267,9 +268,10 @@ export function parseInvoicePaymentSheetData(csvOrTsvText: string): {
     const kodeMitra = findValue(['kode_mitra', 'kode mitra', 'mitra_id', 'id mitra', 'mitra id', 'id_user', 'id sekolah']) || 'MO004';
     const bulan = findValue(['bulan', 'periode bulan', 'month']) || 'Juli';
     const tahunStr = findValue(['tahun', 'year']) || '2026';
-    const tahunAjaran = findValue(['tahun_ajaran', 'tahun ajaran', 'ta', 'periode']) || '2026/2027';
-    const kategoriRaw = findValue(['kategori', 'kategori tagihan', 'jenis tagihan', 'type']) || 'Renewal Fee';
+    const rawTA = findValue(['tahun_ajaran', 'tahun ajaran', 'ta', 'periode']);
     const tanggalKirim = findValue(['tanggal_kirim', 'tanggal kirim', 'tgl kirim', 'tanggal terbit', 'tgl terbit']) || '2026-07-01';
+    const tahunAjaran = normalizeTahunAjaran(rawTA, tanggalKirim) || '2026/2027';
+    const kategoriRaw = findValue(['kategori', 'kategori tagihan', 'jenis tagihan', 'type']) || 'Renewal Fee';
     const tanggalDibayar = findValue(['tanggal_dibayar', 'tanggal dibayar', 'tgl bayar', 'tanggal bayar', 'tgl dibayar']);
     
     const tagihanFullRaw = findValue(['tagihan_full', 'tagihan full', 'tagihan bruto', 'nominal full', 'full']);

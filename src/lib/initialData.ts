@@ -1354,6 +1354,7 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     id: 'PRG-2026-001',
     jenis: 'Visitasi',
     judul: 'Visitasi Benchmarking Pembelajaran Sentra & Inklusi Ramah Anak',
+    tahunAjaran: '2026/2027',
     mitraId: 'MO004',
     namaSekolah: 'Al-Falah Depok',
     tanggalMulai: '2026-10-06',
@@ -1365,15 +1366,198 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     linkSheet: 'https://docs.google.com/spreadsheets/d/1al-falah-rundown-visitasi-2026/edit',
     linkPdf: 'https://drive.google.com/file/d/1al-falah-surat-tugas-visitasi.pdf/view',
     linkCanva: 'https://www.canva.com/design/DAF-presentasi-alfalah-visitasi/view',
+    flyerUrl: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80',
+    flyerCaption: 'Brosur Resmi Visitasi Benchmarking Tata Ruang Sentra & Inklusi Ramah Anak Al-Falah Depok 2026',
     status: 'Disetujui',
-    catatanAdmin: 'Pengajuan disetujui. Tim Mitra Office telah menyiapkan ruangan sentra dan mentor pendamping lapangan.',
+    catatanAdmin: 'Pengajuan disetujui. Tim Mitra Office telah menyiapkan ruangan sentra, materi observasi, dan mentor pendamping lapangan.',
     tanggalPengajuan: '2026-09-12',
     updatedAt: '2026-09-14',
+    dokumenSekolah: [
+      {
+        id: 'DOK-SEK-001',
+        nama: 'MoU Kerjasama Visitasi & Supervisi No. 042/L-MAP/MOU/2026',
+        tipe: 'MoU',
+        url: 'https://docs.google.com/document/d/1al-falah-mou-visitasi/edit',
+        tanggal: '2026-09-15',
+        keterangan: 'Nota kesepahaman resmi penyelenggaraan visitasi kampus Lazuardi Cinere.'
+      },
+      {
+        id: 'DOK-SEK-002',
+        nama: 'Surat Tugas Peserta Visitasi dari Yayasan Al-Falah Depok',
+        tipe: 'Surat Tugas',
+        url: 'https://drive.google.com/file/d/1al-falah-surat-tugas-visitasi.pdf/view',
+        tanggal: '2026-09-16',
+        keterangan: 'Daftar resmi 7 guru dan kepala sekolah delegasi visitasi.'
+      },
+      {
+        id: 'DOK-SEK-003',
+        nama: 'Panduan Pelaksanaan & SOP Kunjungan Visitasi Kampus Lazuardi',
+        tipe: 'Panduan',
+        url: 'https://drive.google.com/file/d/1panduan-sop-visitasi-lazuardi.pdf/view',
+        tanggal: '2026-09-18',
+        keterangan: 'Panduan observasi kelas sentra dan tata tertib selama kunjungan.'
+      },
+      {
+        id: 'DOK-SEK-004',
+        nama: 'Piagam Kemitraan Sekolah Pengembang Sentra Welas Asih 2026',
+        tipe: 'Sertifikat Sekolah',
+        url: 'https://drive.google.com/file/d/1piagam-sekolah-pengembang-alfalah.pdf/view',
+        tanggal: '2026-10-07',
+        keterangan: 'Piagam apresiasi resmi dari Lazuardi Mitra Office.'
+      }
+    ],
+    pesertaMagang: [
+      {
+        id: 'PESERTA-001',
+        nama: 'Rina Marlina, S.Pd',
+        peran: 'Kepala Sekolah Al-Falah Depok',
+        email: 'rina.marlina@alfalahdepok.sch.id',
+        telepon: '0812-9876-5431',
+        dokumenPribadi: [
+          {
+            id: 'DP-001',
+            nama: 'Sertifikat Partisipasi Kepemimpinan Sekolah Inklusi & Sentra',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-rina-marlina.pdf/view',
+            tanggal: '2026-10-07',
+            keterangan: 'Sertifikat kepesertaan studi tiru pimpinan.'
+          },
+          {
+            id: 'DP-002',
+            nama: 'Lembar Refleksi Pimpinan & Analisis Kebutuhan Lembaga',
+            tipe: 'Logbook',
+            url: 'https://docs.google.com/document/d/1lembar-refleksi-rina/edit',
+            tanggal: '2026-10-07',
+            keterangan: 'Rangkuman temuan strategis pasca visitasi.'
+          }
+        ]
+      },
+      {
+        id: 'PESERTA-002',
+        nama: 'Dewi Anggraini, S.Pd',
+        peran: 'Guru Koordinator Sentra Balok',
+        email: 'dewi.sentra@alfalahdepok.sch.id',
+        telepon: '0813-1122-3344',
+        dokumenPribadi: [
+          {
+            id: 'DP-003',
+            nama: 'Sertifikat Observasi Manajemen Tata Ruang Sentra',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-dewi-sentra.pdf/view',
+            tanggal: '2026-10-07',
+            keterangan: 'Sertifikat observasi sentra balok dan loose parts.'
+          },
+          {
+            id: 'DP-004',
+            nama: 'Portofolio Layout Desain Ruang Sentra Balok',
+            tipe: 'Portofolio',
+            url: 'https://www.canva.com/design/DAF-portofolio-sentra-dewi/view',
+            tanggal: '2026-10-08',
+            keterangan: 'Sketsa tata letak rak balok dan zonasi bermain.'
+          }
+        ]
+      },
+      {
+        id: 'PESERTA-003',
+        nama: 'Muhammad Ilham, S.Pd',
+        peran: 'Shadow Teacher / Guru Pendamping Khusus',
+        email: 'ilham.gp@alfalahdepok.sch.id',
+        telepon: '0815-5566-7788',
+        dokumenPribadi: [
+          {
+            id: 'DP-005',
+            nama: 'Sertifikat Kunjungan Supervisi Kelas Inklusi Ramah Anak',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-ilham-shadow.pdf/view',
+            tanggal: '2026-10-07',
+            keterangan: 'Apresiasi observasi praktik pendampingan siswa inklusi.'
+          },
+          {
+            id: 'DP-006',
+            nama: 'Lembar Penilaian & Umpan Balik Observasi Inklusi',
+            tipe: 'Penilaian',
+            url: 'https://docs.google.com/spreadsheets/d/1penilaian-ilham-lazuardi/edit',
+            tanggal: '2026-10-07',
+            keterangan: 'Evaluasi kesiapan strategi diferensiasi belajar.'
+          }
+        ]
+      }
+    ],
+    laporanProgram: [
+      {
+        id: 'LAP-001',
+        judul: 'Laporan Komprehensif Hasil Visitasi & Observasi Tata Kelola Sentra Kampus Cinere',
+        tipe: 'Laporan Visitasi',
+        penulis: 'Tim Evaluator Mitra Office (Delfi Dwi Hermawati)',
+        tanggal: '2026-10-08',
+        ringkasan: 'Visitasi berjalan lancar dengan 7 peserta. Ditemukan antusiasme tinggi pada sentra balok dan integrasi budaya welas asih. Tindak lanjut penyusunan layout sentra sedang berlangsung.',
+        url: 'https://docs.google.com/document/d/1laporan-hasil-visitasi-alfalah-2026/edit',
+        status: 'Disetujui'
+      },
+      {
+        id: 'LAP-002',
+        judul: 'Executive Summary Evaluasi Keselarasan Mutu MenDAKI Al-Falah Depok',
+        tipe: 'Evaluasi Mitra',
+        penulis: 'Kepala Bagian Mitra Office (Anita Sulastri)',
+        tanggal: '2026-10-09',
+        ringkasan: 'Rekomendasi percepatan pelatihan guru pembimbing khusus dan standarisasi media loose parts.',
+        url: 'https://drive.google.com/file/d/1exec-summary-alfalah-mendaki.pdf/view',
+        status: 'Final'
+      }
+    ],
+    agendaGapAnalysis: [
+      {
+        id: 'GAP-001',
+        topik: 'Penataan Ruang & Media Sentra Balok (Loose Parts)',
+        aspek: 'Kurikulum & Pembelajaran',
+        tanggal: '2026-10-07',
+        kondisiAwal: 'Ruang kelas belum memiliki zonasi jelas antara area balok mikro dan makro. Rasio balok per anak masih 1:3.',
+        standarLazuardi: 'Tersedia minimal 5 sentra aktif dengan klasifikasi media loose parts terstandar dan rasio balok 1:1 sesuai kapasitas murid.',
+        gapSelisih: 'Kekurangan modul partisi sentra dan set balok kayu alami bersertifikasi aman anak sekitar 40%.',
+        rencanaAksi: 'Pengadaan unit blocks bertahap, redesign tata ruang ruang kelas sentra, dan workshop penataan media sebelum awal November 2026.',
+        pic: 'Dewi Anggraini, S.Pd (Koordinator Sentra)',
+        targetSelesai: '2026-11-15',
+        status: 'Dalam Proses',
+        dokumenUrl: 'https://docs.google.com/spreadsheets/d/1gap-analysis-sentra-alfalah/edit',
+        catatan: 'Desain layout ruangan telah disetujui Mitra Office pada tanggal 10 Oktober 2026.'
+      },
+      {
+        id: 'GAP-002',
+        topik: 'Standarisasi Penyusunan Individualized Education Program (IEP)',
+        aspek: 'Inklusi & Welas Asih',
+        tanggal: '2026-10-07',
+        kondisiAwal: 'Format IEP masih bersifat deskriptif umum semesteran tanpa target capaian mingguan yang terukur.',
+        standarLazuardi: 'Format IEP Lazuardi berbasis continuous weekly assessment dengan milestone capaian sensori, motorik, dan komunikasi.',
+        gapSelisih: 'Instrumen asesmen diagnostik awal belum menggunakan rubrik diferensiasi Lazuardi.',
+        rencanaAksi: 'Adopsi form IEP Lazuardi, pendampingan psikolog pusat, dan supervisi mingguan bersama mentor Mitra Office.',
+        pic: 'Muhammad Ilham, S.Pd (Shadow Teacher)',
+        targetSelesai: '2026-10-25',
+        status: 'Terpenuhi',
+        dokumenUrl: 'https://docs.google.com/document/d/1iep-format-alfalah-verified/edit',
+        catatan: 'Dokumen template IEP resmi telah diimplementasikan untuk seluruh siswa berkebutuhan khusus.'
+      },
+      {
+        id: 'GAP-003',
+        topik: 'Fasilitas Calming Corner & Ruang Sensori Regulasi Diri',
+        aspek: 'Sarana & Fasilitas',
+        tanggal: '2026-10-07',
+        kondisiAwal: 'Belum ada area khusus di tiap ruang kelas untuk menenangkan siswa ketika mengalami tantrum atau overstimulasi.',
+        standarLazuardi: 'Setiap ruang kelas inklusi wajib memiliki Calming Corner dengan bean bag, headphone peredam suara, dan visual feeling chart.',
+        gapSelisih: 'Fasilitas sensory tools masih belum tersedia di 4 ruang kelas utama.',
+        rencanaAksi: 'Alokasi anggaran perlengkapan sensory kit dan pelatihan guru piket untuk pemanfaatan calming space.',
+        pic: 'Rina Marlina, S.Pd',
+        targetSelesai: '2026-11-30',
+        status: 'Belum Selesai',
+        dokumenUrl: 'https://drive.google.com/file/d/1spesifikasi-calming-corner.pdf/view',
+        catatan: 'Menunggu proses pengadaan modul perlengkapan dari vendor rekanan yayasan.'
+      }
+    ]
   },
   {
     id: 'PRG-2026-002',
     jenis: 'Magang',
     judul: 'Program Magang Guru Pendamping Khusus (Shadow Teacher) & Diferensiasi',
+    tahunAjaran: '2026/2027',
     mitraId: 'MO008',
     namaSekolah: 'Ibnu Sina',
     tanggalMulai: '2026-10-12',
@@ -1385,15 +1569,164 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     linkSheet: 'https://docs.google.com/spreadsheets/d/1ibnu-sina-presensi-magang-sheet/edit',
     linkPdf: 'https://drive.google.com/file/d/1ibnu-sina-surat-pengantar-magang.pdf/view',
     linkCanva: 'https://www.canva.com/design/DAF-magang-guru-ibnusina/view',
+    flyerUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=80',
+    flyerCaption: 'Brosur Program Magang Intensif Guru Pendamping Khusus (Shadow Teacher) Angkatan VIII Lazuardi',
     status: 'Sedang Berjalan',
-    catatanAdmin: 'Peserta telah mengikuti briefing orientasi hari pertama. Mentor: Ibu Delfi Dwi Hermawati.',
+    catatanAdmin: 'Peserta telah mengikuti briefing orientasi hari pertama. Mentor penanggung jawab: Ibu Delfi Dwi Hermawati.',
     tanggalPengajuan: '2026-09-05',
     updatedAt: '2026-09-18',
+    dokumenSekolah: [
+      {
+        id: 'DOK-SEK-010',
+        nama: 'Perjanjian Pelaksanaan Magang Pendidik No. 018/MAGANG/L-MAP/2026',
+        tipe: 'MoU',
+        url: 'https://docs.google.com/document/d/1mou-magang-ibnusina/edit',
+        tanggal: '2026-09-20',
+        keterangan: 'Perjanjian kerjasama magang guru antara Ibnu Sina dan Lazuardi Mitra Office.'
+      },
+      {
+        id: 'DOK-SEK-011',
+        nama: 'Surat Pengantar & Penugasan Magang Resmi Sekolah Ibnu Sina',
+        tipe: 'Surat Tugas',
+        url: 'https://drive.google.com/file/d/1surat-tugas-ibnusina-magang.pdf/view',
+        tanggal: '2026-09-25',
+        keterangan: 'Penugasan 2 guru pendamping untuk menjalani magang intensif di Kampus Cinere.'
+      },
+      {
+        id: 'DOK-SEK-012',
+        nama: 'Buku Pedoman Praktik Magang Guru & Shadow Teacher Lazuardi',
+        tipe: 'Panduan',
+        url: 'https://drive.google.com/file/d/1buku-pedoman-magang-shadow-teacher.pdf/view',
+        tanggal: '2026-10-01',
+        keterangan: 'Panduan kurikulum magang, indikator kompetensi, dan rubrik asesmen.'
+      }
+    ],
+    pesertaMagang: [
+      {
+        id: 'PESERTA-010',
+        nama: 'Fathur Rahman, S.Pd',
+        peran: 'Guru Pendamping Khusus (Inklusi)',
+        email: 'fathur.shadow@ibnusina.sch.id',
+        telepon: '0812-4455-6677',
+        dokumenPribadi: [
+          {
+            id: 'DP-010',
+            nama: 'Sertifikat Kelulusan Magang Praktik Pendampingan Siswa Inklusi',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-fathur-magang.pdf/view',
+            tanggal: '2026-10-24',
+            keterangan: 'Predikat kelulusan: Sangat Baik (A). Divalidasi oleh Tim Asesor Lazuardi.'
+          },
+          {
+            id: 'DP-011',
+            nama: 'Kartu Tanda Peserta Magang Resmi Lazuardi ID-MG-2026-08',
+            tipe: 'Surat Tugas',
+            url: 'https://drive.google.com/file/d/1idcard-fathur-magang.pdf/view',
+            tanggal: '2026-10-12',
+            keterangan: 'Kartu pengenal akses lingkungan sekolah dan laboratorium belajar.'
+          },
+          {
+            id: 'DP-012',
+            nama: 'Logbook Harian Aktivitas Pendampingan Siswa Sensori',
+            tipe: 'Logbook',
+            url: 'https://docs.google.com/spreadsheets/d/1logbook-fathur-harian/edit',
+            tanggal: '2026-10-18',
+            keterangan: 'Catatan observasi perilaku siswa dan respon intervensi harian.'
+          },
+          {
+            id: 'DP-013',
+            nama: 'Lembar Penilaian Kinerja Magang dari Mentor Senior Lazuardi',
+            tipe: 'Penilaian',
+            url: 'https://docs.google.com/document/d/1penilaian-kinerja-fathur/edit',
+            tanggal: '2026-10-24',
+            keterangan: 'Skor total evaluasi kompetensi pedagogik inklusi: 94/100.'
+          }
+        ]
+      },
+      {
+        id: 'PESERTA-011',
+        nama: 'Siti Nurhaliza, S.Psi',
+        peran: 'Konselor Tumbuh Kembang & Shadow Teacher',
+        email: 'siti.nurhaliza@ibnusina.sch.id',
+        telepon: '0813-7788-9900',
+        dokumenPribadi: [
+          {
+            id: 'DP-014',
+            nama: 'Sertifikat Kompetensi Asesmen Sensori & Modifikasi Perilaku',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-siti-nurhaliza.pdf/view',
+            tanggal: '2026-10-24',
+            keterangan: 'Lisensi kompetensi asesmen sensori anak berkebutuhan khusus.'
+          },
+          {
+            id: 'DP-015',
+            nama: 'Portofolio Modul Modifikasi Perilaku & Intervensi Tantrum',
+            tipe: 'Portofolio',
+            url: 'https://www.canva.com/design/DAF-portofolio-siti-nurhaliza/view',
+            tanggal: '2026-10-22',
+            keterangan: 'Kompilasi studi kasus dan solusi penanganan emosi anak.'
+          },
+          {
+            id: 'DP-016',
+            nama: 'Logbook Pendampingan Konseling Siswa Berkelanjutan',
+            tipe: 'Logbook',
+            url: 'https://docs.google.com/spreadsheets/d/1logbook-siti-konseling/edit',
+            tanggal: '2026-10-20',
+            keterangan: 'Catatan harian konseling dan komunikasi dengan orang tua.'
+          }
+        ]
+      }
+    ],
+    laporanProgram: [
+      {
+        id: 'LAP-010',
+        judul: 'Laporan Perkembangan Mingguan Program Magang Shadow Teacher Periode Oktober 2026',
+        tipe: 'Laporan Akhir Magang',
+        penulis: 'Delfi Dwi Hermawati (Officer Pendamping)',
+        tanggal: '2026-10-18',
+        ringkasan: 'Peserta menunjukkan progres signifikan dalam penyusunan rubrik IEP mingguan dan penguasaan teknik sensory integration.',
+        url: 'https://docs.google.com/document/d/1laporan-mingguan-magang-ibnusina/edit',
+        status: 'Final'
+      }
+    ],
+    agendaGapAnalysis: [
+      {
+        id: 'GAP-010',
+        topik: 'Keterampilan Teknik De-eskalasi & Regulasi Emosi Siswa Inklusi',
+        aspek: 'SDM & Guru',
+        tanggal: '2026-10-14',
+        kondisiAwal: 'Guru shadow belum menguasai teknik de-eskalasi verbal serta protokol sensory break saat anak mengalami over-stimulasi.',
+        standarLazuardi: 'Seluruh shadow teacher tersertifikasi dalam protokol de-eskalasi ramah anak dengan pendekatan welas asih.',
+        gapSelisih: 'Kesenjangan pemahaman penanganan krisis perilaku siswa berkebutuhan khusus sekitar 35%.',
+        rencanaAksi: 'Simulasi roleplay kasus nyata di kelas Lazuardi dan penyusunan kartu isyarat visual (Visual Cue Cards).',
+        pic: 'Siti Nurhaliza, S.Psi',
+        targetSelesai: '2026-10-22',
+        status: 'Terpenuhi',
+        dokumenUrl: 'https://docs.google.com/document/d/1protokol-deeskalasi-ibnusina/edit',
+        catatan: 'Peserta telah lulus ujian simulasi de-eskalasi dengan predikat Sangat Baik.'
+      },
+      {
+        id: 'GAP-011',
+        topik: 'Digitalisasi Daily Communication Book dengan Orang Tua Siswa',
+        aspek: 'Tata Kelola',
+        tanggal: '2026-10-16',
+        kondisiAwal: 'Catatan harian perkembangan anak masih ditulis tangan pada buku fisik yang rawan hilang atau terlambat dibaca.',
+        standarLazuardi: 'Komunikasi perkembangan harian terintegrasi sistem digital L-MAP atau form online terstruktur.',
+        gapSelisih: 'Orang tua siswa di Ibnu Sina belum mendapatkan update harian yang terdokumentasi rapi.',
+        rencanaAksi: 'Adopsi Google Form harian terintegrasi Google Sheet rekap perkembangan anak untuk kemitraan orang tua.',
+        pic: 'Fathur Rahman, S.Pd',
+        targetSelesai: '2026-11-05',
+        status: 'Dalam Proses',
+        dokumenUrl: 'https://docs.google.com/spreadsheets/d/1form-komunikasi-ortu-ibnusina/edit',
+        catatan: 'Uji coba form digital pada 3 orang tua siswa dimulai pekan depan.'
+      }
+    ]
   },
   {
     id: 'PRG-2026-003',
     jenis: 'Visitasi',
     judul: 'Visitasi Supervisi Sarana Laboratorium Sains & Kurikulum Cambridge',
+    tahunAjaran: '2026/2027',
     mitraId: 'MO006',
     namaSekolah: 'Cordova',
     tanggalMulai: '2026-10-20',
@@ -1404,15 +1737,83 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     linkDocs: 'https://docs.google.com/document/d/1cordova-tor-lab-sains-visitasi/edit',
     linkSheet: 'https://docs.google.com/spreadsheets/d/1cordova-rundown-visitasi-lab/edit',
     linkPdf: 'https://drive.google.com/file/d/1cordova-proposal-visitasi.pdf/view',
+    flyerUrl: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=800&auto=format&fit=crop&q=80',
+    flyerCaption: 'Flyer Supervisi Laboratorium Sains Terpadu & Penerapan Kurikulum Cambridge SMP-SMA Cordova',
     status: 'Diajukan',
     catatanAdmin: 'Menunggu konfirmasi jadwal ketersediaan Kepala Laboratorium Lazuardi.',
     tanggalPengajuan: '2026-09-18',
     updatedAt: '2026-09-18',
+    dokumenSekolah: [
+      {
+        id: 'DOK-SEK-020',
+        nama: 'Proposal Pengajuan Supervisi Laboratorium Sains Cordova',
+        tipe: 'Surat Tugas',
+        url: 'https://docs.google.com/document/d/1proposal-supervisi-lab-cordova/edit',
+        tanggal: '2026-09-18',
+        keterangan: 'Dokumen pengajuan visitasi kelayakan fasilitas laboratorium.'
+      },
+      {
+        id: 'DOK-SEK-021',
+        nama: 'Panduan Standar Keselamatan Laboratorium (K3) Lazuardi',
+        tipe: 'Panduan',
+        url: 'https://drive.google.com/file/d/1panduan-k3-lab-lazuardi.pdf/view',
+        tanggal: '2026-09-20',
+        keterangan: 'SOP pengolahan limbah praktikum dan alat proteksi diri laboratorium.'
+      }
+    ],
+    pesertaMagang: [
+      {
+        id: 'PESERTA-020',
+        nama: 'Ahmad Zaki',
+        peran: 'Koordinator Kurikulum Cordova',
+        email: 'ahmad.zaki@cordova.sch.id',
+        dokumenPribadi: [
+          {
+            id: 'DP-020',
+            nama: 'Instrumen Pra-Supervisi Kurikulum Cambridge Sains',
+            tipe: 'Logbook',
+            url: 'https://docs.google.com/spreadsheets/d/1instrumen-pra-supervisi-cordova/edit',
+            tanggal: '2026-09-19',
+            keterangan: 'Checklist kesiapan silabus praktikum fisika & biologi.'
+          }
+        ]
+      }
+    ],
+    laporanProgram: [
+      {
+        id: 'LAP-020',
+        judul: 'Hasil Penilaian Awal Kelayakan Laboratorium Sains Cordova',
+        tipe: 'Laporan Visitasi',
+        penulis: 'Koordinator Fasilitas Sains Lazuardi',
+        tanggal: '2026-09-22',
+        ringkasan: 'Perlu penambahan lemari asam (fume hood) dan eyewash station sebelum sertifikasi praktikum sains kurikulum internasional.',
+        url: 'https://docs.google.com/document/d/1hasil-penilaian-lab-cordova/edit',
+        status: 'Draft'
+      }
+    ],
+    agendaGapAnalysis: [
+      {
+        id: 'GAP-020',
+        topik: 'Standarisasi Alat Proteksi Diri (APD) & Eye Wash Station Lab',
+        aspek: 'Sarana & Fasilitas',
+        tanggal: '2026-09-20',
+        kondisiAwal: 'Lab sains Cordova belum memiliki emergency eye wash dan shower pembilas zat kimia.',
+        standarLazuardi: 'Wajib memiliki Eye Wash Station dan lemari penyimpanan bahan kimia berlabel B3 terstandar.',
+        gapSelisih: 'Ketiadaan sistem keselamatan darurat di laboratorium kimia.',
+        rencanaAksi: 'Instalasi kran eye wash darurat dan pengadaan jas lab antistatis.',
+        pic: 'Ahmad Zaki (Koordinator Kurikulum)',
+        targetSelesai: '2026-11-20',
+        status: 'Dalam Proses',
+        dokumenUrl: 'https://drive.google.com/file/d/1spesifikasi-eyewash-lab.pdf/view',
+        catatan: 'Vendor instalasi sanitasi lab sedang melakukan survei lokasi.'
+      }
+    ]
   },
   {
     id: 'PRG-2026-004',
     jenis: 'Magang',
     judul: 'Magang Tata Kelola Administrasi Sekolah & Manajemen Keuangan L-MAP',
+    tahunAjaran: '2026/2027',
     mitraId: 'MO005',
     namaSekolah: 'Al-Falah Klaten',
     tanggalMulai: '2026-09-01',
@@ -1423,15 +1824,91 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     linkDocs: 'https://docs.google.com/document/d/1klaten-laporan-magang-keuangan/edit',
     linkSheet: 'https://docs.google.com/spreadsheets/d/1klaten-logbook-magang-adm/edit',
     linkCanva: 'https://www.canva.com/design/DAF-klaten-portofolio-magang/view',
+    flyerUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&auto=format&fit=crop&q=80',
+    flyerCaption: 'Flyer Pelatihan & Magang Tata Kelola Administrasi Finansial Sekolah Mitra L-MAP 2026',
     status: 'Selesai',
     catatanAdmin: 'Magang selesai dengan hasil evaluasi memuaskan. Sertifikat magang resmi telah diterbitkan.',
     tanggalPengajuan: '2026-08-20',
     updatedAt: '2026-09-15',
+    dokumenSekolah: [
+      {
+        id: 'DOK-SEK-030',
+        nama: 'Berita Acara Kerjasama Magang Administrasi & Keuangan',
+        tipe: 'MoU',
+        url: 'https://docs.google.com/document/d/1ba-magang-keuangan-klaten/edit',
+        tanggal: '2026-08-25',
+        keterangan: 'Persetujuan program pendampingan tata kelola keuangan sekolah mitra.'
+      },
+      {
+        id: 'DOK-SEK-031',
+        nama: 'Surat Keterangan Selesai Magang Administrasi Sekolah Al-Falah Klaten',
+        tipe: 'Sertifikat Sekolah',
+        url: 'https://drive.google.com/file/d/1surat-selesai-magang-klaten.pdf/view',
+        tanggal: '2026-09-15',
+        keterangan: 'Sertifikat apresiasi institusi sekolah mitra tertib administrasi.'
+      }
+    ],
+    pesertaMagang: [
+      {
+        id: 'PESERTA-030',
+        nama: 'Nurul Hidayah',
+        peran: 'Staff Administrasi Keuangan',
+        email: 'nurul.keuangan@alfalahklaten.sch.id',
+        dokumenPribadi: [
+          {
+            id: 'DP-030',
+            nama: 'Sertifikat Kelulusan Pelatihan Sistem Keuangan L-MAP No. CERT-MG-2026-04',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-nurul-hidayah.pdf/view',
+            tanggal: '2026-09-15',
+            keterangan: 'Skor Uji Kompetensi Rekonsiliasi: 96/100 (Predikat: Sangat Memuaskan).'
+          },
+          {
+            id: 'DP-031',
+            nama: 'Logbook Praktik Magang Administrasi 14 Hari',
+            tipe: 'Logbook',
+            url: 'https://docs.google.com/spreadsheets/d/1logbook-nurul-keuangan/edit',
+            tanggal: '2026-09-14',
+            keterangan: 'Rekapitulasi aktivitas pembukuan kas, billing invoice, dan pelaporan.'
+          }
+        ]
+      }
+    ],
+    laporanProgram: [
+      {
+        id: 'LAP-030',
+        judul: 'Laporan Akhir Evaluasi Magang Tata Kelola Keuangan & Sistem Pelaporan L-MAP',
+        tipe: 'Laporan Akhir Magang',
+        penulis: 'Staff Keuangan Mitra Office (Anita Sulastri)',
+        tanggal: '2026-09-15',
+        ringkasan: 'Staff menunjukkan pemahaman prima atas alur verifikasi invoice dan berhasil mengimplementasikan rekonsiliasi kas online tanpa kendala.',
+        url: 'https://docs.google.com/document/d/1laporan-akhir-magang-nurul/edit',
+        status: 'Disetujui'
+      }
+    ],
+    agendaGapAnalysis: [
+      {
+        id: 'GAP-030',
+        topik: 'Digitalisasi Rekonsiliasi Kas Bank & Bukti Transfer Mitra',
+        aspek: 'Tata Kelola',
+        tanggal: '2026-09-05',
+        kondisiAwal: 'Pencocokan slip setoran bank dan invoice masih dilakukan secara manual menggunakan buku kas fisik.',
+        standarLazuardi: 'Seluruh pembayaran terverifikasi otomatis melalui portal upload bukti bayar L-MAP.',
+        gapSelisih: 'Keterlambatan verifikasi tagihan dan tanda terima kwitansi hingga 7 hari kerja.',
+        rencanaAksi: 'Pemanfaatan modul invoice & rekonsiliasi otomatis L-MAP oleh staf keuangan sekolah.',
+        pic: 'Nurul Hidayah',
+        targetSelesai: '2026-09-14',
+        status: 'Terpenuhi',
+        dokumenUrl: 'https://docs.google.com/spreadsheets/d/1sop-rekonsiliasi-klaten/edit',
+        catatan: 'Waktu rekonsiliasi kas berhasil dipangkas dari 7 hari menjadi di bawah 1 jam.'
+      }
+    ]
   },
   {
     id: 'PRG-2026-005',
     jenis: 'Training of Trainers',
     judul: 'Training of Trainers (ToT): Master Trainer Kurikulum Sentra & Compassionate Learning',
+    tahunAjaran: '2026/2027',
     mitraId: 'MO004',
     namaSekolah: 'Al-Falah Depok',
     tanggalMulai: '2026-10-28',
@@ -1443,10 +1920,135 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     linkSheet: 'https://docs.google.com/spreadsheets/d/1tot-evaluasi-kompetensi-trainer/edit',
     linkPdf: 'https://drive.google.com/file/d/1tot-sertifikat-silabus-trainer.pdf/view',
     linkCanva: 'https://www.canva.com/design/DAF-tot-slide-modul-master/view',
+    flyerUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&auto=format&fit=crop&q=80',
+    flyerCaption: 'Flyer Training of Trainers (ToT): Master Trainer Lisensi Pembelajaran Sentra & Welas Asih Lazuardi',
     status: 'Disetujui',
     catatanAdmin: 'Pengajuan ToT telah diverifikasi. Modul pelatihan dan narasumber pusat telah dijadwalkan.',
     tanggalPengajuan: '2026-09-25',
     updatedAt: '2026-09-28',
+    dokumenSekolah: [
+      {
+        id: 'DOK-SEK-040',
+        nama: 'MoU Program Sertifikasi Master Trainer Lazuardi 2026/2027',
+        tipe: 'MoU',
+        url: 'https://docs.google.com/document/d/1mou-tot-alfalah/edit',
+        tanggal: '2026-09-28',
+        keterangan: 'Kesepakatan pembinaan master trainer internal sekolah mitra.'
+      },
+      {
+        id: 'DOK-SEK-041',
+        nama: 'Modul Lengkap ToT: Compassionate Pedagogy & Facilitation Skills',
+        tipe: 'Panduan',
+        url: 'https://drive.google.com/file/d/1modul-tot-compassionate-pedagogy.pdf/view',
+        tanggal: '2026-10-01',
+        keterangan: 'Buku pegangan modul master trainer untuk fasilitasi guru baru.'
+      }
+    ],
+    pesertaMagang: [
+      {
+        id: 'PESERTA-040',
+        nama: 'Hj. Siti Aminah, M.Pd',
+        peran: 'Master Trainer Utama / Pimpinan',
+        email: 'kepsek@alfalahdepok.sch.id',
+        dokumenPribadi: [
+          {
+            id: 'DP-040',
+            nama: 'Sertifikat Lisensi Master Trainer Kurikulum Sentra Welas Asih',
+            tipe: 'Sertifikat',
+            url: 'https://drive.google.com/file/d/1sertifikat-siti-aminah-trainer.pdf/view',
+            tanggal: '2026-10-30',
+            keterangan: 'Lisensi resmi fasilitator internal berstandar Lazuardi.'
+          }
+        ]
+      }
+    ],
+    laporanProgram: [
+      {
+        id: 'LAP-040',
+        judul: 'Laporan Verifikasi Kelayakan Sertifikasi Master Trainer Al-Falah Depok',
+        tipe: 'Laporan ToT',
+        penulis: 'Tim Akademik Mitra Office',
+        tanggal: '2026-09-29',
+        ringkasan: 'Peserta memenuhi seluruh prasyarat jam terbang mengajar dan siap menjalani tahapan micro-teaching.',
+        url: 'https://docs.google.com/document/d/1laporan-kelayakan-tot/edit',
+        status: 'Disetujui'
+      }
+    ],
+    agendaGapAnalysis: [
+      {
+        id: 'GAP-040',
+        topik: 'Kemandirian Fasilitasi Pelatihan In-House Guru Baru',
+        aspek: 'SDM & Guru',
+        tanggal: '2026-09-28',
+        kondisiAwal: 'Sekolah mitra masih 100% mendatangkan narasumber eksternal setiap kali ada pelatihan guru baru.',
+        standarLazuardi: 'Minimal 2 certified master trainer mandiri yang mampu menyelenggarakan in-house training standar Lazuardi.',
+        gapSelisih: 'Ketergantungan narasumber pusat masih tinggi.',
+        rencanaAksi: 'Uji simulasi micro-teaching internal dan pendampingan pembuatan materi presentasi.',
+        pic: 'Hj. Siti Aminah, M.Pd',
+        targetSelesai: '2026-11-10',
+        status: 'Dalam Proses',
+        dokumenUrl: 'https://docs.google.com/spreadsheets/d/1rubrik-microteaching-trainer/edit',
+        catatan: 'Modul presentasi sedang dalam tahap finalisasi.'
+      }
+    ]
+  },
+  {
+    id: 'PRG-2026-006',
+    jenis: 'LATOF',
+    judul: 'LATOF (Lazuardi Training of Facilitators) Inklusi & Pembelajaran Berdiferensiasi',
+    tahunAjaran: '2026/2027',
+    mitraId: 'MO004',
+    namaSekolah: 'Al-Falah Depok',
+    sasaranSekolahNama: 'Semua Sekolah Mitra',
+    tanggalMulai: '2026-11-04',
+    tanggalSelesai: '2026-11-06',
+    peserta: 'Ust. Rizky Ramadhan, S.Pd. & Delegasi Guru Mitra',
+    jumlahPeserta: 8,
+    deskripsi: 'Program sertifikasi fasilitator kurikulum diferensiasi dan pendekatan welas asih bagi guru dan pimpinan sekolah mitra.',
+    flyerUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=80',
+    flyerCaption: 'Flyer Resmi LATOF Gelombang I: Lazuardi Training of Facilitators 2026',
+    status: 'Sedang Berjalan',
+    tanggalPengajuan: '2026-10-01',
+    dokumenSekolah: [
+      {
+        id: 'DOK-SEK-060',
+        nama: 'Buku Panduan Fasilitator LATOF Inklusi 2026',
+        tipe: 'Panduan',
+        url: 'https://drive.google.com/file/d/1panduan-latof-inklusi.pdf/view',
+        tanggal: '2026-10-25',
+        keterangan: 'Panduan kurikulum fasilitasi dan modul studi kasus.'
+      }
+    ],
+    pesertaMagang: [
+      {
+        id: 'PESERTA-060',
+        nama: 'Ust. Rizky Ramadhan, S.Pd.',
+        peran: 'Fasilitator Kurikulum & PAI',
+        email: 'rizky.alfalah@lazuardi.sch.id',
+        sekolahId: 'MO004',
+        namaSekolah: 'Al-Falah Depok',
+        dokumenPribadi: [
+          {
+            id: 'DP-060',
+            nama: 'Surat Tugas Peserta LATOF Akademik Lazuardi',
+            tipe: 'Surat Tugas',
+            url: 'https://drive.google.com/file/d/1surat-tugas-rizky-latof.pdf/view',
+            tanggal: '2026-11-01',
+            uploadedBy: 'admin',
+            keterangan: 'Surat penugasan resmi sebagai delegasi fasilitator sekolah.'
+          },
+          {
+            id: 'DP-061',
+            nama: 'Lembar Refleksi & Resume Materi LATOF Hari Ke-1',
+            tipe: 'Logbook',
+            url: 'https://docs.google.com/document/d/1resume-latof-rizky/edit',
+            tanggal: '2026-11-04',
+            uploadedBy: 'peserta',
+            keterangan: 'Catatan ringkasan pilar diferensiasi belajar dan strategi scaffolding.'
+          }
+        ]
+      }
+    ]
   },
 ];
 
