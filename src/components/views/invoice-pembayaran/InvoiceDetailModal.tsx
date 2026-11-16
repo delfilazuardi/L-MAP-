@@ -3,7 +3,11 @@ import { X, Printer, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Invoice } from '../../../types';
 import { formatRupiah } from './types';
 import { useSettings } from '../../../context/SettingsContext';
-import { isAfiliasiTanpaInvoice } from '../../../lib/invoiceUtils';
+import {
+  isAfiliasiTanpaInvoice,
+  getInvoiceRemainingDebt,
+  getEffectiveInvoiceStatus,
+} from '../../../lib/invoiceUtils';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice | null;
@@ -17,9 +21,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const { settings } = useSettings();
   if (!invoice) return null;
 
-  const tagihanFull = invoice.tagihanFull || invoice.nominal || 0;
-  const realisasi = invoice.tagihanRealisasi || invoice.nominal || 0;
-  const dibayar = invoice.nominalPembayaran || 0;
+  const tagihanFull = Number(invoice.tagihanFull) || Number(invoice.nominal) || 0;
+  const realisasi = Number(invoice.tagihanRealisasi) || Number(invoice.nominal) || 0;
+  const dibayar = Number(invoice.nominalPembayaran) || 0;
   const isTanpaInvoice = Boolean(
     invoice.isPendataanAfiliasi ||
     !invoice.nomorInvoice ||
@@ -30,7 +34,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   );
   const isPelaporan = isTanpaInvoice || Boolean(invoice.isPelaporanSaja);
   // Nominal piutang adalah pengurangan dari Tagihan Full dan Pembayaran
-  const sisa = isPelaporan ? 0 : Math.max(0, tagihanFull - dibayar);
+  const sisa = isPelaporan ? 0 : getInvoiceRemainingDebt(invoice);
+  const effectiveStatus = isPelaporan ? 'Lunas' : getEffectiveInvoiceStatus(invoice);
 
   const handlePrint = () => {
     window.print();
@@ -257,7 +262,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           {/* Footer Signature */}
           <div className="pt-4 flex items-center justify-between text-xs text-slate-600">
             <div>
-              <p>Status: <strong className="text-slate-900">{invoice.status}</strong></p>
+              <p>Status: <strong className="text-slate-900">{effectiveStatus}</strong></p>
               <p className="text-[11px] text-slate-400 mt-1">Dicetak otomatis dari L-MAP v2.6</p>
             </div>
             <div className="text-center w-48">

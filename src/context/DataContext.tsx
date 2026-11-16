@@ -99,7 +99,10 @@ interface DataContextType {
   updateInvoice: (invoice: Invoice) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => Promise<void>;
-  addPembayaran: (pembayaran: Omit<Pembayaran, 'id'> & { id?: string }) => Promise<void>;
+  addPembayaran: (
+    pembayaran: Omit<Pembayaran, 'id'> & { id?: string },
+    options?: { skipInvoiceSync?: boolean }
+  ) => Promise<void>;
   updatePembayaran: (pembayaran: Pembayaran) => Promise<void>;
   deletePembayaran: (id: string) => Promise<void>;
   verifyPembayaran: (id: string, status: PembayaranStatus, catatan?: string) => Promise<void>;
@@ -656,10 +659,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!target) throw new Error(`Invoice dengan ID ${id} tidak ditemukan.`);
 
     const isLunas = status === 'Lunas';
+    const fullAmount = Math.max(
+      Number(target.tagihanFull) || 0,
+      Number(target.tagihanRealisasi) || 0,
+      Number(target.nominal) || 0
+    );
     const updated: Invoice = {
       ...target,
       status,
-      nominalPembayaran: isLunas ? (target.tagihanRealisasi || target.nominal) : target.nominalPembayaran,
+      nominalPembayaran: isLunas ? fullAmount : target.nominalPembayaran,
     };
 
     setInvoiceList(prev => prev.map(inv => inv.id === id ? updated : inv));
@@ -673,7 +681,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ==========================================
   // PEMBAYARAN CRUD
   // ==========================================
-  const addPembayaran = useCallback(async (pembayaranData: Omit<Pembayaran, 'id'> & { id?: string }) => {
+  const addPembayaran = useCallback(async (
+    pembayaranData: Omit<Pembayaran, 'id'> & { id?: string },
+    options?: { skipInvoiceSync?: boolean }
+  ) => {
     const isDemo = isDemoEntity(pembayaranData.mitraId) || isDemoEntity(pembayaranData.id);
     const id = pembayaranData.id || (isDemo ? `BYR-DEMO-${Date.now().toString().slice(-4)}` : `PAY-${Date.now().toString().slice(-6)}`);
     // Auto-set status to Terverifikasi so there is no manual verification needed
@@ -690,13 +701,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return next;
     });
 
-    // If linked to an invoice, directly update invoice payment amount & status without waiting for verification
-    if (newPay.invoiceId) {
+    // If linked to a single invoice (and not skipped by multi-invoice cicilan caller), sync invoice payment amount & status
+    if (!options?.skipInvoiceSync && newPay.invoiceId) {
       const updatedInvoice = invoiceList.find(inv => inv.id === newPay.invoiceId || inv.nomorInvoice === newPay.invoiceId);
       if (updatedInvoice) {
-        const realisasi = updatedInvoice.tagihanRealisasi || updatedInvoice.nominal || newPay.jumlah;
-        const paid = newPay.jumlah;
-        const nextStatus: Invoice['status'] = paid >= realisasi && realisasi > 0
+        const fullTarget = Math.max(
+          Number(updatedInvoice.tagihanFull) || 0,
+          Number(updatedInvoice.tagihanRealisasi) || 0,
+          Number(updatedInvoice.nominal) || 0,
+          Number(newPay.jumlah) || 0
+        );
+        const paid = Number(newPay.jumlah) || 0;
+        const nextStatus: Invoice['status'] = paid >= fullTarget && fullTarget > 0
           ? 'Lunas'
           : paid > 0
           ? 'Sebagian'
@@ -768,9 +784,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (status === 'Terverifikasi' && target.invoiceId) {
       const targetInvoice = invoiceList.find(inv => inv.id === target.invoiceId);
       if (targetInvoice) {
-        const targetNominal = targetInvoice.tagihanRealisasi || targetInvoice.nominal || target.jumlah;
-        const newPaidAmount = Math.min(targetNominal, (targetInvoice.nominalPembayaran || 0) + target.jumlah);
-        const isFullyPaid = newPaidAmount >= targetNominal;
+        const targetNominal = Math.max(
+          Number(targetInvoice.tagihanFull) || 0,
+          Number(targetInvoice.tagihanRealisasi) || 0,
+          Number(targetInvoice.nominal) || 0,
+          Number(target.jumlah) || 0
+        );
+        const newPaidAmount = Math.min(targetNominal, (Number(targetInvoice.nominalPembayaran) || 0) + (Number(target.jumlah) || 0));
+        const isFullyPaid = newPaidAmount >= targetNominal && targetNominal > 0;
         const newInvoiceStatus: Invoice['status'] = isFullyPaid ? 'Lunas' : 'Sebagian';
 
         const invUpdate: Invoice = {

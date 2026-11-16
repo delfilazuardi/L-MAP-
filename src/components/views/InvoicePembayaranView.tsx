@@ -36,7 +36,10 @@ import {
   isValidTahunAjaranFormat,
   normalizeTahunAjaran,
   getInvoiceTahunAjaran,
-  getPaymentTahunAjaran
+  getPaymentTahunAjaran,
+  getInvoiceRemainingDebt,
+  getEffectiveInvoiceStatus,
+  isRecordBelongsToSchool
 } from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
@@ -118,16 +121,20 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const baseInvoices = useMemo(() => {
     const filtered = isAdmin 
       ? invoiceList.filter(i => !i.isDemo && i.mitraId !== 'DEMO-MITRA') 
-      : invoiceList.filter(i => i.mitraId === currentUser?.sekolahId);
+      : currentUser?.sekolahId
+        ? invoiceList.filter(i => isRecordBelongsToSchool(i, currentUser.sekolahId!, sekolahList))
+        : [];
     return [...filtered].sort(compareInvoiceBySequenceAsc);
-  }, [isAdmin, invoiceList, currentUser]);
+  }, [isAdmin, invoiceList, currentUser, sekolahList]);
 
   const basePayments = useMemo(() => {
     const filtered = isAdmin 
       ? pembayaranList.filter(p => !p.isDemo && p.mitraId !== 'DEMO-MITRA') 
-      : pembayaranList.filter(p => p.mitraId === currentUser?.sekolahId);
+      : currentUser?.sekolahId
+        ? pembayaranList.filter(p => isRecordBelongsToSchool(p, currentUser.sekolahId!, sekolahList))
+        : [];
     return [...filtered].sort(comparePaymentByInvoiceSequenceAsc);
-  }, [isAdmin, pembayaranList, currentUser]);
+  }, [isAdmin, pembayaranList, currentUser, sekolahList]);
 
   // List of Sekolah Mitra vs Sekolah Afiliasi (3 Sekolah Khusus) - strictly exclude demo school from production billing list
   const mitraSekolahList = useMemo(() => {
@@ -193,17 +200,20 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         (inv.keterangan && inv.keterangan.toLowerCase().includes(q)) ||
         (inv.bulan && inv.bulan.toLowerCase().includes(q));
 
-      const matchSekolah = filterSekolah === 'ALL' || inv.mitraId === filterSekolah;
+      const matchSekolah =
+        filterSekolah === 'ALL' ||
+        isRecordBelongsToSchool(inv, filterSekolah, sekolahList);
 
       // Filter Tahun Ajaran tepat & terstandarisasi
       const invTA = getInvoiceTahunAjaran(inv);
       const matchTahun = filterTahunAjaran === 'ALL' || invTA === filterTahunAjaran;
 
-      const matchStatus = filterStatus === 'ALL' || inv.status === filterStatus;
+      const effectiveStatus = getEffectiveInvoiceStatus(inv);
+      const matchStatus = filterStatus === 'ALL' || effectiveStatus === filterStatus;
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban]);
+  }, [baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban, sekolahList]);
 
   // Global filtered payments: strictly separated by active tab and Tahun Ajaran
   const filteredPayments = useMemo(() => {
@@ -224,7 +234,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         (pay.catatan && pay.catatan.toLowerCase().includes(q)) ||
         (pay.invoiceId && pay.invoiceId.toLowerCase().includes(q));
 
-      const matchSekolah = filterSekolah === 'ALL' || pay.mitraId === filterSekolah;
+      const matchSekolah =
+        filterSekolah === 'ALL' ||
+        isRecordBelongsToSchool(pay, filterSekolah, sekolahList);
 
       // Filter Tahun Ajaran tepat & terstandarisasi
       const linkedInv = pay.invoiceId ? baseInvoices.find(i => i.id === pay.invoiceId || i.nomorInvoice === pay.invoiceId) : null;
@@ -235,7 +247,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [basePayments, baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban]);
+  }, [basePayments, baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban, sekolahList]);
 
   // Grand Totals strictly calculated based on active tab
   const grandTotals = useMemo(() => {
@@ -265,25 +277,28 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
     // Tab Sekolah Mitra atau Semua:
     const payableInvoices = filteredInvoices.filter(
-      i => !isSekolahAfiliasiTab(i.mitraId || i.namaSekolah)
+      i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId || i.namaSekolah, {
+        date: i.tanggalKirim,
+        tahunAjaran: i.tahunAjaran,
+      }))
     );
     const totalTagihanFullPayable = payableInvoices.reduce(
-      (acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0
+      (acc, i) => acc + (Number(i.tagihanFull) || Number(i.nominal) || 0), 0
     );
     const totalTagihanRealisasiPayable = payableInvoices.reduce(
-      (acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0
+      (acc, i) => acc + (Number(i.tagihanRealisasi) || Number(i.nominal) || 0), 0
     );
     // Hitung total pembayaran masuk tepat sesuai penjumlahan nominal pembayaran invoice
     const totalPembayaranMasuk = payableInvoices.reduce(
-      (acc, i) => acc + (i.nominalPembayaran || 0), 0
+      (acc, i) => acc + (Number(i.nominalPembayaran) || 0), 0
     );
 
     // Sisa piutang adalah penjumlahan eksak dari sisa piutang masing-masing invoice
     const totalSisaPiutang = payableInvoices.reduce(
-      (acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0
+      (acc, i) => acc + getInvoiceRemainingDebt(i), 0
     );
     const totalUnpaidInvoices = payableInvoices.filter(
-      i => Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)) > 0
+      i => getInvoiceRemainingDebt(i) > 0
     ).length;
     const totalPendingPayments = 0;
 
@@ -396,10 +411,13 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         status: 'Terverifikasi',
       } as Pembayaran);
     } else {
-      await addPembayaran({
-        ...data,
-        status: 'Terverifikasi',
-      } as Omit<Pembayaran, 'id'>);
+      await addPembayaran(
+        {
+          ...data,
+          status: 'Terverifikasi',
+        } as Omit<Pembayaran, 'id'>,
+        invoiceUpdates ? { skipInvoiceSync: true } : undefined
+      );
     }
 
     if (invoiceUpdates) {
@@ -407,8 +425,12 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         i => i.id === invoiceUpdates.invoiceId || i.nomorInvoice === invoiceUpdates.invoiceId
       );
       if (targetInv) {
+        const targetFullForStatus = Math.max(
+          Number(invoiceUpdates.tagihanFull) || 0,
+          Number(invoiceUpdates.tagihanRealisasi) || 0
+        );
         const nextStatus =
-          invoiceUpdates.nominalPembayaran >= invoiceUpdates.tagihanRealisasi && invoiceUpdates.tagihanRealisasi > 0
+          invoiceUpdates.nominalPembayaran >= targetFullForStatus && targetFullForStatus > 0
             ? 'Lunas'
             : invoiceUpdates.nominalPembayaran > 0
             ? 'Sebagian'
@@ -438,8 +460,12 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   ) => {
     if (!isAdmin) return;
     const paid = values.isPaid ? values.nominalPembayaran : 0;
+    const targetFullForStatus = Math.max(
+      Number(values.tagihanFull) || 0,
+      Number(values.tagihanRealisasi) || 0
+    );
     const nextStatus =
-      paid >= values.tagihanRealisasi && values.tagihanRealisasi > 0
+      paid >= targetFullForStatus && targetFullForStatus > 0
         ? 'Lunas'
         : paid > 0
         ? 'Sebagian'
@@ -481,7 +507,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           buktiUrl: '',
           status: 'Terverifikasi',
           catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}`,
-        });
+        }, { skipInvoiceSync: true });
       }
     }
   };
@@ -521,7 +547,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       status: 'Terverifikasi',
       invoiceId: invoiceNumbers,
       catatan: paymentMeta.catatan || `Pembayaran cicilan memotong ${allocationResult.updatedInvoices.length} invoice (${invoiceNumbers})`,
-    });
+    }, { skipInvoiceSync: true });
 
     // 2. Update setiap invoice yang dialokasikan (FIFO)
     for (const item of allocationResult.updatedInvoices) {
@@ -949,15 +975,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
             {RUANG_CONFIGS.map((config, index) => {
               const invoicesInRuang = filteredInvoices.filter(i => normalizeRuang(i.kategori) === config.id);
               const isAfiliasiTabActive = tabKewajiban === 'AFILIASI';
-              const payableInRuang = isAfiliasiTabActive 
-                ? [] 
-                : invoicesInRuang.filter(i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId, {
-                    date: i.tanggalKirim,
-                    tahunAjaran: i.tahunAjaran,
-                  })));
               const sisaInRuang = isAfiliasiTabActive 
                 ? 0 
-                : payableInRuang.reduce((acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0);
+                : invoicesInRuang.reduce((acc, i) => acc + getInvoiceRemainingDebt(i), 0);
 
               return (
                 <button
@@ -1125,16 +1145,16 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               })));
 
           // Calculate metrics for this room (strictly matching table rows below 100%)
-          const tagihanFull = roomInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
-          const tagihanFullPayable = payableRoomInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
-          const tagihanRealisasi = roomInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
+          const tagihanFull = roomInvoices.reduce((acc, i) => acc + (Number(i.tagihanFull) || Number(i.nominal) || 0), 0);
+          const tagihanFullPayable = payableRoomInvoices.reduce((acc, i) => acc + (Number(i.tagihanFull) || Number(i.nominal) || 0), 0);
+          const tagihanRealisasi = roomInvoices.reduce((acc, i) => acc + (Number(i.tagihanRealisasi) || Number(i.nominal) || 0), 0);
           const totalDibayar = isAfiliasiTabActive 
             ? 0 
-            : payableRoomInvoices.reduce((acc, i) => acc + (i.nominalPembayaran || 0), 0);
+            : payableRoomInvoices.reduce((acc, i) => acc + (Number(i.nominalPembayaran) || 0), 0);
           // Sisa piutang adalah penjumlahan eksak sisa masing-masing invoice yang belum lunas
           const sisaPiutang = isAfiliasiTabActive 
             ? 0 
-            : payableRoomInvoices.reduce((acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0);
+            : payableRoomInvoices.reduce((acc, i) => acc + getInvoiceRemainingDebt(i), 0);
           const persenLunas = isAfiliasiTabActive 
             ? 100 
             : (tagihanFullPayable > 0 
@@ -1143,10 +1163,10 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
           const lunasCount = isAfiliasiTabActive 
             ? roomInvoices.length 
-            : roomInvoices.filter(i => i.status === 'Lunas').length;
+            : roomInvoices.filter(i => getEffectiveInvoiceStatus(i) === 'Lunas').length;
           const unpaidCount = isAfiliasiTabActive 
             ? 0 
-            : payableRoomInvoices.filter(i => Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)) > 0).length;
+            : payableRoomInvoices.filter(i => getInvoiceRemainingDebt(i) > 0).length;
           const verifiedPaymentsCount = roomPayments.filter(p => p.status !== 'Ditolak').length;
           const pendingPaymentsCount = 0;
 
@@ -1261,7 +1281,21 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           sekolahList={availableSchoolsForFilter.filter(s => !s.isDemo && s.id !== 'DEMO-MITRA')}
           invoices={baseInvoices}
           payments={basePayments}
-          defaultSekolahId={filterSekolah !== 'ALL' ? filterSekolah : undefined}
+          defaultSekolahId={
+            filterSekolah !== 'ALL'
+              ? filterSekolah
+              : (() => {
+                  const uniqueSchoolIds = Array.from(
+                    new Set(
+                      filteredInvoices
+                        .filter(i => getInvoiceRemainingDebt(i) > 0)
+                        .map(i => i.mitraId)
+                        .filter(Boolean)
+                    )
+                  );
+                  return uniqueSchoolIds.length === 1 ? uniqueSchoolIds[0] : undefined;
+                })()
+          }
           onExecutePayment={handleExecuteCicilanPayment}
         />
       )}

@@ -22,7 +22,9 @@ import {
   extractInvoiceSequenceNumber,
   compareInvoiceBySequenceAsc,
   isAfiliasiTanpaInvoice,
-  getInvoiceTahunAjaran
+  getInvoiceTahunAjaran,
+  getInvoiceRemainingDebt,
+  getEffectiveInvoiceStatus
 } from '../../../lib/invoiceUtils';
 
 interface InvoiceTableProps {
@@ -124,10 +126,10 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
         date: inv.tanggalKirim,
         tahunAjaran: inv.tahunAjaran,
       });
-      const full = inv.tagihanFull || inv.nominal || 0;
-      const real = inv.tagihanRealisasi || inv.nominal || 0;
-      const dibayar = isPelaporan ? 0 : (inv.nominalPembayaran || 0);
-      const sisa = isPelaporan ? 0 : Math.max(0, full - dibayar);
+      const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+      const real = Number(inv.tagihanRealisasi) || Number(inv.nominal) || 0;
+      const dibayar = isPelaporan ? 0 : (Number(inv.nominalPembayaran) || 0);
+      const sisa = getInvoiceRemainingDebt(inv);
 
       sumTagihanFull += full;
       sumTagihanRealisasi += real;
@@ -246,13 +248,14 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
               tahunAjaran: inv.tahunAjaran,
             });
 
-            const fullTagihan = inv.tagihanFull || inv.nominal || 0;
-            const realisasi = inv.tagihanRealisasi || inv.nominal || 0;
-            const dibayar = inv.nominalPembayaran || 0;
+            const fullTagihan = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+            const realisasi = Number(inv.tagihanRealisasi) || Number(inv.nominal) || 0;
+            const dibayar = Number(inv.nominalPembayaran) || 0;
             // Nominal Piutang adalah pengurangan dari Tagihan Full dan Pembayaran
-            const sisa = Math.max(0, fullTagihan - dibayar);
+            const sisa = getInvoiceRemainingDebt(inv);
+            const effectiveStatus = getEffectiveInvoiceStatus(inv);
             const seqNumber = extractInvoiceSequenceNumber(inv.nomorInvoice || inv.id);
-            const isCheckedPaid = dibayar > 0 || inv.status === 'Lunas' || inv.status === 'Sebagian';
+            const isCheckedPaid = dibayar > 0 || effectiveStatus === 'Lunas' || effectiveStatus === 'Sebagian';
             const isRowOpen = openPaymentRowId === inv.id;
             const isTanpaInvoice = Boolean(
               inv.isPendataanAfiliasi ||
@@ -393,10 +396,10 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                         />
                         <span>{isCheckedPaid ? 'Sudah Bayar' : 'Ceklis Bayar'}</span>
                       </label>
-                      {getStatusBadge(inv.status)}
+                      {getStatusBadge(effectiveStatus)}
                     </div>
                   ) : (
-                    getStatusBadge(inv.status)
+                    getStatusBadge(effectiveStatus)
                   )}
                 </td>
 

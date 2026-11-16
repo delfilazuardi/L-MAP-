@@ -21,7 +21,12 @@ import {
 import { ActiveNavTab } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
-import { isSchoolPelaporanSaja, getSchoolObligationBadgeInfo } from '../../lib/invoiceUtils';
+import {
+  isSchoolPelaporanSaja,
+  getSchoolObligationBadgeInfo,
+  getInvoiceRemainingDebt,
+  getEffectiveInvoiceStatus,
+} from '../../lib/invoiceUtils';
 
 interface DashboardViewProps {
   onNavigate: (tab: ActiveNavTab) => void;
@@ -73,9 +78,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
   const totalUnpaidNominal = isPelaporanSchool
     ? 0
-    : filteredInvoices
-        .filter(i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId, { date: i.tanggalKirim, tahunAjaran: i.tahunAjaran })))
-        .reduce((acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0);
+    : filteredInvoices.reduce((acc, i) => acc + getInvoiceRemainingDebt(i), 0);
 
   const pendingLaporanCount = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
   const approvedLaporanCount = filteredLaporan.filter(l => l.status === 'Disetujui' || l.status === 'Diterima').length;
@@ -320,7 +323,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <span>
               {isPelaporanSchool 
                 ? 'Bebas kewajiban pembayaran' 
-                : `${filteredInvoices.filter(i => i.status === 'Belum Bayar' || i.status === 'Jatuh Tempo').length} invoice belum lunas`}
+                : `${filteredInvoices.filter(i => getInvoiceRemainingDebt(i) > 0).length} invoice belum lunas`}
             </span>
             <ArrowUpRight size={12} className={isPelaporanSchool ? 'text-purple-600' : 'text-rose-600'} />
           </p>
@@ -499,15 +502,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             </div>
 
             <div className="space-y-2.5">
-              {filteredInvoices.slice(0, 3).map((inv) => (
+              {filteredInvoices.slice(0, 3).map((inv) => {
+                const effStatus = getEffectiveInvoiceStatus(inv);
+                return (
                 <div 
                   key={inv.id}
                   className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-50 flex items-center justify-between gap-3 transition"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold ${
-                      inv.status === 'Lunas' ? 'bg-emerald-100 text-emerald-700' :
-                      inv.status === 'Jatuh Tempo' ? 'bg-rose-100 text-rose-700' :
+                      effStatus === 'Lunas' ? 'bg-emerald-100 text-emerald-700' :
+                      effStatus === 'Jatuh Tempo' ? 'bg-rose-100 text-rose-700' :
                       'bg-amber-100 text-amber-800'
                     }`}>
                       <Receipt size={16} />
@@ -526,15 +531,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                       {formatRupiah(inv.nominal)}
                     </div>
                     <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full mt-0.5 ${
-                      inv.status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' :
-                      inv.status === 'Jatuh Tempo' ? 'bg-rose-100 text-rose-700 font-bold' :
+                      effStatus === 'Lunas' ? 'bg-emerald-100 text-emerald-800' :
+                      effStatus === 'Jatuh Tempo' ? 'bg-rose-100 text-rose-700 font-bold' :
                       'bg-amber-100 text-amber-800'
                     }`}>
-                      {inv.status}
+                      {effStatus}
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

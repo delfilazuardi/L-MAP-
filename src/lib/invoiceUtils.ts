@@ -628,48 +628,171 @@ export function getInvoiceEffectiveSortDate(inv: {
 }
 
 /**
- * Mengalokasikan dana cicilan (misal Rp 10.000.000 atau Rp 8.000.000) secara otomatis ke invoice-invoice
- * yang belum lunas milik sekolah tersebut berdasarkan urutan invoice terlama (FIFO).
+ * Memeriksa apakah sebuah record (Invoice / Pembayaran) milik sekolah tertentu
+ * dengan pencocokan ID (case-insensitive & trimmed) serta fallback nama sekolah.
+ */
+export function isRecordBelongsToSchool(
+  record: {
+    mitraId?: string;
+    kodeMitra?: string;
+    sekolahId?: string;
+    namaSekolah?: string;
+  },
+  schoolOrId:
+    | { id: string; kodeMitra?: string; namaSekolah?: string }
+    | string,
+  allSchools?: { id: string; kodeMitra?: string; namaSekolah?: string }[]
+): boolean {
+  const targetObj =
+    typeof schoolOrId === 'string'
+      ? allSchools?.find(
+          (s) =>
+            s.id.trim().toLowerCase() === schoolOrId.trim().toLowerCase() ||
+            (s.kodeMitra &&
+              s.kodeMitra.trim().toLowerCase() === schoolOrId.trim().toLowerCase())
+        ) || { id: schoolOrId, kodeMitra: schoolOrId, namaSekolah: '' }
+      : schoolOrId;
+
+  const targetIds = [targetObj.id, targetObj.kodeMitra]
+    .filter(Boolean)
+    .map((x) => String(x).trim().toLowerCase());
+
+  const recId = String(
+    record.mitraId || record.kodeMitra || record.sekolahId || ''
+  )
+    .trim()
+    .toLowerCase();
+
+  if (recId && targetIds.includes(recId)) {
+    return true;
+  }
+
+  // Fallback jika ID pada record kosong atau tidak cocok ke sekolah manapun,
+  // cocokan berdasarkan nama sekolah (mis. "Lazuardi Tursina Bandung" vs "Lazuardi Tursina")
+  const recName = String(record.namaSekolah || '')
+    .toLowerCase()
+    .replace(/\blazuardi\b/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const targetName = String(targetObj.namaSekolah || '')
+    .toLowerCase()
+    .replace(/\blazuardi\b/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!recId || (allSchools && !allSchools.some((s) => s.id.trim().toLowerCase() === recId))) {
+    if (recName && targetName) {
+      if (recName === targetName || recName.includes(targetName) || targetName.includes(recName)) {
+        return true;
+      }
+      // Pencocokan token kata unik sekolah (min 4 huruf, bukan kata kota umum kecuali bagian dari nama)
+      const tokens = targetName.split(' ').filter((w) => w.length >= 4);
+      if (tokens.some((t) => recName.split(' ').includes(t))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Single Source of Truth untuk menghitung Sisa Piutang Invoice (Rp).
+ * Sekolah Afiliasi / Pelaporan Saja selalu bernilai 0.
+ * Selain itu: max(0, Tagihan Full - Nominal Pembayaran).
+ */
+export function getInvoiceRemainingDebt(inv: Invoice): number {
+  const isPelaporan = Boolean(
+    inv.isPelaporanSaja ||
+      isSchoolPelaporanSaja(inv.mitraId || inv.namaSekolah || '', {
+        date: inv.tanggalKirim,
+        tahunAjaran: inv.tahunAjaran,
+      })
+  );
+  if (isPelaporan) return 0;
+
+  const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+  const paid = Number(inv.nominalPembayaran) || 0;
+  return Math.max(0, full - paid);
+}
+
+/**
+ * Single Source of Truth untuk Status Pembayaran Efektif sebuah Invoice
+ * agar konsisten antara tabel utama, filter status, dan modal cicilan.
+ */
+export function getEffectiveInvoiceStatus(inv: Invoice): InvoiceStatus {
+  const isPelaporan = Boolean(
+    inv.isPelaporanSaja ||
+      isSchoolPelaporanSaja(inv.mitraId || inv.namaSekolah || '', {
+        date: inv.tanggalKirim,
+        tahunAjaran: inv.tahunAjaran,
+      })
+  );
+  if (isPelaporan) return 'Lunas';
+
+  const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+  const paid = Number(inv.nominalPembayaran) || 0;
+  const remaining = Math.max(0, full - paid);
+
+  if (full > 0 && remaining === 0) return 'Lunas';
+  if (paid > 0 && remaining > 0) return 'Sebagian';
+  if (inv.status === 'Jatuh Tempo' || inv.status === 'Menunggu Konfirmasi') {
+    return inv.status;
+  }
+  return 'Belum Bayar';
+}
+
+/**
+ * Urutan baku FIFO untuk daftar & alokasi cicilan multi-invoice:
+ * 1. Piutang Lampau terlebih dahulu
+ * 2. Periode / tanggal tertua
+ * 3. Nomor urut invoice terkecil
+ */
+export function compareInvoicesForCicilanFIFO(a: Invoice, b: Invoice): number {
+  const isLampauA =
+    a.kategori === 'Piutang Lampau' ||
+    String(a.kategori || '').toLowerCase().includes('lampau');
+  const isLampauB =
+    b.kategori === 'Piutang Lampau' ||
+    String(b.kategori || '').toLowerCase().includes('lampau');
+  if (isLampauA && !isLampauB) return -1;
+  if (!isLampauA && isLampauB) return 1;
+
+  const dateA = getInvoiceEffectiveSortDate(a);
+  const dateB = getInvoiceEffectiveSortDate(b);
+  if (dateA !== dateB) {
+    return dateA.localeCompare(dateB);
+  }
+
+  return compareInvoiceBySequenceAsc(a, b);
+}
+
+/**
+ * Mengalokasikan dana cicilan (misal Rp 5.000.000) secara otomatis ke seluruh invoice
+ * yang masih memiliki sisa piutang > 0 milik sekolah tersebut berdasarkan urutan invoice terlama (FIFO).
  */
 export function allocateCicilanToInvoices(
   schoolInvoices: Invoice[],
   installmentAmount: number,
   paymentDate?: string
 ): CicilanAllocationResult {
-  // Ambil hanya invoice yang belum lunas dan masih memiliki sisa piutang > 0
+  // Ambil semua invoice yang masih memiliki sisa piutang > 0 (tidak bergantung pada label status yang mungkin usang)
   const payableInvoices = [...schoolInvoices]
-    .filter(inv => {
-      if (inv.status === 'Lunas') return false;
-      const full = inv.tagihanFull || inv.nominal || 0;
-      const paid = inv.nominalPembayaran || 0;
-      return (full - paid) > 0;
-    })
-    .sort((a, b) => {
-      // Prioritaskan Piutang Lampau terlebih dahulu jika ada
-      const isLampauA = a.kategori === 'Piutang Lampau' || (a.kategori as string)?.toLowerCase().includes('lampau');
-      const isLampauB = b.kategori === 'Piutang Lampau' || (b.kategori as string)?.toLowerCase().includes('lampau');
-      if (isLampauA && !isLampauB) return -1;
-      if (!isLampauA && isLampauB) return 1;
+    .filter(inv => getInvoiceRemainingDebt(inv) > 0)
+    .sort(compareInvoicesForCicilanFIFO);
 
-      // Urutkan berdasarkan tanggal periode tertua (FIFO)
-      const dateA = getInvoiceEffectiveSortDate(a);
-      const dateB = getInvoiceEffectiveSortDate(b);
-      if (dateA !== dateB) {
-        return dateA.localeCompare(dateB);
-      }
-
-      return compareInvoiceBySequenceAsc(a, b);
-    });
-
-  let fundsToAllocate = installmentAmount;
+  let fundsToAllocate = Math.max(0, Number(installmentAmount) || 0);
   const updatedInvoices: CicilanAllocationItem[] = [];
   let totalDebtBefore = 0;
   let totalDebtAfter = 0;
   const payDate = paymentDate || new Date().toISOString().split('T')[0];
 
   payableInvoices.forEach(inv => {
-    const full = inv.tagihanFull || inv.nominal || 0;
-    const previousPaid = inv.nominalPembayaran || 0;
+    const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+    const previousPaid = Number(inv.nominalPembayaran) || 0;
     const remainingBefore = Math.max(0, full - previousPaid);
     totalDebtBefore += remainingBefore;
 
@@ -709,7 +832,7 @@ export function allocateCicilanToInvoices(
 
   return {
     updatedInvoices,
-    totalAllocated: installmentAmount - fundsToAllocate,
+    totalAllocated: (Math.max(0, Number(installmentAmount) || 0)) - fundsToAllocate,
     remainingInstallment: fundsToAllocate,
     totalDebtBefore,
     totalDebtAfter,

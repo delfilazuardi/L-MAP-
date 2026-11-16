@@ -306,11 +306,12 @@ export function parseInvoicePaymentSheetData(csvOrTsvText: string): {
     else if (statusInvoiceRaw.toLowerCase().includes('revisi')) statusInvoice = 'Revisi';
     else if (statusInvoiceRaw.toLowerCase().includes('batal')) statusInvoice = 'Dibatalkan';
 
-    // Status Pembayaran
+    // Status Pembayaran (hanya Lunas jika nominalPembayaran melunasi penuh tagihanFull & tagihanRealisasi)
+    const fullTarget = Math.max(tagihanFull, tagihanRealisasi);
     let status: InvoiceStatus = 'Belum Bayar';
-    if (nominalPembayaran >= tagihanRealisasi && tagihanRealisasi > 0) {
+    if (nominalPembayaran >= fullTarget && fullTarget > 0) {
       status = 'Lunas';
-    } else if (nominalPembayaran > 0 && nominalPembayaran < tagihanRealisasi) {
+    } else if (nominalPembayaran > 0 && nominalPembayaran < fullTarget) {
       status = 'Sebagian';
     } else if (statusBayarRaw.toLowerCase().includes('konfirmasi') || statusBayarRaw.toLowerCase().includes('tunggu')) {
       status = 'Menunggu Konfirmasi';

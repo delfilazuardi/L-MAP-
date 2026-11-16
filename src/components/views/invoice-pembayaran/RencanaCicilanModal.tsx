@@ -18,7 +18,11 @@ import { Invoice, Pembayaran, SekolahMitra } from '../../../types';
 import { 
   formatRupiah, 
   allocateCicilanToInvoices, 
-  CicilanAllocationResult 
+  CicilanAllocationResult,
+  getInvoiceRemainingDebt,
+  getEffectiveInvoiceStatus,
+  isRecordBelongsToSchool,
+  compareInvoicesForCicilanFIFO
 } from '../../../lib/invoiceUtils';
 import { NominalInput } from './NominalInput';
 import { FileUploadBox } from './FileUploadBox';
@@ -68,14 +72,16 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
     defaultSekolahId || payableSchools[0]?.id || 'MO004'
   );
 
-  // Sync selected school when defaultSekolahId or isOpen changes
+  // Sync selected school ONLY when modal opens or defaultSekolahId changes
   useEffect(() => {
+    if (!isOpen) return;
     if (defaultSekolahId) {
       setSelectedMitraId(defaultSekolahId);
     } else if (payableSchools.length > 0 && !payableSchools.some(s => s.id === selectedMitraId)) {
       setSelectedMitraId(payableSchools[0].id);
     }
-  }, [defaultSekolahId, isOpen, payableSchools, selectedMitraId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSekolahId, isOpen]);
 
   // Payment form states
   const [inputBayarNominal, setInputBayarNominal] = useState<number>(5000000);
@@ -94,34 +100,30 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
     return sekolahList.find(s => s.id === selectedMitraId) || payableSchools[0] || sekolahList[0];
   }, [sekolahList, payableSchools, selectedMitraId]);
 
-  // All unpaid invoices of selected school (sorted FIFO: oldest first)
+  // All invoices of selected school with remaining debt > 0 (sorted FIFO, matches main screen 100%)
   const schoolUnpaidInvoices = useMemo(() => {
+    const targetSchool = selectedSchool || selectedMitraId;
     return invoices
       .filter(i => {
-        if (i.mitraId !== selectedMitraId) return false;
-        if (i.status === 'Lunas') return false;
-        const full = i.tagihanFull || i.nominal || 0;
-        const paid = i.nominalPembayaran || 0;
-        return (full - paid) > 0;
+        if (!isRecordBelongsToSchool(i, targetSchool, sekolahList)) return false;
+        return getInvoiceRemainingDebt(i) > 0;
       })
-      .sort((a, b) => (a.tanggalKirim || '').localeCompare(b.tanggalKirim || ''));
-  }, [invoices, selectedMitraId]);
+      .sort(compareInvoicesForCicilanFIFO);
+  }, [invoices, selectedSchool, selectedMitraId, sekolahList]);
 
-  // Total current unpaid debt of selected school
+  // Total current unpaid debt of selected school (exact sum of table remaining debts)
   const totalHutangSekolah = useMemo(() => {
     return schoolUnpaidInvoices.reduce((acc, inv) => {
-      const full = inv.tagihanFull || inv.nominal || 0;
-      const paid = inv.nominalPembayaran || 0;
-      return acc + Math.max(0, full - paid);
+      return acc + getInvoiceRemainingDebt(inv);
     }, 0);
   }, [schoolUnpaidInvoices]);
 
   // When school changes, adjust default input amount sensibly
   useEffect(() => {
     if (totalHutangSekolah > 0) {
-      if (inputBayarNominal > totalHutangSekolah || inputBayarNominal === 5000000) {
-        setInputBayarNominal(totalHutangSekolah >= 5000000 ? 5000000 : totalHutangSekolah);
-      }
+      setInputBayarNominal(totalHutangSekolah >= 5000000 ? 5000000 : totalHutangSekolah);
+    } else {
+      setInputBayarNominal(0);
     }
     setSuccessMessage(null);
   }, [selectedMitraId, totalHutangSekolah]);
@@ -234,12 +236,9 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                 className="w-full sm:w-80 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs"
               >
                 {payableSchools.map((s) => {
-                  const sInvoices = invoices.filter(i => i.mitraId === s.id && i.status !== 'Lunas');
-                  const sDebt = sInvoices.reduce((acc, inv) => {
-                    const full = inv.tagihanFull || inv.nominal || 0;
-                    const paid = inv.nominalPembayaran || 0;
-                    return acc + Math.max(0, full - paid);
-                  }, 0);
+                  const sDebt = invoices
+                    .filter(i => isRecordBelongsToSchool(i, s, sekolahList))
+                    .reduce((acc, inv) => acc + getInvoiceRemainingDebt(inv), 0);
 
                   return (
                     <option key={s.id} value={s.id}>
@@ -479,12 +478,11 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                   <tbody className="divide-y divide-slate-200 bg-white">
                     {schoolUnpaidInvoices.map((inv) => {
                       const allocItem = allocationSimulation.updatedInvoices.find(u => u.invoice.id === inv.id);
-                      const full = inv.tagihanFull || inv.nominal || 0;
-                      const paidBefore = inv.nominalPembayaran || 0;
-                      const remBefore = Math.max(0, full - paidBefore);
+                      const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+                      const remBefore = getInvoiceRemainingDebt(inv);
                       const allocated = allocItem?.allocatedAmount || 0;
                       const newRemaining = Math.max(0, remBefore - allocated);
-                      const newStatus = allocItem ? allocItem.newStatus : inv.status;
+                      const newStatus = allocItem ? allocItem.newStatus : getEffectiveInvoiceStatus(inv);
 
                       return (
                         <tr 

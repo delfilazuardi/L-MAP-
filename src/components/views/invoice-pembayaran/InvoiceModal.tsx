@@ -130,11 +130,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
     const effectivePaid = isBayarChecked ? Number(nominalPembayaran) : 0;
 
-    // Auto calculate status based on Ceklis Bayar & Nominal Bayar
+    // Auto calculate status based on Ceklis Bayar & Nominal Bayar (Lunas hanya jika melunasi Tagihan Full & Realisasi)
+    const fullTarget = Math.max(Number(tagihanFull) || 0, Number(tagihanRealisasi) || 0);
     let finalStatus: InvoiceStatus = 'Belum Bayar';
-    if (isBayarChecked && effectivePaid >= tagihanRealisasi && tagihanRealisasi > 0) {
+    if (isBayarChecked && effectivePaid >= fullTarget && fullTarget > 0) {
       finalStatus = 'Lunas';
-    } else if (isBayarChecked && effectivePaid > 0 && effectivePaid < tagihanRealisasi) {
+    } else if (isBayarChecked && effectivePaid > 0) {
       finalStatus = 'Sebagian';
     } else {
       finalStatus = 'Belum Bayar';

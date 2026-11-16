@@ -3,7 +3,13 @@ import { X, CheckCircle2, School } from 'lucide-react';
 import { Pembayaran, Invoice, SekolahMitra, InvoiceStatus } from '../../../types';
 import { RuangKategoriId, formatRupiah } from './types';
 import { NominalInput } from './NominalInput';
-import { getTahunAjaranFromDate, compareInvoiceBySequenceAsc, isAfiliasiTanpaInvoice, normalizeTahunAjaran } from '../../../lib/invoiceUtils';
+import {
+  getTahunAjaranFromDate,
+  compareInvoiceBySequenceAsc,
+  isAfiliasiTanpaInvoice,
+  normalizeTahunAjaran,
+  isRecordBelongsToSchool,
+} from '../../../lib/invoiceUtils';
 
 interface PembayaranModalProps {
   isOpen: boolean;
@@ -101,7 +107,7 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
 
   // Filter invoices for selected school and sort from smallest to largest invoice sequence
   const relevantInvoices = [...invoiceList]
-    .filter(i => i.mitraId === mitraId)
+    .filter(i => isRecordBelongsToSchool(i, mitraId, sekolahList))
     .sort(compareInvoiceBySequenceAsc);
 
   const handleSubmit = async (e: React.FormEvent) => {
