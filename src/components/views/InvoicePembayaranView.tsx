@@ -273,17 +273,15 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     const totalTagihanRealisasiPayable = payableInvoices.reduce(
       (acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0
     );
-    // Hitung total pembayaran masuk dari nominalPembayaran invoice (ataupun riwayat pembayaran) tanpa perlu filter verifikasi
-    const totalPembayaranFromInvoices = payableInvoices.reduce(
+    // Hitung total pembayaran masuk tepat sesuai penjumlahan nominal pembayaran invoice
+    const totalPembayaranMasuk = payableInvoices.reduce(
       (acc, i) => acc + (i.nominalPembayaran || 0), 0
     );
-    const totalPembayaranFromPayments = filteredPayments
-      .filter(p => p.status !== 'Ditolak')
-      .reduce((acc, p) => acc + p.jumlah, 0);
-    const totalPembayaranMasuk = Math.max(totalPembayaranFromInvoices, totalPembayaranFromPayments);
 
-    // Nominal Piutang adalah pengurangan dari Tagihan Full dikurangi Pembayaran
-    const totalSisaPiutang = Math.max(0, totalTagihanFullPayable - totalPembayaranMasuk);
+    // Sisa piutang adalah penjumlahan eksak dari sisa piutang masing-masing invoice
+    const totalSisaPiutang = payableInvoices.reduce(
+      (acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0
+    );
     const totalUnpaidInvoices = payableInvoices.filter(
       i => Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)) > 0
     ).length;
@@ -304,7 +302,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         ? Math.min(100, Math.round((totalPembayaranMasuk / totalTagihanFullPayable) * 100))
         : 0,
     };
-  }, [filteredInvoices, filteredPayments, tabKewajiban]);
+  }, [filteredInvoices, tabKewajiban]);
 
   // Smooth scroll handler
   const scrollToAnchor = (anchorId: string) => {
@@ -504,10 +502,15 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     if (!isAdmin) return;
 
     // 1. Tambahkan pembayaran cicilan rekonsiliasi
+    const primaryCategory = allocationResult.updatedInvoices[0]?.invoice.kategori || 'Piutang Lampau';
+    const invoiceNumbers = allocationResult.updatedInvoices
+      .map(i => i.invoice.nomorInvoice || i.invoice.id)
+      .join(', ');
+
     await addPembayaran({
       mitraId: school.id,
       namaSekolah: school.namaSekolah,
-      kategori: 'Piutang Lampau',
+      kategori: primaryCategory,
       tahunAjaran: getTahunAjaranFromDate(paymentMeta.tanggalBayar),
       jumlah: amount,
       tanggalBayar: paymentMeta.tanggalBayar,
@@ -516,7 +519,8 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       buktiUrl: paymentMeta.buktiUrl || '',
       kwitansiUrl: paymentMeta.kwitansiUrl || '',
       status: 'Terverifikasi',
-      catatan: paymentMeta.catatan,
+      invoiceId: invoiceNumbers,
+      catatan: paymentMeta.catatan || `Pembayaran cicilan memotong ${allocationResult.updatedInvoices.length} invoice (${invoiceNumbers})`,
     });
 
     // 2. Update setiap invoice yang dialokasikan (FIFO)
@@ -571,10 +575,10 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                     id="btn-global-cicilan-rekonsiliasi"
                     onClick={() => setIsCicilanModalOpen(true)}
                     className="px-3.5 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 hover:text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs"
-                    title="Rencana Cicilan & Rekonsiliasi Tagihan Lintas Invoice (e.g. 40 Juta dicicil 4 Juta/bulan x 10 kali)"
+                    title="Bayar cicilan fleksibel: misalnya hutang Rp 15 Juta, bayar Rp 5 Juta otomatis potong beberapa invoice tertua"
                   >
-                    <CalendarRange size={16} className="text-amber-300" />
-                    <span className="hidden sm:inline">Rencana Cicilan (Rekonsiliasi)</span>
+                    <Sparkles size={16} className="text-amber-300" />
+                    <span className="hidden sm:inline">⚡ Bayar Cicilan Multi-Invoice</span>
                     <span className="sm:hidden">Cicilan</span>
                   </button>
 
@@ -791,10 +795,10 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                   id="btn-cicilan-piutang-card"
                   onClick={() => setIsCicilanModalOpen(true)}
                   className="mt-2.5 w-full py-1.5 px-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                  title="Klik untuk membuka pembayaran cicilan rekonsiliasi piutang berjalan"
+                  title="Bayar cicilan fleksibel multi-invoice (potong tagihan tertua)"
                 >
-                  <CalendarRange size={13} className="text-slate-950 font-bold" />
-                  <span>⚡ Klik Cicilan Pembayaran</span>
+                  <Sparkles size={13} className="text-slate-950 font-bold" />
+                  <span>⚡ Bayar Cicilan Multi-Invoice</span>
                 </button>
               )}
             </div>
@@ -944,12 +948,16 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
 
             {RUANG_CONFIGS.map((config, index) => {
               const invoicesInRuang = filteredInvoices.filter(i => normalizeRuang(i.kategori) === config.id);
-              const paymentsInRuang = filteredPayments.filter(p => normalizeRuang(p.kategori) === config.id);
-              const fullInRuang = invoicesInRuang.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
-              const bayarFromInvInRuang = invoicesInRuang.reduce((acc, i) => acc + (i.nominalPembayaran || 0), 0);
-              const bayarFromPayInRuang = paymentsInRuang.filter(p => p.status !== 'Ditolak').reduce((acc, p) => acc + p.jumlah, 0);
-              const bayarInRuang = Math.max(bayarFromInvInRuang, bayarFromPayInRuang);
-              const sisaInRuang = Math.max(0, fullInRuang - bayarInRuang);
+              const isAfiliasiTabActive = tabKewajiban === 'AFILIASI';
+              const payableInRuang = isAfiliasiTabActive 
+                ? [] 
+                : invoicesInRuang.filter(i => !(i.isPelaporanSaja || isSchoolPelaporanSaja(i.mitraId, {
+                    date: i.tanggalKirim,
+                    tahunAjaran: i.tahunAjaran,
+                  })));
+              const sisaInRuang = isAfiliasiTabActive 
+                ? 0 
+                : payableInRuang.reduce((acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0);
 
               return (
                 <button
@@ -1094,7 +1102,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
               >
                 <Sparkles size={16} />
-                <span>⚡ Klik Cicilan Pembayaran</span>
+                <span>⚡ Bayar Cicilan Multi-Invoice</span>
               </button>
             )}
           </div>
@@ -1116,19 +1124,17 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 tahunAjaran: i.tahunAjaran,
               })));
 
-          // Calculate metrics for this room
+          // Calculate metrics for this room (strictly matching table rows below 100%)
           const tagihanFull = roomInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
           const tagihanFullPayable = payableRoomInvoices.reduce((acc, i) => acc + (i.tagihanFull || i.nominal || 0), 0);
           const tagihanRealisasi = roomInvoices.reduce((acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0);
-          const dibayarFromInvoices = payableRoomInvoices.reduce((acc, i) => acc + (i.nominalPembayaran || 0), 0);
-          const dibayarFromPayments = roomPayments
-            .filter(p => p.status !== 'Ditolak')
-            .reduce((acc, p) => acc + p.jumlah, 0);
           const totalDibayar = isAfiliasiTabActive 
             ? 0 
-            : Math.max(dibayarFromInvoices, dibayarFromPayments);
-          // Nominal piutang adalah pengurangan dari Tagihan Full dan Pembayaran
-          const sisaPiutang = isAfiliasiTabActive ? 0 : Math.max(0, tagihanFullPayable - totalDibayar);
+            : payableRoomInvoices.reduce((acc, i) => acc + (i.nominalPembayaran || 0), 0);
+          // Sisa piutang adalah penjumlahan eksak sisa masing-masing invoice yang belum lunas
+          const sisaPiutang = isAfiliasiTabActive 
+            ? 0 
+            : payableRoomInvoices.reduce((acc, i) => acc + Math.max(0, (i.tagihanFull || i.nominal || 0) - (i.nominalPembayaran || 0)), 0);
           const persenLunas = isAfiliasiTabActive 
             ? 100 
             : (tagihanFullPayable > 0 

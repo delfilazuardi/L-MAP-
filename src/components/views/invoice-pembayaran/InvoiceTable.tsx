@@ -54,6 +54,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   onDelete,
   onPay,
   onQuickSavePayment,
+  kategoriTitle = '',
   defaultSortOrder = 'terkecil',
 }) => {
   // Urutan No. Invoice otomatis dari Terkecil -> Terbesar (mis: 292 -> 293 -> 294)
@@ -110,6 +111,38 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
       return sortOrder === 'terkecil' ? cmp : -cmp;
     });
   }, [invoices, sortOrder]);
+
+  // Totals for table footer (strictly matching RuangReportCard above 100%)
+  const tableTotals = useMemo(() => {
+    let sumTagihanFull = 0;
+    let sumTagihanRealisasi = 0;
+    let sumNominalBayar = 0;
+    let sumSisaPiutang = 0;
+
+    sortedInvoices.forEach(inv => {
+      const isPelaporan = inv.isPelaporanSaja || isSchoolPelaporanSaja(inv.mitraId, {
+        date: inv.tanggalKirim,
+        tahunAjaran: inv.tahunAjaran,
+      });
+      const full = inv.tagihanFull || inv.nominal || 0;
+      const real = inv.tagihanRealisasi || inv.nominal || 0;
+      const dibayar = isPelaporan ? 0 : (inv.nominalPembayaran || 0);
+      const sisa = isPelaporan ? 0 : Math.max(0, full - dibayar);
+
+      sumTagihanFull += full;
+      sumTagihanRealisasi += real;
+      sumNominalBayar += dibayar;
+      sumSisaPiutang += sisa;
+    });
+
+    return {
+      sumTagihanFull,
+      sumTagihanRealisasi,
+      sumNominalBayar,
+      sumSisaPiutang,
+      count: sortedInvoices.length,
+    };
+  }, [sortedInvoices]);
 
   if (invoices.length === 0) {
     return (
@@ -545,6 +578,32 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             );
           })}
         </tbody>
+        <tfoot className="border-t-2 border-slate-300 bg-slate-100/95 text-xs font-black text-slate-800">
+          <tr>
+            <td colSpan={3} className="py-3.5 px-4">
+              <div className="flex items-center gap-2">
+                <span className="uppercase tracking-wider text-[11px] text-slate-600 font-extrabold">
+                  Total ({tableTotals.count} Tagihan {kategoriTitle})
+                </span>
+              </div>
+            </td>
+            <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-700">
+              {formatRupiah(tableTotals.sumTagihanFull)}
+            </td>
+            <td className="py-3.5 px-4 text-right font-mono font-black text-blue-900">
+              {formatRupiah(tableTotals.sumTagihanRealisasi)}
+            </td>
+            <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-700">
+              {formatRupiah(tableTotals.sumNominalBayar)}
+            </td>
+            <td className="py-3.5 px-4 text-right font-mono font-black text-rose-700">
+              {formatRupiah(tableTotals.sumSisaPiutang)}
+            </td>
+            <td colSpan={2} className="py-3.5 px-4 text-center text-[10px] text-slate-600 font-bold">
+              {tableTotals.sumSisaPiutang === 0 ? '✓ Semua Lunas' : 'Belum Lunas'}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );

@@ -41,6 +41,10 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
     });
   }, [payments, sortOrder]);
 
+  const totalNominalBayar = useMemo(() => {
+    return payments.reduce((acc, p) => acc + (p.jumlah || 0), 0);
+  }, [payments]);
+
   if (payments.length === 0) {
     return (
       <div className="p-8 text-center bg-white rounded-2xl border border-slate-200/80 my-3">
@@ -193,6 +197,21 @@ export const PembayaranTable: React.FC<PembayaranTableProps> = ({
             );
           })}
         </tbody>
+        <tfoot className="border-t-2 border-slate-300 bg-slate-100/95 text-xs font-black text-slate-800">
+          <tr>
+            <td colSpan={3} className="py-3.5 px-4">
+              <span className="uppercase tracking-wider text-[11px] text-slate-600 font-extrabold">
+                Total ({payments.length} Transaksi Pembayaran)
+              </span>
+            </td>
+            <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-700 text-sm">
+              {formatRupiah(totalNominalBayar)}
+            </td>
+            <td colSpan={2} className="py-3.5 px-4 text-center text-[10px] text-emerald-700 font-bold">
+              ✓ Semua Masuk
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );

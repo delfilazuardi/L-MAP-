@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   X, 
   Upload, 
@@ -12,7 +12,9 @@ import {
   Sparkles,
   Link2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  Check
 } from 'lucide-react';
 import { ProgramMitraItem, ProgramMitraJenis, PesertaMagangItem, SekolahMitra } from '../../../types';
 import { STANDARD_TAHUN_AJARAN_LIST } from '../../../lib/invoiceUtils';
@@ -46,8 +48,10 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
   const [tahunAjaran, setTahunAjaran] = useState('2026/2027');
   const [tanggalMulai, setTanggalMulai] = useState(new Date().toISOString().split('T')[0]);
   const [tanggalSelesai, setTanggalSelesai] = useState('');
-  const [targetScope, setTargetScope] = useState<'SEMUA' | 'SPESIFIK'>('SEMUA');
-  const [selectedSekolahId, setSelectedSekolahId] = useState(sekolahList[0]?.id || 'MO004');
+  
+  // Sasaran Sekolah (Bisa Beberapa Sekolah atau Semua Sekolah)
+  const [targetScope, setTargetScope] = useState<'SEMUA' | 'BEBERAPA'>('SEMUA');
+  const [selectedSekolahIds, setSelectedSekolahIds] = useState<string[]>([]);
   const [deskripsi, setDeskripsi] = useState('');
 
   // Flyer State (Portrait 3:4)
@@ -59,10 +63,10 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
 
   // Sasaran Peserta List
   const [pesertaList, setPesertaList] = useState<PesertaMagangItem[]>([]);
+  const [activeSchoolForNewPeserta, setActiveSchoolForNewPeserta] = useState<string>('');
   const [newPesertaNama, setNewPesertaNama] = useState('');
   const [newPesertaPeran, setNewPesertaPeran] = useState('');
   const [newPesertaEmail, setNewPesertaEmail] = useState('');
-  const [newPesertaSekolahId, setNewPesertaSekolahId] = useState(sekolahList[0]?.id || 'MO004');
 
   // Dokumen Panduan / Template Pendukung
   const [panduanNama, setPanduanNama] = useState('');
@@ -81,11 +85,23 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
       setTanggalMulai(editingProgram.tanggalMulai || new Date().toISOString().split('T')[0]);
       setTanggalSelesai(editingProgram.tanggalSelesai || '');
       
-      const isSemua = editingProgram.sasaranSekolahNama === 'Semua Sekolah Mitra' || !editingProgram.mitraId || editingProgram.mitraId === 'ALL';
-      setTargetScope(isSemua ? 'SEMUA' : 'SPESIFIK');
-      setSelectedSekolahId(editingProgram.mitraId || sekolahList[0]?.id || 'MO004');
-      setDeskripsi(editingProgram.deskripsi || '');
+      const isSemua = editingProgram.sasaranSekolahNama === 'Semua Sekolah Mitra' || 
+        !editingProgram.mitraId || 
+        editingProgram.mitraId === 'ALL' ||
+        (editingProgram.sasaranSekolahIds && editingProgram.sasaranSekolahIds.length === sekolahList.length);
 
+      if (isSemua) {
+        setTargetScope('SEMUA');
+        setSelectedSekolahIds(sekolahList.map(s => s.id));
+      } else {
+        setTargetScope('BEBERAPA');
+        const ids = editingProgram.sasaranSekolahIds && editingProgram.sasaranSekolahIds.length > 0 
+          ? editingProgram.sasaranSekolahIds 
+          : (editingProgram.mitraId ? [editingProgram.mitraId] : [sekolahList[0]?.id || 'MO004']);
+        setSelectedSekolahIds(ids);
+      }
+
+      setDeskripsi(editingProgram.deskripsi || '');
       setFlyerUrl(editingProgram.flyerUrl || '');
       setFlyerCaption(editingProgram.flyerCaption || '');
       setFlyerFileName(editingProgram.flyerFileName || '');
@@ -104,7 +120,7 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
       setTanggalMulai(today);
       setTanggalSelesai('');
       setTargetScope('SEMUA');
-      setSelectedSekolahId(sekolahList[0]?.id || 'MO004');
+      setSelectedSekolahIds(sekolahList.map(s => s.id));
       setDeskripsi('');
       setFlyerUrl('');
       setFlyerCaption('');
@@ -117,7 +133,58 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
     setErrorMsg('');
   }, [isOpen, editingProgram, sekolahList]);
 
+  // Active target schools list based on targetScope
+  const activeTargetSchools = useMemo(() => {
+    if (targetScope === 'SEMUA') {
+      return sekolahList;
+    }
+    return sekolahList.filter(s => selectedSekolahIds.includes(s.id));
+  }, [targetScope, selectedSekolahIds, sekolahList]);
+
+  // Set default active school for new participant
+  useEffect(() => {
+    if (activeTargetSchools.length > 0) {
+      if (!activeSchoolForNewPeserta || !activeTargetSchools.some(s => s.id === activeSchoolForNewPeserta)) {
+        setActiveSchoolForNewPeserta(activeTargetSchools[0].id);
+      }
+    } else {
+      setActiveSchoolForNewPeserta('');
+    }
+  }, [activeTargetSchools, activeSchoolForNewPeserta]);
+
   if (!isOpen) return null;
+
+  // Toggle school selection for multiple schools
+  const handleToggleSchool = (schoolId: string) => {
+    setSelectedSekolahIds(prev => {
+      if (prev.includes(schoolId)) {
+        if (prev.length === 1) {
+          setErrorMsg('Minimal pilih 1 sekolah sasaran.');
+          return prev;
+        }
+        setErrorMsg('');
+        return prev.filter(id => id !== schoolId);
+      } else {
+        setErrorMsg('');
+        return [...prev, schoolId];
+      }
+    });
+  };
+
+  const handleSelectAllSchools = () => {
+    setTargetScope('SEMUA');
+    setSelectedSekolahIds(sekolahList.map(s => s.id));
+    setErrorMsg('');
+  };
+
+  const handleSelectMultipleMode = () => {
+    setTargetScope('BEBERAPA');
+    if (selectedSekolahIds.length === 0 || selectedSekolahIds.length === sekolahList.length) {
+      // Default pick first 2 schools
+      setSelectedSekolahIds(sekolahList.slice(0, 2).map(s => s.id));
+    }
+    setErrorMsg('');
+  };
 
   // Handle local image upload for Portrait Flyer
   const handleFlyerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,22 +211,29 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleAddPeserta = () => {
-    if (!newPesertaNama.trim()) return;
-    const targetSchool = sekolahList.find(s => s.id === newPesertaSekolahId);
+  // Add participant to a specific school
+  const handleAddPesertaToSchool = (targetSchoolId: string) => {
+    if (!newPesertaNama.trim()) {
+      setErrorMsg('Masukkan nama peserta terlebih dahulu.');
+      return;
+    }
+
+    const schoolObj = sekolahList.find(s => s.id === targetSchoolId);
     const newPeserta: PesertaMagangItem = {
       id: `PESERTA-${Date.now().toString().slice(-6)}`,
       nama: newPesertaNama.trim(),
       peran: newPesertaPeran.trim() || 'Peserta Program',
       email: newPesertaEmail.trim() || undefined,
-      sekolahId: targetSchool?.id || selectedSekolahId,
-      namaSekolah: targetSchool?.namaSekolah || 'Sekolah Mitra',
+      sekolahId: schoolObj?.id || targetSchoolId,
+      namaSekolah: schoolObj?.namaSekolah || 'Sekolah Mitra',
       dokumenPribadi: [],
     };
+
     setPesertaList(prev => [...prev, newPeserta]);
     setNewPesertaNama('');
     setNewPesertaPeran('');
     setNewPesertaEmail('');
+    setErrorMsg('');
   };
 
   const handleRemovePeserta = (pesertaId: string) => {
@@ -173,13 +247,28 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
       return;
     }
 
+    if (targetScope === 'BEBERAPA' && selectedSekolahIds.length === 0) {
+      setErrorMsg('Pilih minimal satu sekolah sasaran.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMsg('');
 
     try {
-      const targetSchool = sekolahList.find(s => s.id === selectedSekolahId);
-      const sasaranSekolahNama = targetScope === 'SEMUA' ? 'Semua Sekolah Mitra' : (targetSchool?.namaSekolah || 'Sekolah Mitra');
-      const mitraId = targetScope === 'SEMUA' ? 'ALL' : selectedSekolahId;
+      const isSemua = targetScope === 'SEMUA' || selectedSekolahIds.length === sekolahList.length;
+      const targetSchoolObjects = isSemua 
+        ? sekolahList 
+        : sekolahList.filter(s => selectedSekolahIds.includes(s.id));
+
+      const sasaranSekolahNama = isSemua 
+        ? 'Semua Sekolah Mitra' 
+        : (targetSchoolObjects.length === 1 
+            ? targetSchoolObjects[0].namaSekolah 
+            : `${targetSchoolObjects.length} Sekolah (${targetSchoolObjects.map(s => s.namaSekolah).join(', ')})`);
+
+      const finalSasaranIds = isSemua ? sekolahList.map(s => s.id) : selectedSekolahIds;
+      const mitraId = isSemua ? 'ALL' : (selectedSekolahIds[0] || 'ALL');
 
       // Dokumen panduan dari admin jika ada
       const existingDokumenSekolah = editingProgram?.dokumenSekolah || [];
@@ -209,7 +298,7 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
         mitraId,
         namaSekolah: sasaranSekolahNama,
         sasaranSekolahNama,
-        sasaranSekolahIds: targetScope === 'SEMUA' ? sekolahList.map(s => s.id) : [selectedSekolahId],
+        sasaranSekolahIds: finalSasaranIds,
         tanggalMulai,
         tanggalSelesai: tanggalSelesai || undefined,
         deskripsi: deskripsi.trim() || `Program ${kategori} Kemitraan Lazuardi`,
@@ -235,7 +324,7 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 flex flex-col">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 flex flex-col">
         {/* Header */}
         <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-sm z-10">
           <div>
@@ -243,7 +332,7 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
               {editingProgram ? 'Edit Program Mitra' : 'Buat Program Mitra Baru'}
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Isi flyer, nama program, tahun ajaran, kategori, dan sasaran peserta.
+              Tentukan flyer, nama program, tahun ajaran, kategori, beberapa sekolah sasaran, serta peserta tiap sekolah.
             </p>
           </div>
           <button
@@ -413,119 +502,237 @@ export const ProgramFormModal: React.FC<ProgramFormModalProps> = ({
             </div>
           </div>
 
-          {/* 5. SASARAN SEKOLAH */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-700">
-              Sasaran Sekolah Mitra
-            </label>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="radio"
-                  name="scope"
-                  checked={targetScope === 'SEMUA'}
-                  onChange={() => setTargetScope('SEMUA')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span>Semua Sekolah Mitra</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                <input
-                  type="radio"
-                  name="scope"
-                  checked={targetScope === 'SPESIFIK'}
-                  onChange={() => setTargetScope('SPESIFIK')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span>Sekolah Tertentu</span>
-              </label>
-            </div>
-
-            {targetScope === 'SPESIFIK' && (
-              <select
-                value={selectedSekolahId}
-                onChange={(e) => setSelectedSekolahId(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
-              >
-                {sekolahList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.namaSekolah} ({s.id})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* 6. SASARAN PESERTA (DIISI OLEH ADMIN) */}
+          {/* 5. SASARAN SEKOLAH (BISA BEBERAPA SEKOLAH) */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                  Sasaran Peserta ({pesertaList.length} Peserta Terdaftar)
+                  Sasaran Sekolah Mitra
                 </label>
                 <span className="text-[11px] text-slate-500">
-                  Peserta yang login hanya bisa melihat dokumen miliknya sendiri.
+                  Pilih semua sekolah atau tandai beberapa sekolah sekaligus.
+                </span>
+              </div>
+
+              {/* Mode Toggle Pills */}
+              <div className="flex items-center gap-1.5 p-1 bg-white rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={handleSelectAllSchools}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    targetScope === 'SEMUA'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Semua Sekolah ({sekolahList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSelectMultipleMode}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    targetScope === 'BEBERAPA'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Pilih Beberapa Sekolah ({selectedSekolahIds.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Checklist of Multiple Target Schools */}
+            <div className="pt-1">
+              <span className="text-[11px] font-bold text-slate-600 block mb-2">
+                Daftar Sekolah Mitra Sasaran ({activeTargetSchools.length} Sekolah Terpilih):
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {sekolahList.map((s) => {
+                  const isChecked = targetScope === 'SEMUA' || selectedSekolahIds.includes(s.id);
+
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        if (targetScope === 'SEMUA') {
+                          // Switch to specific and uncheck this one
+                          setTargetScope('BEBERAPA');
+                          setSelectedSekolahIds(sekolahList.filter(item => item.id !== s.id).map(item => item.id));
+                        } else {
+                          handleToggleSchool(s.id);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border transition flex items-center justify-between gap-2 cursor-pointer ${
+                        isChecked 
+                          ? 'bg-blue-50/80 border-blue-400 text-blue-900 shadow-xs' 
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="min-w-0 flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                          isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'
+                        }`}>
+                          {isChecked && <Check size={12} strokeWidth={3} />}
+                        </div>
+                        <div className="truncate">
+                          <span className="text-xs font-bold block truncate">{s.namaSekolah}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{s.id} • {s.kota}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 6. SASARAN PESERTA PER SETIAP SEKOLAH */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Peserta per Setiap Sekolah ({pesertaList.length} Peserta Terdaftar)
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Tambahkan peserta untuk setiap sekolah sasaran. Peserta yang login hanya bisa melihat dokumen pribadinya sendiri.
                 </span>
               </div>
             </div>
 
-            {/* List Peserta Terdaftar */}
-            {pesertaList.length > 0 ? (
-              <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-200 overflow-hidden max-h-44 overflow-y-auto">
-                {pesertaList.map((p, idx) => (
-                  <div key={p.id || idx} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <strong className="text-slate-800 font-bold">{p.nama}</strong>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono">
-                          {p.namaSekolah || p.sekolahId}
+            {/* Quick Add Participant Input Form */}
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
+              <span className="text-xs font-bold text-slate-800 block">
+                + Tambah Peserta Baru
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                {/* Select School */}
+                <div className="sm:col-span-4">
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Sekolah Asal</label>
+                  <select
+                    value={activeSchoolForNewPeserta}
+                    onChange={(e) => setActiveSchoolForNewPeserta(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    {activeTargetSchools.map(s => (
+                      <option key={s.id} value={s.id}>{s.namaSekolah}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Name */}
+                <div className="sm:col-span-4">
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Nama Peserta</label>
+                  <input
+                    type="text"
+                    value={newPesertaNama}
+                    onChange={(e) => setNewPesertaNama(e.target.value)}
+                    placeholder="Nama guru / delegasi..."
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Role */}
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Peran / Posisi</label>
+                  <input
+                    type="text"
+                    value={newPesertaPeran}
+                    onChange={(e) => setNewPesertaPeran(e.target.value)}
+                    placeholder="mis: Guru Inklusi"
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Button */}
+                <div className="sm:col-span-2 flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => handleAddPesertaToSchool(activeSchoolForNewPeserta)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                  >
+                    <Plus size={14} />
+                    <span>Tambah</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Optional Email input */}
+              <div>
+                <input
+                  type="email"
+                  value={newPesertaEmail}
+                  onChange={(e) => setNewPesertaEmail(e.target.value)}
+                  placeholder="Email peserta (opsional, untuk sinkronisasi akun saat login)"
+                  className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 text-[11px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* GROUPED PARTICIPANTS PER SCHOOL */}
+            <div className="space-y-3 pt-1">
+              {activeTargetSchools.map(school => {
+                const schoolPeserta = pesertaList.filter(p => p.sekolahId === school.id);
+
+                return (
+                  <div key={school.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                    {/* School Header */}
+                    <div className="p-3 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Building2 size={16} className="text-blue-600" />
+                        <strong className="text-xs font-bold text-slate-800">{school.namaSekolah}</strong>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white text-slate-600 border border-slate-200">
+                          {school.id}
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-500 block">
-                        {p.peran || 'Peserta'} {p.email ? `• ${p.email}` : ''}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePeserta(p.id)}
-                      className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                      title="Hapus peserta"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-3 text-center bg-white rounded-xl border border-slate-200 text-xs text-slate-400">
-                Belum ada nama peserta ditambahkan. Anda dapat menambahkan peserta di bawah ini:
-              </div>
-            )}
 
-            {/* Form Tambah Peserta Langsung */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
-              <input
-                type="text"
-                value={newPesertaNama}
-                onChange={(e) => setNewPesertaNama(e.target.value)}
-                placeholder="Nama peserta / guru..."
-                className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="text"
-                value={newPesertaPeran}
-                onChange={(e) => setNewPesertaPeran(e.target.value)}
-                placeholder="Peran (mis: Guru Inklusi)"
-                className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="button"
-                onClick={handleAddPeserta}
-                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
-              >
-                <Plus size={14} />
-                <span>+ Peserta</span>
-              </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                          {schoolPeserta.length} Peserta
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSchoolForNewPeserta(school.id);
+                          }}
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                        >
+                          + Tambah Peserta
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* School Participants List */}
+                    {schoolPeserta.length > 0 ? (
+                      <div className="divide-y divide-slate-100">
+                        {schoolPeserta.map(p => (
+                          <div key={p.id} className="p-2.5 px-3 flex items-center justify-between text-xs hover:bg-slate-50">
+                            <div>
+                              <strong className="text-slate-800 font-bold block">{p.nama}</strong>
+                              <span className="text-[11px] text-slate-500">
+                                {p.peran || 'Peserta'} {p.email ? `• ${p.email}` : ''}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePeserta(p.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                              title="Hapus peserta"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 text-center text-[11px] text-slate-400">
+                        Belum ada peserta dari {school.namaSekolah}.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

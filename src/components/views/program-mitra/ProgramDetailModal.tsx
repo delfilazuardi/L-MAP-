@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   Calendar, 
@@ -57,18 +57,21 @@ export const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [targetPesertaForUpload, setTargetPesertaForUpload] = useState<PesertaMagangItem | null>(null);
 
-  // State for Adding a New Participant (Admin mode)
-  const [isAddingPesertaInline, setIsAddingPesertaInline] = useState(false);
-  const [newPesertaNama, setNewPesertaNama] = useState('');
-  const [newPesertaPeran, setNewPesertaPeran] = useState('');
-  const [newPesertaEmail, setNewPesertaEmail] = useState('');
-  const [newPesertaSekolahId, setNewPesertaSekolahId] = useState(sekolahList[0]?.id || 'MO004');
-
   // State for Adding General Guide Document (Admin mode)
   const [isAddingPanduan, setIsAddingPanduan] = useState(false);
   const [newPanduanNama, setNewPanduanNama] = useState('');
   const [newPanduanTipe, setNewPanduanTipe] = useState<'Panduan' | 'MoU' | 'Surat Tugas' | 'Materi'>('Panduan');
   const [newPanduanUrl, setNewPanduanUrl] = useState('');
+
+  // State for per-school inline participant creation (Admin mode)
+  const [activeInlineSchoolId, setActiveInlineSchoolId] = useState<string | null>(null);
+  const [inlinePesertaNama, setInlinePesertaNama] = useState('');
+  const [inlinePesertaPeran, setInlinePesertaPeran] = useState('');
+  const [inlinePesertaEmail, setInlinePesertaEmail] = useState('');
+
+  // State for adding additional target school to program
+  const [isAddingSchoolToProgram, setIsAddingSchoolToProgram] = useState(false);
+  const [selectedSchoolToAdd, setSelectedSchoolToAdd] = useState('');
 
   if (!isOpen || !program) return null;
 
@@ -172,17 +175,37 @@ export const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({
     }
   };
 
-  // Handler: Add participant by Admin
-  const handleAdminAddPeserta = async () => {
-    if (!newPesertaNama.trim()) return;
-    const targetSchool = sekolahList.find(s => s.id === newPesertaSekolahId);
+  // Target schools for this program
+  const targetSchools: SekolahMitra[] = useMemo(() => {
+    if (!program) return [];
+    if (program.sasaranSekolahIds && program.sasaranSekolahIds.length > 0) {
+      const filtered = sekolahList.filter(s => program.sasaranSekolahIds!.includes(s.id));
+      if (filtered.length > 0) return filtered;
+    }
+    if (program.mitraId && program.mitraId !== 'ALL') {
+      const match = sekolahList.find(s => s.id === program.mitraId);
+      if (match) return [match];
+    }
+    return sekolahList;
+  }, [program, sekolahList]);
+
+  // Available schools not yet targeted in this program
+  const availableSchoolsToAdd = useMemo(() => {
+    const existingIds = new Set(targetSchools.map(s => s.id));
+    return sekolahList.filter(s => !existingIds.has(s.id));
+  }, [targetSchools, sekolahList]);
+
+  // Handler: Add participant directly to a specific target school
+  const handleSaveParticipantForSchool = async (school: SekolahMitra) => {
+    if (!inlinePesertaNama.trim()) return;
+
     const newPeserta: PesertaMagangItem = {
       id: `PESERTA-${Date.now().toString().slice(-6)}`,
-      nama: newPesertaNama.trim(),
-      peran: newPesertaPeran.trim() || 'Peserta Program',
-      email: newPesertaEmail.trim() || undefined,
-      sekolahId: targetSchool?.id || program.mitraId,
-      namaSekolah: targetSchool?.namaSekolah || program.namaSekolah,
+      nama: inlinePesertaNama.trim(),
+      peran: inlinePesertaPeran.trim() || 'Peserta Program',
+      email: inlinePesertaEmail.trim() || undefined,
+      sekolahId: school.id,
+      namaSekolah: school.namaSekolah,
       dokumenPribadi: [],
     };
 
@@ -196,10 +219,63 @@ export const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({
     };
 
     await onUpdateProgram(updatedProgram);
-    setNewPesertaNama('');
-    setNewPesertaPeran('');
-    setNewPesertaEmail('');
-    setIsAddingPesertaInline(false);
+    setInlinePesertaNama('');
+    setInlinePesertaPeran('');
+    setInlinePesertaEmail('');
+    setActiveInlineSchoolId(null);
+  };
+
+  // Handler: Add target school to program
+  const handleAddSchoolTarget = async () => {
+    if (!selectedSchoolToAdd) return;
+    const currentIds = program.sasaranSekolahIds && program.sasaranSekolahIds.length > 0 
+      ? program.sasaranSekolahIds 
+      : targetSchools.map(s => s.id);
+
+    if (currentIds.includes(selectedSchoolToAdd)) return;
+    const newIds = [...currentIds, selectedSchoolToAdd];
+    const newTargetSchools = sekolahList.filter(s => newIds.includes(s.id));
+    const newNama = newTargetSchools.length === sekolahList.length
+      ? 'Semua Sekolah Mitra'
+      : (newTargetSchools.length === 1 
+          ? newTargetSchools[0].namaSekolah 
+          : `${newTargetSchools.length} Sekolah (${newTargetSchools.map(s => s.namaSekolah).join(', ')})`);
+
+    const updatedProgram: ProgramMitraItem = {
+      ...program,
+      sasaranSekolahIds: newIds,
+      sasaranSekolahNama: newNama,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await onUpdateProgram(updatedProgram);
+    setSelectedSchoolToAdd('');
+    setIsAddingSchoolToProgram(false);
+  };
+
+  // Handler: Remove target school from program
+  const handleRemoveSchoolTarget = async (schoolId: string) => {
+    const currentIds = program.sasaranSekolahIds && program.sasaranSekolahIds.length > 0
+      ? program.sasaranSekolahIds
+      : targetSchools.map(s => s.id);
+
+    if (currentIds.length <= 1) return;
+    const newIds = currentIds.filter(id => id !== schoolId);
+    const newTargetSchools = sekolahList.filter(s => newIds.includes(s.id));
+    const newNama = newTargetSchools.length === sekolahList.length
+      ? 'Semua Sekolah Mitra'
+      : (newTargetSchools.length === 1 
+          ? newTargetSchools[0].namaSekolah 
+          : `${newTargetSchools.length} Sekolah (${newTargetSchools.map(s => s.namaSekolah).join(', ')})`);
+
+    const updatedProgram: ProgramMitraItem = {
+      ...program,
+      sasaranSekolahIds: newIds,
+      sasaranSekolahNama: newNama,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await onUpdateProgram(updatedProgram);
   };
 
   // Handler: Remove participant by Admin
@@ -638,142 +714,332 @@ export const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({
                       </div>
                     ) : null}
 
-                    {/* Table of All Participants */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div>
-                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                            Daftar Peserta Terdaftar ({program.pesertaMagang?.length || 0})
-                          </h4>
-                          <span className="text-[11px] text-slate-500">
-                            Admin dapat menambahkan peserta dan mengelola dokumen khusus per peserta.
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingPesertaInline(true)}
-                          className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
-                        >
-                          <Plus size={14} />
-                          <span>+ Tambah Peserta Baru</span>
-                        </button>
-                      </div>
-
-                      {/* Inline Form to Add Participant */}
-                      {isAddingPesertaInline && (
-                        <div className="p-3.5 rounded-xl bg-white border-2 border-blue-400 space-y-2.5 shadow-xs">
-                          <span className="text-xs font-bold text-blue-900 block">
-                            Form Tambah Peserta Baru
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                            <input
-                              type="text"
-                              value={newPesertaNama}
-                              onChange={(e) => setNewPesertaNama(e.target.value)}
-                              placeholder="Nama Lengkap Peserta..."
-                              className="sm:col-span-2 px-3 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <input
-                              type="text"
-                              value={newPesertaPeran}
-                              onChange={(e) => setNewPesertaPeran(e.target.value)}
-                              placeholder="Peran / Jabatan..."
-                              className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <select
-                              value={newPesertaSekolahId}
-                              onChange={(e) => setNewPesertaSekolahId(e.target.value)}
-                              className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                            >
-                              {sekolahList.map(s => (
-                                <option key={s.id} value={s.id}>{s.namaSekolah}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <input
-                              type="email"
-                              value={newPesertaEmail}
-                              onChange={(e) => setNewPesertaEmail(e.target.value)}
-                              placeholder="Email guru/peserta (opsional untuk sinkronisasi akun)"
-                              className="w-full sm:w-80 px-3 py-1.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                    {/* Sasaran Sekolah & Daftar Peserta Tiap Sekolah */}
+                    <div className="space-y-4">
+                      {/* Top Bar: Target Schools Chips & Quick Add School */}
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div>
                             <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setIsAddingPesertaInline(false)}
-                                className="px-3 py-1 rounded-lg border border-slate-300 text-xs text-slate-600 font-bold hover:bg-slate-100"
-                              >
-                                Batal
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleAdminAddPeserta}
-                                className="px-3.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-                              >
-                                Simpan Peserta
-                              </button>
+                              <School size={16} className="text-blue-600" />
+                              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                Sasaran Sekolah ({targetSchools.length} Sekolah)
+                              </h4>
                             </div>
+                            <span className="text-[11px] text-slate-500 block mt-0.5">
+                              Setiap sekolah dapat ditambahkan peserta khusus. Peserta guru hanya dapat melihat dokumen milik mereka sendiri.
+                            </span>
                           </div>
-                        </div>
-                      )}
 
-                      {/* Participant Cards / Table */}
-                      {(program.pesertaMagang || []).length > 0 ? (
-                        <div className="divide-y divide-slate-200 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                          {program.pesertaMagang!.map(p => {
-                            const docCount = (p.dokumenPribadi || []).length;
-                            const isCurrentSelected = selectedPesertaForAdmin?.id === p.id;
+                          {availableSchoolsToAdd.length > 0 && (
+                            <div>
+                              {!isAddingSchoolToProgram ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setIsAddingSchoolToProgram(true)}
+                                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
+                                >
+                                  <Plus size={14} />
+                                  <span>+ Tambah Sekolah Sasaran</span>
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={selectedSchoolToAdd}
+                                    onChange={(e) => setSelectedSchoolToAdd(e.target.value)}
+                                    className="px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs bg-white font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    <option value="">Pilih Sekolah Mitra...</option>
+                                    {availableSchoolsToAdd.map(s => (
+                                      <option key={s.id} value={s.id}>{s.namaSekolah}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={handleAddSchoolTarget}
+                                    disabled={!selectedSchoolToAdd}
+                                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer"
+                                  >
+                                    Tambah
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsAddingSchoolToProgram(false);
+                                      setSelectedSchoolToAdd('');
+                                    }}
+                                    className="px-2 py-1.5 rounded-xl border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100 transition cursor-pointer"
+                                  >
+                                    Batal
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* School badges */}
+                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                          {targetSchools.map(sch => {
+                            const countPeserta = (program.pesertaMagang || []).filter(
+                              p => p.sekolahId === sch.id || (!p.sekolahId && sch.id === program.mitraId)
+                            ).length;
 
                             return (
-                              <div key={p.id} className={`p-3 flex items-center justify-between gap-3 text-xs transition ${
-                                isCurrentSelected ? 'bg-blue-50/50' : 'hover:bg-slate-50'
-                              }`}>
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-2">
-                                    <strong className="text-slate-800 font-bold text-xs sm:text-sm">
-                                      {p.nama}
-                                    </strong>
-                                    <span className="text-[10px] px-2 py-0.2 rounded bg-slate-100 text-slate-700 font-mono font-semibold border border-slate-200">
-                                      {p.namaSekolah || p.sekolahId}
-                                    </span>
-                                    <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-blue-100 text-blue-800">
-                                      {docCount} Dokumen
-                                    </span>
-                                  </div>
-                                  <span className="text-[11px] text-slate-500 block">
-                                    {p.peran || 'Peserta'} {p.email ? `• ${p.email}` : ''}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedPesertaForAdmin(p)}
-                                    className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold transition flex items-center gap-1 border border-blue-200 text-xs cursor-pointer"
-                                  >
-                                    <span>Kelola Dokumen ({docCount})</span>
-                                    <ChevronRight size={13} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAdminRemovePeserta(p.id)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                    title="Hapus peserta"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
+                              <div
+                                key={sch.id}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs"
+                              >
+                                <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                                <span>{sch.namaSekolah}</span>
+                                <span className="px-1.5 py-0.2 rounded-md bg-blue-100 text-blue-800 text-[10px] font-mono">
+                                  {countPeserta} Peserta
+                                </span>
                               </div>
                             );
                           })}
                         </div>
-                      ) : (
-                        <div className="p-5 text-center bg-white rounded-xl border border-dashed border-slate-300 text-xs text-slate-400">
-                          Belum ada peserta yang ditambahkan ke program ini. Silakan klik tombol <strong>Tambah Peserta Baru</strong>.
-                        </div>
-                      )}
+                      </div>
+
+                      {/* Per-School Cards & Participants */}
+                      <div className="space-y-4">
+                        {targetSchools.map(school => {
+                          const schoolPeserta = (program.pesertaMagang || []).filter(
+                            p => p.sekolahId === school.id || (!p.sekolahId && school.id === program.mitraId)
+                          );
+                          const isAddingHere = activeInlineSchoolId === school.id;
+
+                          return (
+                            <div 
+                              key={school.id} 
+                              className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-3"
+                            >
+                              {/* School Card Header */}
+                              <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-slate-100">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold shrink-0">
+                                    <School size={16} />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="text-sm font-black text-slate-800">
+                                        {school.namaSekolah}
+                                      </h4>
+                                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-bold border border-slate-200">
+                                        {school.kodeMitra || school.id}
+                                      </span>
+                                      <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-blue-100 text-blue-800">
+                                        {schoolPeserta.length} Peserta
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] text-slate-500 block">
+                                      {school.kota || 'Indonesia'} • {school.jenjang || 'Sekolah Mitra'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (isAddingHere) {
+                                        setActiveInlineSchoolId(null);
+                                      } else {
+                                        setActiveInlineSchoolId(school.id);
+                                        setInlinePesertaNama('');
+                                        setInlinePesertaPeran('');
+                                        setInlinePesertaEmail('');
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                  >
+                                    <Plus size={14} />
+                                    <span>+ Tambah Peserta</span>
+                                  </button>
+
+                                  {targetSchools.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSchoolTarget(school.id)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                                      title={`Keluarkan ${school.namaSekolah} dari sasaran program`}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Inline Form to Add Participant to THIS school */}
+                              {isAddingHere && (
+                                <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-300 space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-black text-blue-900">
+                                      Tambah Peserta Baru untuk {school.namaSekolah}
+                                    </span>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setActiveInlineSchoolId(null)}
+                                      className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <input
+                                      type="text"
+                                      value={inlinePesertaNama}
+                                      onChange={(e) => setInlinePesertaNama(e.target.value)}
+                                      placeholder="Nama Lengkap Peserta..."
+                                      className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      autoFocus
+                                    />
+                                    <input
+                                      type="text"
+                                      value={inlinePesertaPeran}
+                                      onChange={(e) => setInlinePesertaPeran(e.target.value)}
+                                      placeholder="Peran / Jabatan (e.g. Guru Sentra)..."
+                                      className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <input
+                                      type="email"
+                                      value={inlinePesertaEmail}
+                                      onChange={(e) => setInlinePesertaEmail(e.target.value)}
+                                      placeholder="Email guru (opsional)..."
+                                      className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center justify-end gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveInlineSchoolId(null)}
+                                      className="px-3 py-1 rounded-lg border border-slate-300 text-xs text-slate-600 font-bold hover:bg-slate-100 transition cursor-pointer"
+                                    >
+                                      Batal
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveParticipantForSchool(school)}
+                                      className="px-3.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
+                                    >
+                                      Simpan Peserta
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Participants list for THIS school */}
+                              {schoolPeserta.length > 0 ? (
+                                <div className="divide-y divide-slate-100 bg-slate-50/60 rounded-xl border border-slate-200 overflow-hidden">
+                                  {schoolPeserta.map(p => {
+                                    const docCount = (p.dokumenPribadi || []).length;
+                                    const isCurrentSelected = selectedPesertaForAdmin?.id === p.id;
+
+                                    return (
+                                      <div 
+                                        key={p.id} 
+                                        className={`p-3 flex items-center justify-between gap-3 text-xs transition ${
+                                          isCurrentSelected ? 'bg-blue-50' : 'hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        <div className="space-y-0.5 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <strong className="text-slate-800 font-bold text-xs sm:text-sm">
+                                              {p.nama}
+                                            </strong>
+                                            <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                              {docCount} Dokumen
+                                            </span>
+                                          </div>
+                                          <span className="text-[11px] text-slate-500 block truncate">
+                                            {p.peran || 'Peserta'} {p.email ? `• ${p.email}` : ''}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedPesertaForAdmin(p)}
+                                            className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold transition flex items-center gap-1 border border-blue-200 text-xs cursor-pointer"
+                                          >
+                                            <span>Kelola Dokumen ({docCount})</span>
+                                            <ChevronRight size={13} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAdminRemovePeserta(p.id)}
+                                            className="p-1.5 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                                            title="Hapus peserta"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="p-4 text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">
+                                  Belum ada peserta dari {school.namaSekolah}. Klik tombol <strong>+ Tambah Peserta</strong> di atas untuk mendaftarkan.
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Any participants whose schoolId does not match any current targetSchools */}
+                        {(() => {
+                          const targetIds = new Set(targetSchools.map(s => s.id));
+                          const unassigned = (program.pesertaMagang || []).filter(
+                            p => p.sekolahId && !targetIds.has(p.sekolahId)
+                          );
+                          if (unassigned.length === 0) return null;
+
+                          return (
+                            <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-3">
+                              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100">
+                                Peserta Sekolah Lainnya ({unassigned.length})
+                              </h4>
+                              <div className="divide-y divide-slate-100 bg-slate-50/60 rounded-xl border border-slate-200 overflow-hidden">
+                                {unassigned.map(p => {
+                                  const docCount = (p.dokumenPribadi || []).length;
+                                  return (
+                                    <div key={p.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <strong className="text-slate-800 font-bold">{p.nama}</strong>
+                                          <span className="text-[10px] px-2 py-0.2 rounded bg-slate-100 text-slate-700 font-mono font-semibold">
+                                            {p.namaSekolah || p.sekolahId}
+                                          </span>
+                                        </div>
+                                        <span className="text-[11px] text-slate-500">{p.peran}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedPesertaForAdmin(p)}
+                                          className="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs"
+                                        >
+                                          Kelola Dokumen ({docCount})
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAdminRemovePeserta(p.id)}
+                                          className="p-1.5 text-slate-400 hover:text-rose-600"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}

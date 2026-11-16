@@ -448,6 +448,11 @@ export const ProgramMitraView: React.FC = () => {
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200">
                         TA {item.tahunAjaran || '2026/2027'}
                       </span>
+                      {item.sasaranSekolahIds && item.sasaranSekolahIds.length > 1 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                          {item.sasaranSekolahIds.length} Sekolah Mitra
+                        </span>
+                      )}
                       {isUserEnrolled && isGuruMitra && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
                           <CheckCircle2 size={10} />

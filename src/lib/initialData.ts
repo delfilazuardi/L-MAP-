@@ -1559,11 +1559,13 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     judul: 'Program Magang Guru Pendamping Khusus (Shadow Teacher) & Diferensiasi',
     tahunAjaran: '2026/2027',
     mitraId: 'MO008',
-    namaSekolah: 'Ibnu Sina',
+    namaSekolah: '2 Sekolah (Ibnu Sina, Al-Falah Klaten)',
+    sasaranSekolahNama: '2 Sekolah (Ibnu Sina, Al-Falah Klaten)',
+    sasaranSekolahIds: ['MO008', 'MO005'],
     tanggalMulai: '2026-10-12',
     tanggalSelesai: '2026-10-24',
-    peserta: 'Fathur Rahman, S.Pd & Siti Nurhaliza, S.Psi',
-    jumlahPeserta: 2,
+    peserta: 'Fathur Rahman, Siti Nurhaliza, Hendra Wijaya',
+    jumlahPeserta: 3,
     deskripsi: 'Magang intensif 2 minggu bersama guru shadow senior Lazuardi untuk praktik penyusunan IEP dan teknik intervensi sensori.',
     linkDocs: 'https://docs.google.com/document/d/1ibnu-sina-proposal-magang-guru/edit',
     linkSheet: 'https://docs.google.com/spreadsheets/d/1ibnu-sina-presensi-magang-sheet/edit',
@@ -1673,6 +1675,25 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
             url: 'https://docs.google.com/spreadsheets/d/1logbook-siti-konseling/edit',
             tanggal: '2026-10-20',
             keterangan: 'Catatan harian konseling dan komunikasi dengan orang tua.'
+          }
+        ]
+      },
+      {
+        id: 'PESERTA-012',
+        nama: 'Bpk. Hendra Wijaya, S.Pd.',
+        peran: 'Guru Matematika & IT',
+        email: 'hendra.klaten@lazuardi.sch.id',
+        sekolahId: 'MO005',
+        namaSekolah: 'Al-Falah Klaten',
+        dokumenPribadi: [
+          {
+            id: 'DP-017',
+            nama: 'Surat Tugas Magang Diferensiasi Al-Falah Klaten',
+            tipe: 'Surat Tugas',
+            url: 'https://drive.google.com/file/d/1surat-tugas-hendra.pdf/view',
+            tanggal: '2026-10-10',
+            uploadedBy: 'admin',
+            keterangan: 'Surat tugas delegasi magang guru dari pimpinan Al-Falah Klaten.'
           }
         ]
       }
@@ -1998,12 +2019,13 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
     judul: 'LATOF (Lazuardi Training of Facilitators) Inklusi & Pembelajaran Berdiferensiasi',
     tahunAjaran: '2026/2027',
     mitraId: 'MO004',
-    namaSekolah: 'Al-Falah Depok',
-    sasaranSekolahNama: 'Semua Sekolah Mitra',
+    namaSekolah: '3 Sekolah (Al-Falah Depok, Lazuardi Cordova, Ibnu Sina)',
+    sasaranSekolahNama: '3 Sekolah (Al-Falah Depok, Lazuardi Cordova, Ibnu Sina)',
+    sasaranSekolahIds: ['MO004', 'MO006', 'MO008'],
     tanggalMulai: '2026-11-04',
     tanggalSelesai: '2026-11-06',
-    peserta: 'Ust. Rizky Ramadhan, S.Pd. & Delegasi Guru Mitra',
-    jumlahPeserta: 8,
+    peserta: 'Ust. Rizky Ramadhan, Ibu Fitri Handayani, Bpk. Agus Setiawan',
+    jumlahPeserta: 3,
     deskripsi: 'Program sertifikasi fasilitator kurikulum diferensiasi dan pendekatan welas asih bagi guru dan pimpinan sekolah mitra.',
     flyerUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=80',
     flyerCaption: 'Flyer Resmi LATOF Gelombang I: Lazuardi Training of Facilitators 2026',
@@ -2045,6 +2067,44 @@ export const INITIAL_PROGRAM_MITRA: ProgramMitraItem[] = [
             tanggal: '2026-11-04',
             uploadedBy: 'peserta',
             keterangan: 'Catatan ringkasan pilar diferensiasi belajar dan strategi scaffolding.'
+          }
+        ]
+      },
+      {
+        id: 'PESERTA-061',
+        nama: 'Ibu Fitri Handayani, S.Pd.',
+        peran: 'Guru Bahasa Inggris & Cambridge',
+        email: 'fitri.cordova@lazuardi.sch.id',
+        sekolahId: 'MO006',
+        namaSekolah: 'Lazuardi Cordova',
+        dokumenPribadi: [
+          {
+            id: 'DP-062',
+            nama: 'Surat Tugas Peserta LATOF Lazuardi Cordova',
+            tipe: 'Surat Tugas',
+            url: 'https://drive.google.com/file/d/1surat-tugas-fitri.pdf/view',
+            tanggal: '2026-11-01',
+            uploadedBy: 'admin',
+            keterangan: 'Surat tugas delegasi guru Cordova.'
+          }
+        ]
+      },
+      {
+        id: 'PESERTA-062',
+        nama: 'Bpk. Agus Setiawan, S.Si.',
+        peran: 'Koordinator Magang & IPA',
+        email: 'agus.ibnusina@lazuardi.sch.id',
+        sekolahId: 'MO008',
+        namaSekolah: 'Ibnu Sina',
+        dokumenPribadi: [
+          {
+            id: 'DP-063',
+            nama: 'Surat Tugas Peserta LATOF Ibnu Sina',
+            tipe: 'Surat Tugas',
+            url: 'https://drive.google.com/file/d/1surat-tugas-agus.pdf/view',
+            tanggal: '2026-11-01',
+            uploadedBy: 'admin',
+            keterangan: 'Surat tugas delegasi guru Ibnu Sina.'
           }
         ]
       }
