@@ -19,10 +19,10 @@ import {
   formatRupiah, 
   allocateCicilanToInvoices, 
   CicilanAllocationResult,
-  getInvoiceRemainingDebt,
-  getEffectiveInvoiceStatus,
   isRecordBelongsToSchool,
-  compareInvoicesForCicilanFIFO
+  compareInvoicesForCicilanFIFO,
+  computeInvoiceAccumulationMap,
+  getAccumulationEntry
 } from '../../../lib/invoiceUtils';
 import { NominalInput } from './NominalInput';
 import { FileUploadBox } from './FileUploadBox';
@@ -100,21 +100,41 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
     return sekolahList.find(s => s.id === selectedMitraId) || payableSchools[0] || sekolahList[0];
   }, [sekolahList, payableSchools, selectedMitraId]);
 
-  // All invoices of selected school with remaining debt > 0 (sorted FIFO, matches main screen 100%)
+  // Mesin akumulasi lintas-tagihan agar kelebihan bayar (Full < Bayar) di tagihan lain otomatis mengurangi sisa hutang sekolah ini
+  const accumulationMap = useMemo(
+    () => computeInvoiceAccumulationMap(invoices, sekolahList),
+    [invoices, sekolahList]
+  );
+
+  // All invoices of selected school with effective remaining debt > 0 (sorted FIFO, matches main screen 100%)
   const schoolUnpaidInvoices = useMemo(() => {
     const targetSchool = selectedSchool || selectedMitraId;
     return invoices
       .filter(i => {
         if (!isRecordBelongsToSchool(i, targetSchool, sekolahList)) return false;
-        return getInvoiceRemainingDebt(i) > 0;
+        const acc = getAccumulationEntry(accumulationMap, i);
+        return acc.effectiveRemainingDebt > 0;
+      })
+      .map(i => {
+        const acc = getAccumulationEntry(accumulationMap, i);
+        // Gunakan nominalPembayaran efektif (termasuk akumulasi masuk) agar simulasi cicilan memotong sisa bersih
+        if (acc.accumulatedIn > 0) {
+          return {
+            ...i,
+            nominalPembayaran: acc.storedPaid + acc.accumulatedIn,
+          };
+        }
+        return i;
       })
       .sort(compareInvoicesForCicilanFIFO);
-  }, [invoices, selectedSchool, selectedMitraId, sekolahList]);
+  }, [invoices, selectedSchool, selectedMitraId, sekolahList, accumulationMap]);
 
-  // Total current unpaid debt of selected school (exact sum of table remaining debts)
+  // Total current unpaid debt of selected school (exact sum of accumulated table remaining debts)
   const totalHutangSekolah = useMemo(() => {
     return schoolUnpaidInvoices.reduce((acc, inv) => {
-      return acc + getInvoiceRemainingDebt(inv);
+      const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+      const paid = Number(inv.nominalPembayaran) || 0;
+      return acc + Math.max(0, full - paid);
     }, 0);
   }, [schoolUnpaidInvoices]);
 
@@ -238,7 +258,7 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                 {payableSchools.map((s) => {
                   const sDebt = invoices
                     .filter(i => isRecordBelongsToSchool(i, s, sekolahList))
-                    .reduce((acc, inv) => acc + getInvoiceRemainingDebt(inv), 0);
+                    .reduce((acc, inv) => acc + getAccumulationEntry(accumulationMap, inv).effectiveRemainingDebt, 0);
 
                   return (
                     <option key={s.id} value={s.id}>
@@ -478,11 +498,12 @@ export const RencanaCicilanModal: React.FC<RencanaCicilanModalProps> = ({
                   <tbody className="divide-y divide-slate-200 bg-white">
                     {schoolUnpaidInvoices.map((inv) => {
                       const allocItem = allocationSimulation.updatedInvoices.find(u => u.invoice.id === inv.id);
+                      const accEntry = getAccumulationEntry(accumulationMap, inv);
                       const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
-                      const remBefore = getInvoiceRemainingDebt(inv);
+                      const remBefore = accEntry.effectiveRemainingDebt;
                       const allocated = allocItem?.allocatedAmount || 0;
                       const newRemaining = Math.max(0, remBefore - allocated);
-                      const newStatus = allocItem ? allocItem.newStatus : getEffectiveInvoiceStatus(inv);
+                      const newStatus = allocItem ? allocItem.newStatus : accEntry.effectiveStatus;
 
                       return (
                         <tr 

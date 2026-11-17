@@ -1,4 +1,4 @@
-import { Invoice, InvoiceStatus } from '../types';
+import { Invoice, InvoiceStatus, SekolahMitra } from '../types';
 
 export const ROMAWI_BULAN: Record<number, string> = {
   1: 'I',
@@ -720,8 +720,28 @@ export function getInvoiceRemainingDebt(inv: Invoice): number {
 }
 
 /**
+ * Menghitung kelebihan bayar (surplus) pada satu invoice ketika Nominal Full < Nominal Pembayaran.
+ * Sekolah Afiliasi / Pelaporan Saja selalu 0.
+ */
+export function getInvoiceOverpayment(inv: Invoice): number {
+  const isPelaporan = Boolean(
+    inv.isPelaporanSaja ||
+      isSchoolPelaporanSaja(inv.mitraId || inv.namaSekolah || '', {
+        date: inv.tanggalKirim,
+        tahunAjaran: inv.tahunAjaran,
+      })
+  );
+  if (isPelaporan) return 0;
+
+  const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+  const paid = Number(inv.nominalPembayaran) || 0;
+  return Math.max(0, paid - full);
+}
+
+/**
  * Single Source of Truth untuk Status Pembayaran Efektif sebuah Invoice
  * agar konsisten antara tabel utama, filter status, dan modal cicilan.
+ * Jika pembayaran melebihi Tagihan Full (full < paid), jangan dikatakan Lunas -> 'Akumulasi'.
  */
 export function getEffectiveInvoiceStatus(inv: Invoice): InvoiceStatus {
   const isPelaporan = Boolean(
@@ -737,6 +757,7 @@ export function getEffectiveInvoiceStatus(inv: Invoice): InvoiceStatus {
   const paid = Number(inv.nominalPembayaran) || 0;
   const remaining = Math.max(0, full - paid);
 
+  if (paid > full && paid > 0) return 'Akumulasi';
   if (full > 0 && remaining === 0) return 'Lunas';
   if (paid > 0 && remaining > 0) return 'Sebagian';
   if (inv.status === 'Jatuh Tempo' || inv.status === 'Menunggu Konfirmasi') {
@@ -888,5 +909,335 @@ export function generateJadwalCicilan(
 
   return result;
 }
+
+export interface AccumulationTargetRef {
+  invoiceId: string;
+  nomorInvoice: string;
+  kategori?: string;
+  amount: number;
+}
+
+export interface InvoiceAccumulationInfo {
+  invoiceId: string;
+  isPelaporan: boolean;
+  tagihanFull: number;
+  storedPaid: number;
+  rawSurplus: number; // storedPaid > tagihanFull
+  accumulatedOut: number; // bagian rawSurplus yang terserap ke tagihan lain yg kurang/sebagian
+  accumulatedOutTargets: AccumulationTargetRef[];
+  unallocatedSurplus: number; // sisa lebih bayar setelah semua tagihan lain tertutup
+  accumulatedIn: number; // tambahan pelunasan dari kelebihan bayar tagihan lain sekolah yg sama
+  accumulatedInSources: AccumulationTargetRef[];
+  effectivePaid: number; // Untuk donor: tagihanFull + unallocatedSurplus; untuk penerima: storedPaid + accumulatedIn
+  effectiveNominalLunas: number; // min(tagihanFull, storedPaid + accumulatedIn)
+  effectiveRemainingDebt: number; // max(0, tagihanFull - (storedPaid + accumulatedIn))
+  effectiveStatus: InvoiceStatus;
+}
+
+/**
+ * Mengembalikan key sekolah kanonik agar variasi mitraId / namaSekolah selalu terakumulasi ke sekolah yg sama.
+ */
+export function resolveCanonicalSchoolKey(
+  record: { mitraId?: string | null; sekolahId?: string | null; kodeMitra?: string | null; namaSekolah?: string | null },
+  sekolahList?: Array<Pick<SekolahMitra, 'id' | 'kodeMitra' | 'namaSekolah'>>
+): string {
+  if (sekolahList && sekolahList.length > 0) {
+    const matched = sekolahList.find(s => isRecordBelongsToSchool(record, s, sekolahList));
+    if (matched) return String(matched.id).trim().toUpperCase();
+  }
+  const raw = String(record.mitraId || record.kodeMitra || record.sekolahId || record.namaSekolah || 'UNKNOWN')
+    .trim()
+    .toUpperCase();
+  return raw || 'UNKNOWN';
+}
+
+/**
+ * Mesin Akumulasi Lintas-Tagihan per Sekolah:
+ * Jika ada invoice dengan Tagihan Full < Pembayaran (rawSurplus > 0), kelebihannya TIDAK hilang/dianggap Lunas biasa,
+ * melainkan otomatis diakumulasikan secara FIFO ke tagihan lain milik sekolah yang sama yang masih kurang bayar / sebagian.
+ */
+export function computeInvoiceAccumulationMap(
+  invoices: Invoice[],
+  sekolahList?: Array<Pick<SekolahMitra, 'id' | 'kodeMitra' | 'namaSekolah'>>
+): Map<string, InvoiceAccumulationInfo> {
+  const result = new Map<string, InvoiceAccumulationInfo>();
+  const schoolGroups = new Map<string, Invoice[]>();
+
+  invoices.forEach(inv => {
+    const isPelaporan = Boolean(
+      inv.isPelaporanSaja ||
+        isSchoolPelaporanSaja(inv.mitraId || inv.namaSekolah || '', {
+          date: inv.tanggalKirim,
+          tahunAjaran: inv.tahunAjaran,
+        })
+    );
+    const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+    const paid = isPelaporan ? 0 : (Number(inv.nominalPembayaran) || 0);
+    const rawSurplus = isPelaporan ? 0 : Math.max(0, paid - full);
+    const rawDeficit = isPelaporan ? 0 : Math.max(0, full - paid);
+
+    result.set(inv.id, {
+      invoiceId: inv.id,
+      isPelaporan,
+      tagihanFull: full,
+      storedPaid: paid,
+      rawSurplus,
+      accumulatedOut: 0,
+      accumulatedOutTargets: [],
+      unallocatedSurplus: rawSurplus,
+      accumulatedIn: 0,
+      accumulatedInSources: [],
+      effectivePaid: paid,
+      effectiveNominalLunas: isPelaporan ? full : Math.min(full, paid),
+      effectiveRemainingDebt: rawDeficit,
+      effectiveStatus: getEffectiveInvoiceStatus(inv),
+    });
+
+    if (!isPelaporan) {
+      const key = resolveCanonicalSchoolKey(inv, sekolahList);
+      const list = schoolGroups.get(key) || [];
+      list.push(inv);
+      schoolGroups.set(key, list);
+    }
+  });
+
+  // Distribusikan surplus ke tagihan yg kurang bayar/sebagian dalam sekolah yg sama (urutan FIFO)
+  schoolGroups.forEach(group => {
+    const donors = group
+      .filter(inv => (result.get(inv.id)?.rawSurplus || 0) > 0)
+      .sort(compareInvoicesForCicilanFIFO);
+    const recipients = group
+      .filter(inv => (result.get(inv.id)?.effectiveRemainingDebt || 0) > 0)
+      .sort(compareInvoicesForCicilanFIFO);
+
+    if (donors.length === 0) return;
+
+    donors.forEach(donor => {
+      const donorInfo = result.get(donor.id)!;
+      let available = donorInfo.unallocatedSurplus;
+
+      recipients.forEach(recipient => {
+        if (available <= 0) return;
+        const recInfo = result.get(recipient.id)!;
+        if (recInfo.effectiveRemainingDebt <= 0) return;
+
+        const transfer = Math.min(available, recInfo.effectiveRemainingDebt);
+        available -= transfer;
+
+        donorInfo.accumulatedOut += transfer;
+        donorInfo.unallocatedSurplus -= transfer;
+        donorInfo.accumulatedOutTargets.push({
+          invoiceId: recipient.id,
+          nomorInvoice: recipient.nomorInvoice || recipient.id,
+          kategori: recipient.kategori,
+          amount: transfer,
+        });
+
+        recInfo.accumulatedIn += transfer;
+        recInfo.accumulatedInSources.push({
+          invoiceId: donor.id,
+          nomorInvoice: donor.nomorInvoice || donor.id,
+          kategori: donor.kategori,
+          amount: transfer,
+        });
+        recInfo.effectivePaid = recInfo.storedPaid + recInfo.accumulatedIn;
+        recInfo.effectiveNominalLunas = Math.min(recInfo.tagihanFull, recInfo.effectivePaid);
+        recInfo.effectiveRemainingDebt = Math.max(0, recInfo.tagihanFull - recInfo.effectivePaid);
+
+        if (recInfo.tagihanFull > 0 && recInfo.effectiveRemainingDebt === 0) {
+          recInfo.effectiveStatus = 'Lunas';
+        } else if (recInfo.effectivePaid > 0 && recInfo.effectiveRemainingDebt > 0) {
+          recInfo.effectiveStatus = 'Sebagian';
+        }
+      });
+
+      donorInfo.effectivePaid = donorInfo.tagihanFull + donorInfo.unallocatedSurplus;
+      donorInfo.effectiveNominalLunas = donorInfo.tagihanFull;
+      donorInfo.effectiveRemainingDebt = 0;
+      // Jangan dikatakan Lunas jika nominal full lebih kecil dari pembayaran -> Akumulasi
+      donorInfo.effectiveStatus = 'Akumulasi';
+    });
+  });
+
+  return result;
+}
+
+export function getAccumulationEntry(
+  accMap: Map<string, InvoiceAccumulationInfo> | undefined,
+  inv: Invoice
+): InvoiceAccumulationInfo {
+  const existing = accMap?.get(inv.id);
+  if (existing) return existing;
+
+  const isPelaporan = Boolean(
+    inv.isPelaporanSaja ||
+      isSchoolPelaporanSaja(inv.mitraId || inv.namaSekolah || '', {
+        date: inv.tanggalKirim,
+        tahunAjaran: inv.tahunAjaran,
+      })
+  );
+  const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
+  const paid = isPelaporan ? 0 : (Number(inv.nominalPembayaran) || 0);
+  const rawSurplus = isPelaporan ? 0 : Math.max(0, paid - full);
+  const remaining = isPelaporan ? 0 : Math.max(0, full - paid);
+
+  return {
+    invoiceId: inv.id,
+    isPelaporan,
+    tagihanFull: full,
+    storedPaid: paid,
+    rawSurplus,
+    accumulatedOut: 0,
+    accumulatedOutTargets: [],
+    unallocatedSurplus: rawSurplus,
+    accumulatedIn: 0,
+    accumulatedInSources: [],
+    effectivePaid: paid,
+    effectiveNominalLunas: isPelaporan ? full : Math.min(full, paid),
+    effectiveRemainingDebt: remaining,
+    effectiveStatus: getEffectiveInvoiceStatus(inv),
+  };
+}
+
+export interface OverpaymentDistributionPlan {
+  excess: number;
+  allocation: CicilanAllocationResult;
+  adjustedTargetPaid: number;
+  adjustedTargetStatus: InvoiceStatus;
+}
+
+/**
+ * Merencanakan pemecahan kelebihan bayar (Nominal Full < Nominal Pembayaran)
+ * untuk langsung diakumulasikan ke tagihan lain milik sekolah yang masih kurang bayar / bayar sebagian.
+ */
+export function buildOverpaymentDistributionPlan(
+  targetInvoice: {
+    id?: string;
+    nomorInvoice?: string;
+    mitraId: string;
+    namaSekolah?: string;
+    tagihanFull: number;
+    nominalPembayaran: number;
+    tanggalDibayar?: string;
+  },
+  allInvoices: Invoice[],
+  sekolahList?: Array<Pick<SekolahMitra, 'id' | 'kodeMitra' | 'namaSekolah'>>
+): OverpaymentDistributionPlan {
+  const full = Math.max(0, Number(targetInvoice.tagihanFull) || 0);
+  const paid = Math.max(0, Number(targetInvoice.nominalPembayaran) || 0);
+  const excess = Math.max(0, paid - full);
+
+  const targetSchool = sekolahList?.find(s => isRecordBelongsToSchool(targetInvoice, s, sekolahList)) || targetInvoice.mitraId;
+  const otherUnderpaid = allInvoices.filter(inv => {
+    if (targetInvoice.id && inv.id === targetInvoice.id) return false;
+    if (targetInvoice.nomorInvoice && inv.nomorInvoice === targetInvoice.nomorInvoice) return false;
+    if (!isRecordBelongsToSchool(inv, targetSchool, sekolahList)) return false;
+    return getInvoiceRemainingDebt(inv) > 0;
+  });
+
+  const allocation = allocateCicilanToInvoices(
+    otherUnderpaid,
+    excess,
+    targetInvoice.tanggalDibayar
+  );
+
+  // Jika masih ada sisa kelebihan setelah menutup seluruh tagihan kurang bayar, tetap simpan sebagai Akumulasi
+  const adjustedTargetPaid = full + allocation.remainingInstallment;
+  const adjustedTargetStatus: InvoiceStatus =
+    allocation.remainingInstallment > 0 ? 'Akumulasi' : 'Lunas';
+
+  return {
+    excess,
+    allocation,
+    adjustedTargetPaid,
+    adjustedTargetStatus,
+  };
+}
+
+export interface BulkAccumulationReconciliationPlan {
+  donorCount: number;
+  recipientCount: number;
+  totalTransferred: number;
+  affectedCount: number;
+  updates: Invoice[];
+}
+
+/**
+ * Menghasilkan daftar pembaruan Invoice untuk menyimpan permanen hasil akumulasi
+ * dari invoice yang kelebihan bayar (Nominal Full < Bayar) ke invoice kurang bayar / sebagian di Firestore.
+ */
+export function planBulkAccumulationReconciliation(
+  invoices: Invoice[],
+  sekolahList?: Array<Pick<SekolahMitra, 'id' | 'kodeMitra' | 'namaSekolah'>>
+): BulkAccumulationReconciliationPlan {
+  const accMap = computeInvoiceAccumulationMap(invoices, sekolahList);
+  const updates: Invoice[] = [];
+  let donorCount = 0;
+  let recipientCount = 0;
+  let totalTransferred = 0;
+  const nowIso = new Date().toISOString();
+
+  invoices.forEach(inv => {
+    const info = accMap.get(inv.id);
+    if (!info) return;
+
+    if (info.accumulatedOut > 0) {
+      donorCount += 1;
+      totalTransferred += info.accumulatedOut;
+      const newPaid = info.tagihanFull + info.unallocatedSurplus;
+      const targetLabels = info.accumulatedOutTargets
+        .map(t => `${t.nomorInvoice} (${formatRupiah(t.amount)})`)
+        .join(', ');
+      const appendNote = `Akumulasi ${formatRupiah(info.accumulatedOut)} dialihkan ke: ${targetLabels}`;
+      const prevKet = String(inv.keterangan || '').trim();
+      const newStatus: InvoiceStatus = info.unallocatedSurplus > 0 ? 'Akumulasi' : 'Lunas';
+
+      updates.push({
+        ...inv,
+        nominalPembayaran: newPaid,
+        status: newStatus,
+        keterangan: prevKet.includes(appendNote)
+          ? prevKet
+          : (prevKet ? `${prevKet} | ${appendNote}` : appendNote),
+        updatedAt: nowIso,
+      });
+    } else if (info.accumulatedIn > 0) {
+      recipientCount += 1;
+      const newPaid = info.storedPaid + info.accumulatedIn;
+      const newRemaining = Math.max(0, info.tagihanFull - newPaid);
+      const sourceLabels = info.accumulatedInSources
+        .map(s => `${s.nomorInvoice} (+${formatRupiah(s.amount)})`)
+        .join(', ');
+      const appendNote = `Terima akumulasi dari: ${sourceLabels}`;
+      const prevKet = String(inv.keterangan || '').trim();
+      const newStatus: InvoiceStatus =
+        newRemaining === 0 && info.tagihanFull > 0
+          ? 'Lunas'
+          : newPaid > 0
+          ? 'Sebagian'
+          : 'Belum Bayar';
+
+      updates.push({
+        ...inv,
+        nominalPembayaran: newPaid,
+        status: newStatus,
+        tanggalDibayar: inv.tanggalDibayar || nowIso.split('T')[0],
+        keterangan: prevKet.includes(appendNote)
+          ? prevKet
+          : (prevKet ? `${prevKet} | ${appendNote}` : appendNote),
+        updatedAt: nowIso,
+      });
+    }
+  });
+
+  return {
+    donorCount,
+    recipientCount,
+    totalTransferred,
+    affectedCount: updates.length,
+    updates,
+  };
+}
+
 
 

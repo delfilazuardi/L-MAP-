@@ -5,22 +5,25 @@ import { formatRupiah } from './types';
 import { useSettings } from '../../../context/SettingsContext';
 import {
   isAfiliasiTanpaInvoice,
-  getInvoiceRemainingDebt,
-  getEffectiveInvoiceStatus,
+  InvoiceAccumulationInfo,
+  getAccumulationEntry,
 } from '../../../lib/invoiceUtils';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice | null;
+  accumulationInfo?: InvoiceAccumulationInfo;
   onClose: () => void;
 }
 
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   invoice,
+  accumulationInfo,
   onClose,
 }) => {
   const { settings } = useSettings();
   if (!invoice) return null;
 
+  const accInfo = accumulationInfo || getAccumulationEntry(undefined, invoice);
   const tagihanFull = Number(invoice.tagihanFull) || Number(invoice.nominal) || 0;
   const realisasi = Number(invoice.tagihanRealisasi) || Number(invoice.nominal) || 0;
   const dibayar = Number(invoice.nominalPembayaran) || 0;
@@ -33,9 +36,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
     })
   );
   const isPelaporan = isTanpaInvoice || Boolean(invoice.isPelaporanSaja);
-  // Nominal piutang adalah pengurangan dari Tagihan Full dan Pembayaran
-  const sisa = isPelaporan ? 0 : getInvoiceRemainingDebt(invoice);
-  const effectiveStatus = isPelaporan ? 'Lunas' : getEffectiveInvoiceStatus(invoice);
+  const sisa = isPelaporan ? 0 : accInfo.effectiveRemainingDebt;
+  const effectiveStatus = isPelaporan ? 'Lunas' : accInfo.effectiveStatus;
 
   const handlePrint = () => {
     window.print();
@@ -160,19 +162,27 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Sisa Hutang / Piutang (Posisi di Bawah) */}
+            {/* Sisa Hutang / Piutang / Akumulasi */}
             <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
               sisa > 0 && !isPelaporan
                 ? 'bg-rose-50/80 border-rose-200 text-rose-950'
+                : accInfo.rawSurplus > 0 && !isPelaporan
+                ? 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
                 : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
             }`}>
               <div>
                 <span className="text-xs font-bold block">
-                  Sisa Hutang (Kewajiban Berjalan)
+                  {accInfo.rawSurplus > 0 && !isPelaporan
+                    ? 'Akumulasi Kelebihan Pembayaran'
+                    : 'Sisa Hutang (Kewajiban Berjalan)'}
                 </span>
                 <span className="text-[11px] text-slate-500 block">
                   {isPelaporan
                     ? 'Khusus pelaporan tagihan (Bebas kewajiban pembayaran)'
+                    : accInfo.rawSurplus > 0
+                    ? `Pembayaran (${formatRupiah(dibayar)}) melebihi Tagihan Full (${formatRupiah(tagihanFull)}). Kelebihan +${formatRupiah(accInfo.rawSurplus)} diakumulasikan ke tagihan lain.`
+                    : accInfo.accumulatedIn > 0
+                    ? `Dibayar langsung (${formatRupiah(dibayar)}) + Akumulasi Masuk (${formatRupiah(accInfo.accumulatedIn)})`
                     : sisa > 0
                     ? `Sisa piutang: Tagihan Full (${formatRupiah(tagihanFull)}) − Pembayaran (${formatRupiah(dibayar)})`
                     : 'Kewajiban telah lunas 100%'}
@@ -180,9 +190,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </div>
               <div className="text-right">
                 <strong className={`text-base sm:text-lg font-mono font-black block ${
-                  sisa > 0 && !isPelaporan ? 'text-rose-600' : 'text-emerald-700'
+                  sisa > 0 && !isPelaporan ? 'text-rose-600' : (accInfo.rawSurplus > 0 ? 'text-indigo-700' : 'text-emerald-700')
                 }`}>
-                  {isPelaporan ? 'Rp 0 (Bebas Biaya)' : formatRupiah(sisa)}
+                  {isPelaporan
+                    ? 'Rp 0 (Bebas Biaya)'
+                    : accInfo.rawSurplus > 0
+                    ? `+${formatRupiah(accInfo.rawSurplus)} (Akumulasi)`
+                    : formatRupiah(sisa)}
                 </strong>
               </div>
             </div>

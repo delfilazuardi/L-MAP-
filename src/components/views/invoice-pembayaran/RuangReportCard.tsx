@@ -25,6 +25,10 @@ interface RuangReportCardProps {
   persenLunas: number;
   lunasCount: number;
   unpaidCount: number;
+  akumulasiCount?: number;
+  akumulasiMasuk?: number;
+  akumulasiKeluar?: number;
+  unallocatedSurplus?: number;
   verifiedPaymentsCount: number;
   pendingPaymentsCount: number;
   onAddInvoice: () => void;
@@ -46,6 +50,10 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
   persenLunas,
   lunasCount,
   unpaidCount,
+  akumulasiCount = 0,
+  akumulasiMasuk = 0,
+  akumulasiKeluar = 0,
+  unallocatedSurplus = 0,
   verifiedPaymentsCount,
   pendingPaymentsCount,
   onAddInvoice,
@@ -154,10 +162,21 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
             <div className="text-base sm:text-lg font-black text-emerald-600 mt-0.5 truncate">
               {formatRupiah(totalDibayar)}
             </div>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-bold mt-0.5">
+            <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-bold mt-0.5 flex-wrap">
               <CheckCircle2 size={12} />
-              <span>{lunasCount} invoice lunas</span>
+              <span>
+                {akumulasiCount > 0
+                  ? `${lunasCount} lunas • ${akumulasiCount} akumulasi`
+                  : `${lunasCount} invoice lunas`}
+              </span>
             </div>
+            {(akumulasiMasuk > 0 || akumulasiKeluar > 0) && (
+              <span className="text-[10px] font-semibold text-indigo-700 block mt-0.5">
+                {akumulasiMasuk > 0 ? `+${formatRupiah(akumulasiMasuk)} akumulasi masuk` : ''}
+                {akumulasiMasuk > 0 && akumulasiKeluar > 0 ? ' • ' : ''}
+                {akumulasiKeluar > 0 ? `${formatRupiah(akumulasiKeluar)} dialokasikan` : ''}
+              </span>
+            )}
           </div>
 
           {/* Metric 4: Sisa Piutang */}
@@ -166,12 +185,22 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
               4. Sisa Piutang Berjalan
             </span>
             <div className={`text-base sm:text-lg font-black mt-0.5 truncate ${
-              sisaPiutang > 0 ? 'text-rose-600' : 'text-slate-700'
+              sisaPiutang > 0 ? 'text-rose-600' : (unallocatedSurplus > 0 || akumulasiCount > 0 ? 'text-indigo-700' : 'text-slate-700')
             }`}>
               {formatRupiah(sisaPiutang)}
             </div>
-            <span className={`text-[11px] font-semibold ${sisaPiutang > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-              {sisaPiutang > 0 ? `${unpaidCount} invoice belum lunas` : 'Semua tagihan lunas!'}
+            <span className={`text-[11px] font-semibold ${
+              sisaPiutang > 0
+                ? 'text-rose-600'
+                : (unallocatedSurplus > 0 || akumulasiCount > 0 ? 'text-indigo-700' : 'text-slate-400')
+            }`}>
+              {sisaPiutang > 0
+                ? `${unpaidCount} invoice belum lunas`
+                : unallocatedSurplus > 0
+                ? `Nominal terakumulasi (+Lebih ${formatRupiah(unallocatedSurplus)})`
+                : akumulasiCount > 0
+                ? 'Nominal lunas terakumulasi'
+                : 'Semua tagihan lunas!'}
             </span>
           </div>
         </div>
@@ -182,7 +211,7 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
             <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5">
               <span className="flex items-center gap-1.5">
                 <TrendingUp size={14} className={config.colors.accentText} />
-                <span>Tingkat Pelunasan {config.title}</span>
+                <span>Tingkat Akumulasi / Pelunasan {config.title}</span>
               </span>
               <span className="font-mono text-sm font-black text-slate-900">
                 {persenLunas}%
@@ -201,6 +230,15 @@ export const RuangReportCard: React.FC<RuangReportCardProps> = ({
               <span className="font-bold text-emerald-600">{lunasCount}</span>
               <span>Lunas</span>
             </div>
+            {akumulasiCount > 0 && (
+              <>
+                <span className="text-slate-300">•</span>
+                <div className="flex items-center gap-1 text-indigo-700 font-semibold">
+                  <span className="font-bold">{akumulasiCount}</span>
+                  <span>Akumulasi</span>
+                </div>
+              </>
+            )}
             <span className="text-slate-300">•</span>
             <div className="flex items-center gap-1 text-slate-600">
               <span className="font-bold text-rose-600">{unpaidCount}</span>

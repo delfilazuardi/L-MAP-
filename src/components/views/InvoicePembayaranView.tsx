@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
-import { Invoice, Pembayaran, PembayaranStatus, SekolahMitra } from '../../types';
+import { Invoice, InvoiceStatus, Pembayaran, PembayaranStatus, SekolahMitra } from '../../types';
 import { 
   isSchoolPelaporanSaja, 
   getSchoolObligationBadgeInfo,
@@ -37,9 +37,10 @@ import {
   normalizeTahunAjaran,
   getInvoiceTahunAjaran,
   getPaymentTahunAjaran,
-  getInvoiceRemainingDebt,
-  getEffectiveInvoiceStatus,
-  isRecordBelongsToSchool
+  isRecordBelongsToSchool,
+  computeInvoiceAccumulationMap,
+  getAccumulationEntry,
+  planBulkAccumulationReconciliation
 } from '../../lib/invoiceUtils';
 import { 
   RUANG_CONFIGS, 
@@ -111,6 +112,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
   const [previewBuktiUrl, setPreviewBuktiUrl] = useState<string | null>(null);
   const [isSheetModalOpen, setIsSheetModalOpen] = useState(false);
   const [isCicilanModalOpen, setIsCicilanModalOpen] = useState(false);
+  const [isApplyingAccumulation, setIsApplyingAccumulation] = useState(false);
 
   // Active anchor highlighting
   const [activeAnchor, setActiveAnchor] = useState<string>('all');
@@ -181,6 +183,17 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [baseInvoices, basePayments]);
 
+  // Mesin Akumulasi Lintas-Tagihan per Sekolah dihitung dari seluruh baseInvoices (lintas ruang & lintas TA)
+  const accumulationMap = useMemo(
+    () => computeInvoiceAccumulationMap(baseInvoices, sekolahList),
+    [baseInvoices, sekolahList]
+  );
+
+  const reconciliationPlan = useMemo(
+    () => planBulkAccumulationReconciliation(baseInvoices, sekolahList),
+    [baseInvoices, sekolahList]
+  );
+
   // Global filtered invoices: strictly separated by active tab and Tahun Ajaran
   const filteredInvoices = useMemo(() => {
     return baseInvoices.filter(inv => {
@@ -208,12 +221,12 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       const invTA = getInvoiceTahunAjaran(inv);
       const matchTahun = filterTahunAjaran === 'ALL' || invTA === filterTahunAjaran;
 
-      const effectiveStatus = getEffectiveInvoiceStatus(inv);
+      const effectiveStatus = getAccumulationEntry(accumulationMap, inv).effectiveStatus;
       const matchStatus = filterStatus === 'ALL' || effectiveStatus === filterStatus;
 
       return matchSearch && matchSekolah && matchTahun && matchStatus;
     });
-  }, [baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban, sekolahList]);
+  }, [baseInvoices, searchQuery, filterSekolah, filterTahunAjaran, filterStatus, tabKewajiban, sekolahList, accumulationMap]);
 
   // Global filtered payments: strictly separated by active tab and Tahun Ajaran
   const filteredPayments = useMemo(() => {
@@ -258,7 +271,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       (acc, i) => acc + (i.tagihanRealisasi || i.nominal || 0), 0
     );
 
-    // Tab Sekolah Afiliasi: 3 Sekolah Khusus (Bebas Kewajiban Bayar, Piutang = 0)
+      // Tab Sekolah Afiliasi: 3 Sekolah Khusus (Bebas Kewajiban Bayar, Piutang = 0)
     if (tabKewajiban === 'AFILIASI') {
       return {
         totalTagihanFull,
@@ -268,6 +281,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         pelaporanCount: filteredInvoices.length,
         payableCount: 0,
         totalPembayaranMasuk: 0,
+        totalNominalLunasTerakumulasi: 0,
+        totalKelebihanBayar: 0,
+        totalAkumulasiInvoices: 0,
         totalSisaPiutang: 0,
         totalUnpaidInvoices: 0,
         totalPendingPayments: 0,
@@ -292,13 +308,23 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     const totalPembayaranMasuk = payableInvoices.reduce(
       (acc, i) => acc + (Number(i.nominalPembayaran) || 0), 0
     );
+    // Nominal lunas terakumulasi (bagian tagihan full yg telah tertutup termasuk akumulasi kelebihan bayar)
+    const totalNominalLunasTerakumulasi = payableInvoices.reduce(
+      (acc, i) => acc + getAccumulationEntry(accumulationMap, i).effectiveNominalLunas, 0
+    );
+    const totalKelebihanBayar = payableInvoices.reduce(
+      (acc, i) => acc + getAccumulationEntry(accumulationMap, i).unallocatedSurplus, 0
+    );
+    const totalAkumulasiInvoices = payableInvoices.filter(
+      i => getAccumulationEntry(accumulationMap, i).effectiveStatus === 'Akumulasi'
+    ).length;
 
-    // Sisa piutang adalah penjumlahan eksak dari sisa piutang masing-masing invoice
+    // Sisa piutang adalah penjumlahan eksak dari sisa piutang efektif setelah akumulasi kelebihan bayar
     const totalSisaPiutang = payableInvoices.reduce(
-      (acc, i) => acc + getInvoiceRemainingDebt(i), 0
+      (acc, i) => acc + getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt, 0
     );
     const totalUnpaidInvoices = payableInvoices.filter(
-      i => getInvoiceRemainingDebt(i) > 0
+      i => getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt > 0
     ).length;
     const totalPendingPayments = 0;
 
@@ -310,14 +336,17 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       pelaporanCount: filteredInvoices.length - payableInvoices.length,
       payableCount: payableInvoices.length,
       totalPembayaranMasuk,
+      totalNominalLunasTerakumulasi,
+      totalKelebihanBayar,
+      totalAkumulasiInvoices,
       totalSisaPiutang,
       totalUnpaidInvoices,
       totalPendingPayments,
       persenLunas: totalTagihanFullPayable > 0 
-        ? Math.min(100, Math.round((totalPembayaranMasuk / totalTagihanFullPayable) * 100))
+        ? Math.min(100, Math.round((totalNominalLunasTerakumulasi / totalTagihanFullPayable) * 100))
         : 0,
     };
-  }, [filteredInvoices, tabKewajiban]);
+  }, [filteredInvoices, tabKewajiban, accumulationMap]);
 
   // Smooth scroll handler
   const scrollToAnchor = (anchorId: string) => {
@@ -355,7 +384,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     setDeleteInvoiceTarget({ id, nomor });
   };
 
-  const handleSaveInvoice = async (data: Partial<Invoice>) => {
+  const handleSaveInvoice = async (data: Partial<Invoice>, extraInvoiceUpdates?: Invoice[]) => {
     if (!isAdmin) return;
     if (editingInvoice) {
       await updateInvoice({
@@ -364,6 +393,12 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       } as Invoice);
     } else {
       await addInvoice(data as Omit<Invoice, 'id'>);
+    }
+
+    if (extraInvoiceUpdates && extraInvoiceUpdates.length > 0) {
+      for (const extraInv of extraInvoiceUpdates) {
+        await updateInvoice(extraInv);
+      }
     }
   };
 
@@ -401,6 +436,8 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       tagihanRealisasi: number;
       nominalPembayaran: number;
       tanggalDibayar: string;
+      statusOverride?: InvoiceStatus;
+      extraInvoiceUpdates?: Invoice[];
     }
   ) => {
     if (!isAdmin) return;
@@ -425,16 +462,20 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
         i => i.id === invoiceUpdates.invoiceId || i.nomorInvoice === invoiceUpdates.invoiceId
       );
       if (targetInv) {
+        const numFull = Number(invoiceUpdates.tagihanFull) || 0;
         const targetFullForStatus = Math.max(
-          Number(invoiceUpdates.tagihanFull) || 0,
+          numFull,
           Number(invoiceUpdates.tagihanRealisasi) || 0
         );
-        const nextStatus =
-          invoiceUpdates.nominalPembayaran >= targetFullForStatus && targetFullForStatus > 0
+        const nextStatus: InvoiceStatus =
+          invoiceUpdates.statusOverride ||
+          (invoiceUpdates.nominalPembayaran > numFull && invoiceUpdates.nominalPembayaran > 0
+            ? 'Akumulasi'
+            : invoiceUpdates.nominalPembayaran >= targetFullForStatus && targetFullForStatus > 0
             ? 'Lunas'
             : invoiceUpdates.nominalPembayaran > 0
             ? 'Sebagian'
-            : 'Belum Bayar';
+            : 'Belum Bayar');
         await updateInvoice({
           ...targetInv,
           tagihanFull: invoiceUpdates.tagihanFull,
@@ -444,6 +485,12 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           tanggalDibayar: invoiceUpdates.tanggalDibayar,
           status: nextStatus,
         });
+      }
+
+      if (invoiceUpdates.extraInvoiceUpdates && invoiceUpdates.extraInvoiceUpdates.length > 0) {
+        for (const extraInv of invoiceUpdates.extraInvoiceUpdates) {
+          await updateInvoice(extraInv);
+        }
       }
     }
   };
@@ -456,20 +503,32 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       tagihanRealisasi: number;
       tanggalDibayar: string;
       nominalPembayaran: number;
+      statusOverride?: InvoiceStatus;
+      extraInvoiceUpdates?: Invoice[];
+      extraNote?: string;
     }
   ) => {
     if (!isAdmin) return;
     const paid = values.isPaid ? values.nominalPembayaran : 0;
+    const numFull = Number(values.tagihanFull) || 0;
     const targetFullForStatus = Math.max(
-      Number(values.tagihanFull) || 0,
+      numFull,
       Number(values.tagihanRealisasi) || 0
     );
-    const nextStatus =
-      paid >= targetFullForStatus && targetFullForStatus > 0
+    const nextStatus: InvoiceStatus =
+      values.statusOverride ||
+      (paid > numFull && paid > 0
+        ? 'Akumulasi'
+        : paid >= targetFullForStatus && targetFullForStatus > 0
         ? 'Lunas'
         : paid > 0
         ? 'Sebagian'
-        : 'Belum Bayar';
+        : 'Belum Bayar');
+
+    const prevKet = String(inv.keterangan || '').trim();
+    const updatedKeterangan = values.extraNote
+      ? (prevKet.includes(values.extraNote) ? prevKet : (prevKet ? `${prevKet} | ${values.extraNote}` : values.extraNote))
+      : inv.keterangan;
 
     await updateInvoice({
       ...inv,
@@ -479,19 +538,32 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       nominalPembayaran: paid,
       tanggalDibayar: paid > 0 ? values.tanggalDibayar : undefined,
       status: nextStatus,
+      keterangan: updatedKeterangan,
     });
+
+    if (values.extraInvoiceUpdates && values.extraInvoiceUpdates.length > 0) {
+      for (const extraInv of values.extraInvoiceUpdates) {
+        await updateInvoice(extraInv);
+      }
+    }
 
     // Sync or create payment record automatically
     const invKey = inv.nomorInvoice || inv.id;
     const existingPay = pembayaranList.find(p => p.invoiceId === inv.id || p.invoiceId === invKey);
-    if (paid > 0) {
+    const payTotal = values.extraInvoiceUpdates
+      ? paid + values.extraInvoiceUpdates.reduce((s, u) => {
+          const orig = invoiceList.find(o => o.id === u.id);
+          return s + Math.max(0, (Number(u.nominalPembayaran) || 0) - (Number(orig?.nominalPembayaran) || 0));
+        }, 0)
+      : paid;
+    if (payTotal > 0) {
       if (existingPay) {
         await updatePembayaran({
           ...existingPay,
-          jumlah: paid,
+          jumlah: payTotal,
           tanggalBayar: values.tanggalDibayar,
           status: 'Terverifikasi',
-          catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}`,
+          catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}${values.extraNote ? ` | ${values.extraNote}` : ''}`,
         });
       } else {
         await addPembayaran({
@@ -500,15 +572,27 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           namaSekolah: inv.namaSekolah,
           kategori: normalizeRuang(inv.kategori),
           tahunAjaran: getInvoiceTahunAjaran(inv),
-          jumlah: paid,
+          jumlah: payTotal,
           tanggalBayar: values.tanggalDibayar,
           metodeBayar: 'Transfer Bank',
           noReferensi: `BYR-${Date.now().toString().slice(-6)}`,
           buktiUrl: '',
           status: 'Terverifikasi',
-          catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}`,
+          catatan: `Tagihan: ${formatRupiah(values.tagihanFull)} | Realisasi: ${formatRupiah(values.tagihanRealisasi)}${values.extraNote ? ` | ${values.extraNote}` : ''}`,
         }, { skipInvoiceSync: true });
       }
+    }
+  };
+
+  const handleApplyBulkAccumulation = async () => {
+    if (!isAdmin || reconciliationPlan.updates.length === 0) return;
+    setIsApplyingAccumulation(true);
+    try {
+      for (const updatedInv of reconciliationPlan.updates) {
+        await updateInvoice(updatedInv);
+      }
+    } finally {
+      setIsApplyingAccumulation(false);
     }
   };
 
@@ -550,12 +634,24 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
     }, { skipInvoiceSync: true });
 
     // 2. Update setiap invoice yang dialokasikan (FIFO)
+    const updatedIdSet = new Set<string>();
     for (const item of allocationResult.updatedInvoices) {
+      updatedIdSet.add(item.invoice.id);
       await updateInvoice({
         ...item.invoice,
         buktiBayarUrl: paymentMeta.buktiUrl || item.invoice.buktiBayarUrl,
         kwitansiUrl: paymentMeta.kwitansiUrl || item.invoice.kwitansiUrl,
       });
+    }
+
+    // 3. Jika sebelumnya ada kelebihan bayar (donor) milik sekolah ini yg sudah diperhitungkan sebagai akumulasi,
+    // simpan penyesuaian donor/penerima tersisa agar saldo surplus tidak terhitung ganda.
+    const schoolInvoices = baseInvoices.filter(inv => isRecordBelongsToSchool(inv, school, sekolahList));
+    const schoolRecon = planBulkAccumulationReconciliation(schoolInvoices, sekolahList);
+    for (const reconInv of schoolRecon.updates) {
+      if (!updatedIdSet.has(reconInv.id)) {
+        await updateInvoice(reconInv);
+      }
     }
   };
 
@@ -782,10 +878,12 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 mt-0.5 truncate">
                 <CheckCircle2 size={12} className="shrink-0" />
-                <span>
+                <span className="truncate">
                   {tabKewajiban === 'AFILIASI' 
                     ? 'Khusus pelaporan tagihan' 
-                    : `${grandTotals.persenLunas}% lunas terbayar`}
+                    : (grandTotals.totalAkumulasiInvoices > 0 || grandTotals.totalKelebihanBayar > 0 || reconciliationPlan.totalTransferred > 0)
+                      ? `Lunas Terakumulasi: ${formatRupiah(grandTotals.totalNominalLunasTerakumulasi)}${grandTotals.totalKelebihanBayar > 0 ? ` (+Lebih ${formatRupiah(grandTotals.totalKelebihanBayar)})` : ''}`
+                      : `${grandTotals.persenLunas}% lunas terbayar`}
                 </span>
               </div>
             </div>
@@ -812,7 +910,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               <span className="text-[11px] text-rose-200/90 mt-0.5 block truncate">
                 {tabKewajiban === 'AFILIASI' 
                   ? 'Rp 0 (Bebas Biaya / Pelaporan)' 
-                  : `${grandTotals.totalUnpaidInvoices} invoice belum lunas`}
+                  : (grandTotals.totalSisaPiutang === 0 && grandTotals.totalKelebihanBayar > 0)
+                    ? `0 kurang bayar • Saldo lebih ${formatRupiah(grandTotals.totalKelebihanBayar)}`
+                    : `${grandTotals.totalUnpaidInvoices} invoice belum lunas`}
               </span>
 
               {tabKewajiban !== 'AFILIASI' && grandTotals.totalSisaPiutang > 0 && isAdmin && (
@@ -977,7 +1077,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               const isAfiliasiTabActive = tabKewajiban === 'AFILIASI';
               const sisaInRuang = isAfiliasiTabActive 
                 ? 0 
-                : invoicesInRuang.reduce((acc, i) => acc + getInvoiceRemainingDebt(i), 0);
+                : invoicesInRuang.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt, 0);
 
               return (
                 <button
@@ -1071,6 +1171,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
               className="w-full sm:w-40 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="ALL">Semua Status</option>
+              <option value="Akumulasi">Lebih Bayar / Akumulasi</option>
               <option value="Lunas">Sudah Bayar (Lunas)</option>
               <option value="Sebagian">Bayar Sebagian</option>
               <option value="Belum Bayar">Belum Bayar</option>
@@ -1078,6 +1179,40 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* BANNER REKONSILIASI AKUMULASI KELEBIHAN BAYAR OTOMATIS */}
+      {isAdmin && tabKewajiban !== 'AFILIASI' && reconciliationPlan.affectedCount > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-50 via-blue-50 to-amber-50 border-2 border-indigo-200 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-indigo-500/20">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  Akumulasi Kelebihan Bayar Terdeteksi
+                </span>
+                <span className="text-xs font-extrabold text-slate-900">
+                  {reconciliationPlan.donorCount} invoice kelebihan bayar &rarr; {reconciliationPlan.recipientCount} invoice kurang/sebagian
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Terdapat total kelebihan pembayaran sebesar <strong className="text-indigo-700">{formatRupiah(reconciliationPlan.totalTransferred)}</strong> yang telah diperhitungkan secara akumulatif pada tampilan piutang. Klik tombol di kanan untuk menyimpan pembagian saldo akumulasi ini langsung ke database invoice terkait.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={isApplyingAccumulation}
+            onClick={handleApplyBulkAccumulation}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-extrabold shadow-md shadow-indigo-600/20 transition flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <CheckCircle2 size={15} />
+            <span>{isApplyingAccumulation ? 'Menyimpan Akumulasi...' : 'Terapkan & Simpan Akumulasi'}</span>
+          </button>
+        </div>
+      )}
 
       {/* BANNER KHUSUS SISA PIUTANG BERJALAN & CICILAN PEMBAYARAN SAAT FILTERING SEKOLAH */}
       {filterSekolah !== 'ALL' && filteredSchoolObj && tabKewajiban !== 'AFILIASI' && (
@@ -1144,29 +1279,44 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 tahunAjaran: i.tahunAjaran,
               })));
 
-          // Calculate metrics for this room (strictly matching table rows below 100%)
+          // Calculate metrics for this room (konsisten dengan akumulasi lintas-tagihan per sekolah)
           const tagihanFull = roomInvoices.reduce((acc, i) => acc + (Number(i.tagihanFull) || Number(i.nominal) || 0), 0);
           const tagihanFullPayable = payableRoomInvoices.reduce((acc, i) => acc + (Number(i.tagihanFull) || Number(i.nominal) || 0), 0);
           const tagihanRealisasi = roomInvoices.reduce((acc, i) => acc + (Number(i.tagihanRealisasi) || Number(i.nominal) || 0), 0);
           const totalDibayar = isAfiliasiTabActive 
             ? 0 
             : payableRoomInvoices.reduce((acc, i) => acc + (Number(i.nominalPembayaran) || 0), 0);
-          // Sisa piutang adalah penjumlahan eksak sisa masing-masing invoice yang belum lunas
+          const totalNominalLunasRoom = isAfiliasiTabActive
+            ? tagihanFull
+            : payableRoomInvoices.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).effectiveNominalLunas, 0);
           const sisaPiutang = isAfiliasiTabActive 
             ? 0 
-            : payableRoomInvoices.reduce((acc, i) => acc + getInvoiceRemainingDebt(i), 0);
+            : payableRoomInvoices.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt, 0);
           const persenLunas = isAfiliasiTabActive 
             ? 100 
             : (tagihanFullPayable > 0 
-                ? Math.min(100, Math.round((totalDibayar / tagihanFullPayable) * 100)) 
+                ? Math.min(100, Math.round((totalNominalLunasRoom / tagihanFullPayable) * 100)) 
                 : 0);
+
+          const akumulasiCount = isAfiliasiTabActive
+            ? 0
+            : payableRoomInvoices.filter(i => getAccumulationEntry(accumulationMap, i).effectiveStatus === 'Akumulasi').length;
+          const akumulasiMasuk = isAfiliasiTabActive
+            ? 0
+            : payableRoomInvoices.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).accumulatedIn, 0);
+          const akumulasiKeluar = isAfiliasiTabActive
+            ? 0
+            : payableRoomInvoices.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).accumulatedOut, 0);
+          const unallocatedSurplus = isAfiliasiTabActive
+            ? 0
+            : payableRoomInvoices.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).unallocatedSurplus, 0);
 
           const lunasCount = isAfiliasiTabActive 
             ? roomInvoices.length 
-            : roomInvoices.filter(i => getEffectiveInvoiceStatus(i) === 'Lunas').length;
+            : roomInvoices.filter(i => getAccumulationEntry(accumulationMap, i).effectiveStatus === 'Lunas').length;
           const unpaidCount = isAfiliasiTabActive 
             ? 0 
-            : payableRoomInvoices.filter(i => getInvoiceRemainingDebt(i) > 0).length;
+            : payableRoomInvoices.filter(i => getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt > 0).length;
           const verifiedPaymentsCount = roomPayments.filter(p => p.status !== 'Ditolak').length;
           const pendingPaymentsCount = 0;
 
@@ -1191,6 +1341,10 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 persenLunas={persenLunas}
                 lunasCount={lunasCount}
                 unpaidCount={unpaidCount}
+                akumulasiCount={akumulasiCount}
+                akumulasiMasuk={akumulasiMasuk}
+                akumulasiKeluar={akumulasiKeluar}
+                unallocatedSurplus={unallocatedSurplus}
                 verifiedPaymentsCount={verifiedPaymentsCount}
                 pendingPaymentsCount={pendingPaymentsCount}
                 onAddInvoice={() => handleOpenAddInvoice(config.id)}
@@ -1205,6 +1359,9 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                 <InvoiceTable
                   invoices={roomInvoices}
                   isAdmin={isAdmin}
+                  accumulationMap={accumulationMap}
+                  allSchoolInvoices={baseInvoices}
+                  sekolahList={sekolahList}
                   kategoriTitle={config.title}
                   onDetail={(inv) => setDetailInvoice(inv)}
                   onEdit={handleOpenEditInvoice}
@@ -1256,6 +1413,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
       {/* Invoice Detail / Printable Preview Modal */}
       <InvoiceDetailModal
         invoice={detailInvoice}
+        accumulationInfo={detailInvoice ? getAccumulationEntry(accumulationMap, detailInvoice) : undefined}
         onClose={() => setDetailInvoice(null)}
       />
 
@@ -1288,7 +1446,7 @@ export const InvoicePembayaranView: React.FC<InvoicePembayaranViewProps> = ({
                   const uniqueSchoolIds = Array.from(
                     new Set(
                       filteredInvoices
-                        .filter(i => getInvoiceRemainingDebt(i) > 0)
+                        .filter(i => getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt > 0)
                         .map(i => i.mitraId)
                         .filter(Boolean)
                     )

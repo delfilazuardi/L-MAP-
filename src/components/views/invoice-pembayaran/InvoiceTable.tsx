@@ -11,9 +11,10 @@ import {
   ChevronDown,
   Check,
   X,
-  School
+  School,
+  Sparkles
 } from 'lucide-react';
-import { Invoice, InvoiceStatus, InvoiceOperationalStatus } from '../../../types';
+import { Invoice, InvoiceStatus, InvoiceOperationalStatus, SekolahMitra } from '../../../types';
 import { formatRupiah } from './types';
 import { NominalInput } from './NominalInput';
 import {
@@ -23,13 +24,17 @@ import {
   compareInvoiceBySequenceAsc,
   isAfiliasiTanpaInvoice,
   getInvoiceTahunAjaran,
-  getInvoiceRemainingDebt,
-  getEffectiveInvoiceStatus
+  InvoiceAccumulationInfo,
+  getAccumulationEntry,
+  buildOverpaymentDistributionPlan
 } from '../../../lib/invoiceUtils';
 
 interface InvoiceTableProps {
   invoices: Invoice[];
   isAdmin: boolean;
+  accumulationMap?: Map<string, InvoiceAccumulationInfo>;
+  allSchoolInvoices?: Invoice[];
+  sekolahList?: SekolahMitra[];
   onDetail: (inv: Invoice) => void;
   onEdit: (inv: Invoice) => void;
   onDelete: (id: string, nomor: string) => void;
@@ -42,6 +47,9 @@ interface InvoiceTableProps {
       tagihanRealisasi: number;
       tanggalDibayar: string;
       nominalPembayaran: number;
+      statusOverride?: InvoiceStatus;
+      extraInvoiceUpdates?: Invoice[];
+      extraNote?: string;
     }
   ) => Promise<void>;
   kategoriTitle?: string;
@@ -51,6 +59,9 @@ interface InvoiceTableProps {
 export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   invoices,
   isAdmin,
+  accumulationMap,
+  allSchoolInvoices,
+  sekolahList,
   onDetail,
   onEdit,
   onDelete,
@@ -68,6 +79,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
   const [formTagihanRealisasi, setFormTagihanRealisasi] = useState<number>(0);
   const [formTanggalBayar, setFormTanggalBayar] = useState<string>(new Date().toISOString().split('T')[0]);
   const [formNominalBayar, setFormNominalBayar] = useState<number>(0);
+  const [inlineAutoAccumulate, setInlineAutoAccumulate] = useState<boolean>(true);
   const [isSavingRow, setIsSavingRow] = useState(false);
 
   const handleToggleRowPayForm = (inv: Invoice, forceUnpay = false) => {
@@ -82,6 +94,7 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
     setFormTagihanRealisasi(real);
     setFormTanggalBayar(inv.tanggalDibayar || new Date().toISOString().split('T')[0]);
     setFormNominalBayar(paid > 0 ? paid : real);
+    setInlineAutoAccumulate(true);
     setOpenPaymentRowId(inv.id);
   };
 
@@ -92,12 +105,59 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
     }
     setIsSavingRow(true);
     try {
+      const numFull = Number(formTagihanFull) || 0;
+      const numReal = Number(formTagihanRealisasi) || 0;
+      const numPaid = Number(formNominalBayar) || 0;
+
+      let finalPaid = numPaid;
+      let statusOverride: InvoiceStatus | undefined = undefined;
+      let extraInvoiceUpdates: Invoice[] | undefined = undefined;
+      let extraNote: string | undefined = undefined;
+
+      if (numPaid > numFull && numPaid > 0) {
+        const plan = buildOverpaymentDistributionPlan(
+          {
+            id: inv.id,
+            nomorInvoice: inv.nomorInvoice,
+            mitraId: inv.mitraId,
+            namaSekolah: inv.namaSekolah,
+            tagihanFull: numFull,
+            nominalPembayaran: numPaid,
+            tanggalDibayar: formTanggalBayar,
+          },
+          allSchoolInvoices || invoices,
+          sekolahList
+        );
+
+        if (inlineAutoAccumulate && plan.allocation.updatedInvoices.length > 0) {
+          finalPaid = plan.adjustedTargetPaid;
+          statusOverride = plan.adjustedTargetStatus;
+          extraInvoiceUpdates = plan.allocation.updatedInvoices.map(u => {
+            const prevKet = String(u.invoice.keterangan || '').trim();
+            const note = `Terima akumulasi ${formatRupiah(u.allocatedAmount)} dari ${inv.nomorInvoice || inv.id}`;
+            return {
+              ...u.invoice,
+              keterangan: prevKet.includes(note) ? prevKet : (prevKet ? `${prevKet} | ${note}` : note),
+            };
+          });
+          const targetNames = plan.allocation.updatedInvoices
+            .map(u => `${u.invoice.nomorInvoice || u.invoice.id} (+${formatRupiah(u.allocatedAmount)})`)
+            .join(', ');
+          extraNote = `Kelebihan ${formatRupiah(plan.allocation.totalAllocated)} diakumulasikan ke: ${targetNames}`;
+        } else {
+          statusOverride = 'Akumulasi';
+        }
+      }
+
       await onQuickSavePayment(inv, {
-        isPaid: formNominalBayar > 0,
-        tagihanFull: Number(formTagihanFull),
-        tagihanRealisasi: Number(formTagihanRealisasi),
+        isPaid: finalPaid > 0,
+        tagihanFull: numFull,
+        tagihanRealisasi: numReal,
         tanggalDibayar: formTanggalBayar,
-        nominalPembayaran: Number(formNominalBayar),
+        nominalPembayaran: finalPaid,
+        statusOverride,
+        extraInvoiceUpdates,
+        extraNote,
       });
       setOpenPaymentRowId(null);
     } finally {
@@ -120,21 +180,22 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
     let sumTagihanRealisasi = 0;
     let sumNominalBayar = 0;
     let sumSisaPiutang = 0;
+    let sumUnallocatedSurplus = 0;
+    let akumulasiCount = 0;
 
     sortedInvoices.forEach(inv => {
-      const isPelaporan = inv.isPelaporanSaja || isSchoolPelaporanSaja(inv.mitraId, {
-        date: inv.tanggalKirim,
-        tahunAjaran: inv.tahunAjaran,
-      });
+      const acc = getAccumulationEntry(accumulationMap, inv);
       const full = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
       const real = Number(inv.tagihanRealisasi) || Number(inv.nominal) || 0;
-      const dibayar = isPelaporan ? 0 : (Number(inv.nominalPembayaran) || 0);
-      const sisa = getInvoiceRemainingDebt(inv);
+      const dibayar = acc.isPelaporan ? 0 : acc.storedPaid;
+      const sisa = acc.effectiveRemainingDebt;
 
       sumTagihanFull += full;
       sumTagihanRealisasi += real;
       sumNominalBayar += dibayar;
       sumSisaPiutang += sisa;
+      sumUnallocatedSurplus += acc.unallocatedSurplus;
+      if (acc.effectiveStatus === 'Akumulasi') akumulasiCount += 1;
     });
 
     return {
@@ -142,9 +203,11 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
       sumTagihanRealisasi,
       sumNominalBayar,
       sumSisaPiutang,
+      sumUnallocatedSurplus,
+      akumulasiCount,
       count: sortedInvoices.length,
     };
-  }, [sortedInvoices]);
+  }, [sortedInvoices, accumulationMap]);
 
   if (invoices.length === 0) {
     return (
@@ -162,6 +225,12 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
 
   const getStatusBadge = (status: InvoiceStatus) => {
     switch (status) {
+      case 'Akumulasi':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-300">
+            <Sparkles size={11} /> Akumulasi
+          </span>
+        );
       case 'Lunas':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -248,14 +317,18 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
               tahunAjaran: inv.tahunAjaran,
             });
 
+            const accInfo = getAccumulationEntry(accumulationMap, inv);
             const fullTagihan = Number(inv.tagihanFull) || Number(inv.nominal) || 0;
             const realisasi = Number(inv.tagihanRealisasi) || Number(inv.nominal) || 0;
             const dibayar = Number(inv.nominalPembayaran) || 0;
-            // Nominal Piutang adalah pengurangan dari Tagihan Full dan Pembayaran
-            const sisa = getInvoiceRemainingDebt(inv);
-            const effectiveStatus = getEffectiveInvoiceStatus(inv);
+            const sisa = accInfo.effectiveRemainingDebt;
+            const effectiveStatus = accInfo.effectiveStatus;
             const seqNumber = extractInvoiceSequenceNumber(inv.nomorInvoice || inv.id);
-            const isCheckedPaid = dibayar > 0 || effectiveStatus === 'Lunas' || effectiveStatus === 'Sebagian';
+            const isCheckedPaid =
+              dibayar > 0 ||
+              effectiveStatus === 'Lunas' ||
+              effectiveStatus === 'Sebagian' ||
+              effectiveStatus === 'Akumulasi';
             const isRowOpen = openPaymentRowId === inv.id;
             const isTanpaInvoice = Boolean(
               inv.isPendataanAfiliasi ||
@@ -338,19 +411,30 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                     <span className="text-slate-400">-</span>
                   ) : (
                     <div>
-                      <span className={`font-bold block ${dibayar > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      <span className={`font-bold block ${
+                        accInfo.rawSurplus > 0 ? 'text-indigo-700' : (dibayar > 0 ? 'text-emerald-600' : 'text-slate-400')
+                      }`}>
                         {formatRupiah(dibayar)}
                       </span>
-                      {dibayar > 0 && dibayar < fullTagihan && (
+                      {accInfo.rawSurplus > 0 ? (
+                        <span className="text-[10px] font-bold text-indigo-700 block">
+                          {accInfo.accumulatedOut > 0
+                            ? `Akumulasi +${formatRupiah(accInfo.accumulatedOut)} ke tagihan lain`
+                            : `Lebih Bayar +${formatRupiah(accInfo.unallocatedSurplus)} (Akumulasi)`}
+                        </span>
+                      ) : accInfo.accumulatedIn > 0 ? (
+                        <span className="text-[10px] font-bold text-emerald-700 block">
+                          +{formatRupiah(accInfo.accumulatedIn)} akumulasi
+                        </span>
+                      ) : dibayar > 0 && dibayar < fullTagihan ? (
                         <span className="text-[10px] font-semibold text-amber-700 block">
                           Dicicil Sebagian
                         </span>
-                      )}
-                      {dibayar >= fullTagihan && fullTagihan > 0 && (
+                      ) : dibayar >= fullTagihan && fullTagihan > 0 ? (
                         <span className="text-[10px] font-bold text-emerald-700 block">
                           ✓ Lunas
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </td>
@@ -362,13 +446,29 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                       <span className="font-bold text-slate-400">Rp 0</span>
                       <span className="text-[9px] font-semibold text-purple-700 block">Bebas Bayar</span>
                     </div>
+                  ) : accInfo.rawSurplus > 0 ? (
+                    <div>
+                      <span className="font-black text-indigo-700 block">Rp 0</span>
+                      <span className="text-[9px] font-bold text-indigo-700 block">
+                        Akumulasi (+{formatRupiah(accInfo.rawSurplus)})
+                      </span>
+                    </div>
                   ) : sisa === 0 && fullTagihan > 0 ? (
                     <div>
                       <span className="font-black text-emerald-600 block">Rp 0</span>
-                      <span className="text-[9px] font-bold text-emerald-700 block">✓ Lunas</span>
+                      <span className="text-[9px] font-bold text-emerald-700 block">
+                        {accInfo.accumulatedIn > 0 ? '✓ Lunas (Terakumulasi)' : '✓ Lunas'}
+                      </span>
                     </div>
                   ) : (
-                    <span className="font-black text-rose-600">{formatRupiah(sisa)}</span>
+                    <div>
+                      <span className="font-black text-rose-600">{formatRupiah(sisa)}</span>
+                      {accInfo.accumulatedIn > 0 && (
+                        <span className="text-[9px] font-bold text-indigo-700 block">
+                          Setelah akumulasi +{formatRupiah(accInfo.accumulatedIn)}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </td>
 
@@ -547,30 +647,95 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100">
-                        <div className="text-xs text-slate-600">
-                          Sisa Piutang (Tagihan Full − Pembayaran):{' '}
-                          <strong className={formTagihanFull - formNominalBayar > 0 ? 'text-rose-600 font-mono' : 'text-emerald-600 font-mono'}>
-                            {formatRupiah(Math.max(0, formTagihanFull - formNominalBayar))}
-                          </strong>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setOpenPaymentRowId(null)}
-                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                          >
-                            Batal
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isSavingRow}
-                            onClick={() => handleSaveInlinePay(inv)}
-                            className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          >
-                            <Check size={14} />
-                            <span>{isSavingRow ? 'Menyimpan...' : 'Simpan Pembayaran'}</span>
-                          </button>
+                      <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                        {formNominalBayar > formTagihanFull && (() => {
+                          const plan = buildOverpaymentDistributionPlan(
+                            {
+                              id: inv.id,
+                              nomorInvoice: inv.nomorInvoice,
+                              mitraId: inv.mitraId,
+                              namaSekolah: inv.namaSekolah,
+                              tagihanFull: Number(formTagihanFull) || 0,
+                              nominalPembayaran: Number(formNominalBayar) || 0,
+                              tanggalDibayar: formTanggalBayar,
+                            },
+                            allSchoolInvoices || invoices,
+                            sekolahList
+                          );
+                          return (
+                            <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-xs space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-black text-indigo-900">
+                                  Kelebihan Bayar (+{formatRupiah(plan.excess)}) — Status Akumulasi
+                                </span>
+                              </div>
+                              {plan.allocation.updatedInvoices.length > 0 ? (
+                                <div className="space-y-1">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none font-bold text-slate-800">
+                                    <input
+                                      type="checkbox"
+                                      checked={inlineAutoAccumulate}
+                                      onChange={(e) => setInlineAutoAccumulate(e.target.checked)}
+                                      className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer"
+                                    />
+                                    <span>
+                                      Akumulasikan {formatRupiah(plan.allocation.totalAllocated)} ke {plan.allocation.updatedInvoices.length} tagihan kurang bayar / sebagian:
+                                    </span>
+                                  </label>
+                                  <div className="pl-5 text-[11px] text-indigo-800 space-y-0.5">
+                                    {plan.allocation.updatedInvoices.map(u => (
+                                      <div key={u.invoice.id} className="flex justify-between">
+                                        <span>{u.invoice.nomorInvoice || u.invoice.id}</span>
+                                        <span className="font-bold">+{formatRupiah(u.allocatedAmount)} (Sisa {formatRupiah(u.newRemaining)})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-indigo-800">
+                                  Belum ada tagihan kurang bayar lain. Status tersimpan sebagai <strong>Akumulasi</strong> untuk tagihan berikutnya.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="text-xs text-slate-600">
+                            {formNominalBayar > formTagihanFull ? (
+                              <>
+                                Status Pembayaran:{' '}
+                                <strong className="text-indigo-700 font-bold">
+                                  Akumulasi (+{formatRupiah(formNominalBayar - formTagihanFull)})
+                                </strong>
+                              </>
+                            ) : (
+                              <>
+                                Sisa Piutang (Tagihan Full − Pembayaran):{' '}
+                                <strong className={formTagihanFull - formNominalBayar > 0 ? 'text-rose-600 font-mono' : 'text-emerald-600 font-mono'}>
+                                  {formatRupiah(Math.max(0, formTagihanFull - formNominalBayar))}
+                                </strong>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setOpenPaymentRowId(null)}
+                              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSavingRow}
+                              onClick={() => handleSaveInlinePay(inv)}
+                              className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              <Check size={14} />
+                              <span>{isSavingRow ? 'Menyimpan...' : 'Simpan Pembayaran'}</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -602,8 +767,16 @@ export const InvoiceTable: React.FC<InvoiceTableProps> = ({
             <td className="py-3.5 px-4 text-right font-mono font-black text-rose-700">
               {formatRupiah(tableTotals.sumSisaPiutang)}
             </td>
-            <td colSpan={2} className="py-3.5 px-4 text-center text-[10px] text-slate-600 font-bold">
-              {tableTotals.sumSisaPiutang === 0 ? '✓ Semua Lunas' : 'Belum Lunas'}
+            <td colSpan={2} className="py-3.5 px-4 text-center text-[10px] font-bold">
+              {tableTotals.sumSisaPiutang > 0 ? (
+                <span className="text-rose-700">Belum Lunas</span>
+              ) : tableTotals.akumulasiCount > 0 || tableTotals.sumUnallocatedSurplus > 0 ? (
+                <span className="text-indigo-700">
+                  Nominal Terakumulasi{tableTotals.sumUnallocatedSurplus > 0 ? ` (+${formatRupiah(tableTotals.sumUnallocatedSurplus)})` : ''}
+                </span>
+              ) : (
+                <span className="text-emerald-700">✓ Semua Lunas</span>
+              )}
             </td>
           </tr>
         </tfoot>

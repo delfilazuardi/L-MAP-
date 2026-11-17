@@ -101,7 +101,7 @@ export interface LaporanBulanan {
 }
 
 export type InvoiceKategori = 'Franchise Fee' | 'Piutang Lampau' | 'Piutang Mitra' | 'Renewal Fee' | 'Jenjang Baru' | 'Lainnya';
-export type InvoiceStatus = 'Belum Bayar' | 'Menunggu Konfirmasi' | 'Lunas' | 'Jatuh Tempo' | 'Sebagian';
+export type InvoiceStatus = 'Belum Bayar' | 'Menunggu Konfirmasi' | 'Lunas' | 'Jatuh Tempo' | 'Sebagian' | 'Akumulasi';
 export type InvoiceOperationalStatus = 'Terkirim' | 'Draft' | 'Menunggu Persetujuan' | 'Revisi' | 'Dibatalkan';
 
 export interface Invoice {

@@ -708,11 +708,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const fullTarget = Math.max(
           Number(updatedInvoice.tagihanFull) || 0,
           Number(updatedInvoice.tagihanRealisasi) || 0,
-          Number(updatedInvoice.nominal) || 0,
-          Number(newPay.jumlah) || 0
+          Number(updatedInvoice.nominal) || 0
         );
         const paid = Number(newPay.jumlah) || 0;
-        const nextStatus: Invoice['status'] = paid >= fullTarget && fullTarget > 0
+        const nextStatus: Invoice['status'] = paid > fullTarget && paid > 0
+          ? 'Akumulasi'
+          : paid === fullTarget && fullTarget > 0
           ? 'Lunas'
           : paid > 0
           ? 'Sebagian'
@@ -787,12 +788,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const targetNominal = Math.max(
           Number(targetInvoice.tagihanFull) || 0,
           Number(targetInvoice.tagihanRealisasi) || 0,
-          Number(targetInvoice.nominal) || 0,
-          Number(target.jumlah) || 0
+          Number(targetInvoice.nominal) || 0
         );
-        const newPaidAmount = Math.min(targetNominal, (Number(targetInvoice.nominalPembayaran) || 0) + (Number(target.jumlah) || 0));
-        const isFullyPaid = newPaidAmount >= targetNominal && targetNominal > 0;
-        const newInvoiceStatus: Invoice['status'] = isFullyPaid ? 'Lunas' : 'Sebagian';
+        const newPaidAmount = (Number(targetInvoice.nominalPembayaran) || 0) + (Number(target.jumlah) || 0);
+        const newInvoiceStatus: Invoice['status'] =
+          newPaidAmount > targetNominal && newPaidAmount > 0
+            ? 'Akumulasi'
+            : newPaidAmount >= targetNominal && targetNominal > 0
+            ? 'Lunas'
+            : 'Sebagian';
 
         const invUpdate: Invoice = {
           ...targetInvoice,

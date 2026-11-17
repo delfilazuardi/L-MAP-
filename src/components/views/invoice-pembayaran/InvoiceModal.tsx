@@ -8,7 +8,8 @@ import {
   isAfiliasiTanpaInvoice,
   STANDARD_TAHUN_AJARAN_LIST,
   normalizeTahunAjaran,
-  getTahunAjaranFromDate
+  getTahunAjaranFromDate,
+  buildOverpaymentDistributionPlan
 } from '../../../lib/invoiceUtils';
 import { NominalInput } from './NominalInput';
 
@@ -19,7 +20,7 @@ interface InvoiceModalProps {
   defaultKategori: RuangKategoriId;
   sekolahList: SekolahMitra[];
   existingInvoices: Invoice[];
-  onSave: (invoiceData: Partial<Invoice>) => Promise<void>;
+  onSave: (invoiceData: Partial<Invoice>, extraInvoiceUpdates?: Invoice[]) => Promise<void>;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -45,6 +46,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [statusInvoice, setStatusInvoice] = useState<InvoiceOperationalStatus>('Terkirim');
   const [status, setStatus] = useState<InvoiceStatus>('Belum Bayar');
   const [keterangan, setKeterangan] = useState('');
+  const [autoAccumulateExcess, setAutoAccumulateExcess] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // List opsi Tahun Ajaran resmi yang bersih dan terstandarisasi untuk dropdown
@@ -114,6 +116,33 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   }, [isOpen, editingInvoice, defaultKategori]);
 
+  // Hitung rencana akumulasi otomatis jika Nominal Full < Nominal Pembayaran
+  const overpaymentPlan = useMemo(() => {
+    const effectivePaid = isBayarChecked ? (Number(nominalPembayaran) || 0) : 0;
+    return buildOverpaymentDistributionPlan(
+      {
+        id: editingInvoice?.id,
+        nomorInvoice: editingInvoice?.nomorInvoice || nomorInvoice,
+        mitraId,
+        tagihanFull: Number(tagihanFull) || 0,
+        nominalPembayaran: effectivePaid,
+        tanggalDibayar,
+      },
+      existingInvoices,
+      sekolahList
+    );
+  }, [
+    isBayarChecked,
+    nominalPembayaran,
+    tagihanFull,
+    editingInvoice,
+    nomorInvoice,
+    mitraId,
+    tanggalDibayar,
+    existingInvoices,
+    sekolahList,
+  ]);
+
   if (!isOpen) return null;
 
   const handleGenerateNumber = () => {
@@ -128,17 +157,47 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const school = sekolahList.find(s => s.id === mitraId);
     const namaSekolah = school ? school.namaSekolah : 'Sekolah Mitra';
 
-    const effectivePaid = isBayarChecked ? Number(nominalPembayaran) : 0;
+    const effectivePaid = isBayarChecked ? (Number(nominalPembayaran) || 0) : 0;
+    const numFull = Number(tagihanFull) || 0;
+    const numRealisasi = Number(tagihanRealisasi) || 0;
+    const fullTarget = Math.max(numFull, numRealisasi);
 
-    // Auto calculate status based on Ceklis Bayar & Nominal Bayar (Lunas hanya jika melunasi Tagihan Full & Realisasi)
-    const fullTarget = Math.max(Number(tagihanFull) || 0, Number(tagihanRealisasi) || 0);
+    let savedPaid = effectivePaid;
     let finalStatus: InvoiceStatus = 'Belum Bayar';
-    if (isBayarChecked && effectivePaid >= fullTarget && fullTarget > 0) {
-      finalStatus = 'Lunas';
-    } else if (isBayarChecked && effectivePaid > 0) {
-      finalStatus = 'Sebagian';
-    } else {
+    let extraInvoiceUpdates: Invoice[] = [];
+    let finalKeterangan = keterangan || (isTanpaInvoice ? `Pendataan Kemitraan Afiliasi ${namaSekolah}` : `Tagihan ${kategori} ${namaSekolah}`);
+
+    if (!isBayarChecked || effectivePaid <= 0) {
+      savedPaid = 0;
       finalStatus = 'Belum Bayar';
+    } else if (effectivePaid > numFull && !isTanpaInvoice) {
+      // Nominal Full lebih kecil dari pembayaran: jangan langsung dikatakan Lunas tanpa akumulasi
+      if (autoAccumulateExcess && overpaymentPlan.allocation.updatedInvoices.length > 0) {
+        savedPaid = overpaymentPlan.adjustedTargetPaid;
+        finalStatus = overpaymentPlan.adjustedTargetStatus; // 'Lunas' jika surplus habis dialokasikan, 'Akumulasi' jika masih sisa lebih
+        const targetNames = overpaymentPlan.allocation.updatedInvoices
+          .map(u => `${u.invoice.nomorInvoice || u.invoice.id} (+${formatRupiah(u.allocatedAmount)})`)
+          .join(', ');
+        extraInvoiceUpdates = overpaymentPlan.allocation.updatedInvoices.map(u => {
+          const prevKet = String(u.invoice.keterangan || '').trim();
+          const note = `Terima akumulasi ${formatRupiah(u.allocatedAmount)} dari ${nomorInvoice || 'pembayaran lebih'}`;
+          return {
+            ...u.invoice,
+            keterangan: prevKet.includes(note) ? prevKet : (prevKet ? `${prevKet} | ${note}` : note),
+          };
+        });
+        const donorNote = `Kelebihan ${formatRupiah(overpaymentPlan.allocation.totalAllocated)} diakumulasikan ke: ${targetNames}`;
+        if (!finalKeterangan.includes(donorNote)) {
+          finalKeterangan = finalKeterangan ? `${finalKeterangan} | ${donorNote}` : donorNote;
+        }
+      } else {
+        savedPaid = effectivePaid;
+        finalStatus = 'Akumulasi';
+      }
+    } else if (effectivePaid >= fullTarget && fullTarget > 0) {
+      finalStatus = 'Lunas';
+    } else {
+      finalStatus = 'Sebagian';
     }
 
     const effectiveId = editingInvoice 
@@ -148,28 +207,31 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       : nomorInvoice;
 
     try {
-      await onSave({
-        id: effectiveId,
-        nomorInvoice: isTanpaInvoice ? undefined : nomorInvoice,
-        mitraId,
-        namaSekolah,
-        kategori,
-        bulan,
-        tahunAjaran: normalizeTahunAjaran(tahunAjaran, tanggalKirim) || '2026/2027',
-        tanggalKirim,
-        tanggalDibayar: isBayarChecked ? tanggalDibayar : undefined,
-        jatuhTempo: editingInvoice?.jatuhTempo || '',
-        nominal: Number(tagihanRealisasi),
-        tagihanFull: Number(tagihanFull),
-        tagihanRealisasi: Number(tagihanRealisasi),
-        nominalPembayaran: effectivePaid,
-        statusInvoice,
-        status: finalStatus,
-        isPelaporanSaja: isTanpaInvoice || editingInvoice?.isPelaporanSaja,
-        isPendataanAfiliasi: isTanpaInvoice,
-        keterangan: keterangan || (isTanpaInvoice ? `Pendataan Kemitraan Afiliasi ${namaSekolah}` : `Tagihan ${kategori} ${namaSekolah}`),
-        createdAt: editingInvoice ? editingInvoice.createdAt : new Date().toISOString(),
-      });
+      await onSave(
+        {
+          id: effectiveId,
+          nomorInvoice: isTanpaInvoice ? undefined : nomorInvoice,
+          mitraId,
+          namaSekolah,
+          kategori,
+          bulan,
+          tahunAjaran: normalizeTahunAjaran(tahunAjaran, tanggalKirim) || '2026/2027',
+          tanggalKirim,
+          tanggalDibayar: isBayarChecked ? tanggalDibayar : undefined,
+          jatuhTempo: editingInvoice?.jatuhTempo || '',
+          nominal: numRealisasi,
+          tagihanFull: numFull,
+          tagihanRealisasi: numRealisasi,
+          nominalPembayaran: savedPaid,
+          statusInvoice,
+          status: finalStatus,
+          isPelaporanSaja: isTanpaInvoice || editingInvoice?.isPelaporanSaja,
+          isPendataanAfiliasi: isTanpaInvoice,
+          keterangan: finalKeterangan,
+          createdAt: editingInvoice ? editingInvoice.createdAt : new Date().toISOString(),
+        },
+        extraInvoiceUpdates.length > 0 ? extraInvoiceUpdates : undefined
+      );
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -519,38 +581,114 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               )}
             </div>
 
-            {/* Sisa Tagihan (Otomatis: Tagihan Full − Pembayaran) */}
-            <div className={`p-3.5 rounded-xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-              tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0
-                ? 'bg-rose-50/80 border-rose-200 text-rose-950'
-                : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-            }`}>
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-black uppercase tracking-wider">
-                    Nominal Piutang (Sisa Piutang)
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0
-                      ? 'bg-rose-200 text-rose-800'
-                      : 'bg-emerald-200 text-emerald-800'
-                  }`}>
-                    {tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'Ada Piutang' : '✓ Lunas'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-600">
-                  Tagihan Full ({formatRupiah(tagihanFull)}) − Pembayaran ({formatRupiah(isBayarChecked ? nominalPembayaran : 0)})
-                </p>
-              </div>
+            {/* Sisa Tagihan / Akumulasi Kelebihan Pembayaran */}
+            {(() => {
+              const paidNow = isBayarChecked ? (Number(nominalPembayaran) || 0) : 0;
+              const diff = (Number(tagihanFull) || 0) - paidNow;
+              const isOverpaid = !isTanpaInvoice && paidNow > (Number(tagihanFull) || 0);
 
-              <div className="text-left sm:text-right shrink-0">
-                <div className={`font-mono text-lg sm:text-xl font-black tracking-tight ${
-                  tagihanFull - (isBayarChecked ? nominalPembayaran : 0) > 0 ? 'text-rose-600' : 'text-emerald-700'
+              if (isOverpaid) {
+                const targets = overpaymentPlan.allocation.updatedInvoices;
+                return (
+                  <div className="p-4 rounded-xl border-2 border-indigo-300 bg-indigo-50/80 text-indigo-950 space-y-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black uppercase tracking-wider text-indigo-900">
+                            Kelebihan Bayar (Akumulasi ke Tagihan Lain)
+                          </span>
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-200 text-indigo-900">
+                            Status: Akumulasi (Bukan Lunas Biasa)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-indigo-800">
+                          Nominal Pembayaran ({formatRupiah(paidNow)}) melebihi Tagihan Full ({formatRupiah(tagihanFull)}) sebesar{' '}
+                          <strong>+{formatRupiah(overpaymentPlan.excess)}</strong>.
+                        </p>
+                      </div>
+                      <div className="text-left sm:text-right shrink-0">
+                        <div className="font-mono text-lg sm:text-xl font-black text-indigo-700">
+                          +{formatRupiah(overpaymentPlan.excess)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {targets.length > 0 ? (
+                      <div className="p-3 rounded-xl bg-white border border-indigo-200 space-y-2">
+                        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={autoAccumulateExcess}
+                            onChange={(e) => setAutoAccumulateExcess(e.target.checked)}
+                            className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
+                          />
+                          <div className="text-xs">
+                            <span className="font-extrabold text-slate-900 block">
+                              Akumulasikan kelebihan {formatRupiah(overpaymentPlan.allocation.totalAllocated)} ke {targets.length} tagihan kurang bayar / sebagian:
+                            </span>
+                          </div>
+                        </label>
+                        <div className="space-y-1 pl-6 text-[11px]">
+                          {targets.map(item => (
+                            <div key={item.invoice.id} className="flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-b-0">
+                              <span className="font-mono font-bold text-slate-700">
+                                {item.invoice.nomorInvoice || item.invoice.id} ({item.invoice.kategori})
+                              </span>
+                              <span className="text-indigo-700 font-bold">
+                                +{formatRupiah(item.allocatedAmount)} → Sisa {formatRupiah(item.newRemaining)} ({item.newStatus})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {overpaymentPlan.allocation.remainingInstallment > 0 && (
+                          <p className="text-[10px] font-bold text-amber-700 pl-6">
+                            Sisa deposit akumulasi yang belum terpakai: +{formatRupiah(overpaymentPlan.allocation.remainingInstallment)} (tersimpan untuk tagihan berikutnya).
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] font-semibold text-indigo-800 bg-white/80 px-3 py-2 rounded-lg border border-indigo-200">
+                        Belum ada tagihan kurang bayar lain untuk sekolah ini saat ini. Nominal kelebihan <strong>+{formatRupiah(overpaymentPlan.excess)}</strong> akan disimpan sebagai status <strong>Akumulasi</strong> dan otomatis terhitung untuk tagihan berikutnya.
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <div className={`p-3.5 rounded-xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  diff > 0
+                    ? 'bg-rose-50/80 border-rose-200 text-rose-950'
+                    : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
                 }`}>
-                  {formatRupiah(Math.max(0, tagihanFull - (isBayarChecked ? nominalPembayaran : 0)))}
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider">
+                        Nominal Piutang (Sisa Piutang)
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        diff > 0
+                          ? 'bg-rose-200 text-rose-800'
+                          : 'bg-emerald-200 text-emerald-800'
+                      }`}>
+                        {diff > 0 ? 'Ada Piutang' : '✓ Lunas'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      Tagihan Full ({formatRupiah(tagihanFull)}) − Pembayaran ({formatRupiah(paidNow)})
+                    </p>
+                  </div>
+
+                  <div className="text-left sm:text-right shrink-0">
+                    <div className={`font-mono text-lg sm:text-xl font-black tracking-tight ${
+                      diff > 0 ? 'text-rose-600' : 'text-emerald-700'
+                    }`}>
+                      {formatRupiah(Math.max(0, diff))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Keterangan */}

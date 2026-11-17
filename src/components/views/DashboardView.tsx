@@ -24,8 +24,8 @@ import { useData } from '../../context/DataContext';
 import {
   isSchoolPelaporanSaja,
   getSchoolObligationBadgeInfo,
-  getInvoiceRemainingDebt,
-  getEffectiveInvoiceStatus,
+  computeInvoiceAccumulationMap,
+  getAccumulationEntry,
 } from '../../lib/invoiceUtils';
 
 interface DashboardViewProps {
@@ -76,9 +76,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     ? realSchools.reduce((acc, s) => acc + s.jumlahSiswa, 0)
     : (currentSchoolData?.jumlahSiswa || 0);
 
+  const accumulationMap = React.useMemo(
+    () => computeInvoiceAccumulationMap(filteredInvoices, sekolahList),
+    [filteredInvoices, sekolahList]
+  );
+
   const totalUnpaidNominal = isPelaporanSchool
     ? 0
-    : filteredInvoices.reduce((acc, i) => acc + getInvoiceRemainingDebt(i), 0);
+    : filteredInvoices.reduce((acc, i) => acc + getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt, 0);
 
   const pendingLaporanCount = filteredLaporan.filter(l => l.status === 'Diajukan' || l.status === 'Direview').length;
   const approvedLaporanCount = filteredLaporan.filter(l => l.status === 'Disetujui' || l.status === 'Diterima').length;
@@ -323,7 +328,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <span>
               {isPelaporanSchool 
                 ? 'Bebas kewajiban pembayaran' 
-                : `${filteredInvoices.filter(i => getInvoiceRemainingDebt(i) > 0).length} invoice belum lunas`}
+                : `${filteredInvoices.filter(i => getAccumulationEntry(accumulationMap, i).effectiveRemainingDebt > 0).length} invoice belum lunas`}
             </span>
             <ArrowUpRight size={12} className={isPelaporanSchool ? 'text-purple-600' : 'text-rose-600'} />
           </p>
@@ -503,7 +508,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
             <div className="space-y-2.5">
               {filteredInvoices.slice(0, 3).map((inv) => {
-                const effStatus = getEffectiveInvoiceStatus(inv);
+                const effStatus = getAccumulationEntry(accumulationMap, inv).effectiveStatus;
                 return (
                 <div 
                   key={inv.id}
@@ -511,6 +516,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold ${
+                      effStatus === 'Akumulasi' ? 'bg-indigo-100 text-indigo-700' :
                       effStatus === 'Lunas' ? 'bg-emerald-100 text-emerald-700' :
                       effStatus === 'Jatuh Tempo' ? 'bg-rose-100 text-rose-700' :
                       'bg-amber-100 text-amber-800'
@@ -531,6 +537,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                       {formatRupiah(inv.nominal)}
                     </div>
                     <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full mt-0.5 ${
+                      effStatus === 'Akumulasi' ? 'bg-indigo-100 text-indigo-800' :
                       effStatus === 'Lunas' ? 'bg-emerald-100 text-emerald-800' :
                       effStatus === 'Jatuh Tempo' ? 'bg-rose-100 text-rose-700 font-bold' :
                       'bg-amber-100 text-amber-800'

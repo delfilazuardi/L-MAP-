@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, CheckCircle2, School } from 'lucide-react';
 import { Pembayaran, Invoice, SekolahMitra, InvoiceStatus } from '../../../types';
 import { RuangKategoriId, formatRupiah } from './types';
@@ -9,6 +9,7 @@ import {
   isAfiliasiTanpaInvoice,
   normalizeTahunAjaran,
   isRecordBelongsToSchool,
+  buildOverpaymentDistributionPlan,
 } from '../../../lib/invoiceUtils';
 
 interface PembayaranModalProps {
@@ -21,7 +22,18 @@ interface PembayaranModalProps {
   invoiceList: Invoice[];
   currentSekolahId?: string;
   isAdmin: boolean;
-  onSave: (paymentData: Partial<Pembayaran>, invoiceUpdates?: { invoiceId: string; tagihanFull: number; tagihanRealisasi: number; nominalPembayaran: number; tanggalDibayar: string }) => Promise<void>;
+  onSave: (
+    paymentData: Partial<Pembayaran>,
+    invoiceUpdates?: {
+      invoiceId: string;
+      tagihanFull: number;
+      tagihanRealisasi: number;
+      nominalPembayaran: number;
+      tanggalDibayar: string;
+      statusOverride?: InvoiceStatus;
+      extraInvoiceUpdates?: Invoice[];
+    }
+  ) => Promise<void>;
 }
 
 export const PembayaranModal: React.FC<PembayaranModalProps> = ({
@@ -44,6 +56,7 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
   const [nominalRealisasi, setNominalRealisasi] = useState(45000000);
   const [tanggalBayar, setTanggalBayar] = useState(new Date().toISOString().split('T')[0]);
   const [jumlah, setJumlah] = useState(45000000);
+  const [autoAccumulateExcess, setAutoAccumulateExcess] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -110,6 +123,37 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
     .filter(i => isRecordBelongsToSchool(i, mitraId, sekolahList))
     .sort(compareInvoiceBySequenceAsc);
 
+  const selectedInvObj = useMemo(
+    () => invoiceList.find(i => i.id === invoiceId || i.nomorInvoice === invoiceId),
+    [invoiceList, invoiceId]
+  );
+
+  const overpaymentPlan = useMemo(() => {
+    const finalPaid = isBayarChecked ? (Number(jumlah) || 0) : 0;
+    return buildOverpaymentDistributionPlan(
+      {
+        id: selectedInvObj?.id,
+        nomorInvoice: selectedInvObj?.nomorInvoice || invoiceId,
+        mitraId,
+        tagihanFull: Number(nominalTagihan) || 0,
+        nominalPembayaran: finalPaid,
+        tanggalDibayar: tanggalBayar,
+      },
+      invoiceList,
+      sekolahList
+    );
+  }, [
+    isBayarChecked,
+    jumlah,
+    selectedInvObj,
+    invoiceId,
+    mitraId,
+    nominalTagihan,
+    tanggalBayar,
+    invoiceList,
+    sekolahList,
+  ]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -118,7 +162,34 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
     const namaSekolah = school ? school.namaSekolah : 'Sekolah Mitra';
     const selectedInv = invoiceList.find(i => i.id === invoiceId || i.nomorInvoice === invoiceId);
     const derivedTA = normalizeTahunAjaran(selectedInv?.tahunAjaran) || getTahunAjaranFromDate(tanggalBayar);
-    const finalPaid = isBayarChecked ? Number(jumlah) : 0;
+    const finalPaid = isBayarChecked ? (Number(jumlah) || 0) : 0;
+    const isOverpaid = !isTanpaInvoice && Boolean(invoiceId) && finalPaid > (Number(nominalTagihan) || 0);
+
+    let invoicePaidForPrimary = finalPaid;
+    let statusOverride: InvoiceStatus | undefined = undefined;
+    let extraInvoiceUpdates: Invoice[] | undefined = undefined;
+    let extraCatatan = '';
+
+    if (isOverpaid) {
+      if (autoAccumulateExcess && overpaymentPlan.allocation.updatedInvoices.length > 0) {
+        invoicePaidForPrimary = overpaymentPlan.adjustedTargetPaid;
+        statusOverride = overpaymentPlan.adjustedTargetStatus;
+        const targetNames = overpaymentPlan.allocation.updatedInvoices
+          .map(u => `${u.invoice.nomorInvoice || u.invoice.id} (+${formatRupiah(u.allocatedAmount)})`)
+          .join(', ');
+        extraCatatan = ` | Akumulasi kelebihan ${formatRupiah(overpaymentPlan.allocation.totalAllocated)} ke: ${targetNames}`;
+        extraInvoiceUpdates = overpaymentPlan.allocation.updatedInvoices.map(u => {
+          const prevKet = String(u.invoice.keterangan || '').trim();
+          const note = `Terima akumulasi ${formatRupiah(u.allocatedAmount)} dari ${invoiceId || 'pembayaran lebih'}`;
+          return {
+            ...u.invoice,
+            keterangan: prevKet.includes(note) ? prevKet : (prevKet ? `${prevKet} | ${note}` : note),
+          };
+        });
+      } else {
+        statusOverride = 'Akumulasi';
+      }
+    }
 
     try {
       await onSave(
@@ -138,15 +209,17 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
           isPendataanAfiliasi: isTanpaInvoice,
           catatan: isTanpaInvoice 
             ? `Pendataan Kemitraan Afiliasi: ${formatRupiah(nominalTagihan)} (Tanpa Invoice)` 
-            : `Tagihan: ${formatRupiah(nominalTagihan)} | Realisasi: ${formatRupiah(nominalRealisasi)}`,
+            : `Tagihan: ${formatRupiah(nominalTagihan)} | Realisasi: ${formatRupiah(nominalRealisasi)}${extraCatatan}`,
         },
         invoiceId
           ? {
               invoiceId,
               tagihanFull: Number(nominalTagihan),
               tagihanRealisasi: Number(nominalRealisasi),
-              nominalPembayaran: finalPaid,
+              nominalPembayaran: invoicePaidForPrimary,
               tanggalDibayar: tanggalBayar,
+              statusOverride,
+              extraInvoiceUpdates,
             }
           : undefined
       );
@@ -354,15 +427,55 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({
                 </div>
               </div>
 
-              {/* Ringkasan Sisa Piutang */}
-              <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs">
-                <span className="font-bold text-slate-600">Nominal Piutang (Tagihan Full − Pembayaran):</span>
-                <span className={`font-mono font-black text-sm ${
-                  nominalTagihan - jumlah > 0 ? 'text-rose-600' : 'text-emerald-600'
-                }`}>
-                  {formatRupiah(Math.max(0, nominalTagihan - jumlah))}
-                </span>
-              </div>
+              {/* Ringkasan Sisa Piutang / Akumulasi Kelebihan Bayar */}
+              {!isTanpaInvoice && Boolean(invoiceId) && (Number(jumlah) || 0) > (Number(nominalTagihan) || 0) ? (
+                <div className="p-3.5 rounded-xl bg-indigo-50 border border-indigo-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-indigo-900">
+                      Kelebihan Bayar (Siap Akumulasi ke Tagihan Lain):
+                    </span>
+                    <span className="font-mono font-black text-sm text-indigo-700">
+                      +{formatRupiah(overpaymentPlan.excess)}
+                    </span>
+                  </div>
+                  {overpaymentPlan.allocation.updatedInvoices.length > 0 ? (
+                    <div className="p-2.5 rounded-lg bg-white border border-indigo-200 space-y-1.5">
+                      <label className="flex items-start gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoAccumulateExcess}
+                          onChange={(e) => setAutoAccumulateExcess(e.target.checked)}
+                          className="mt-0.5 w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer"
+                        />
+                        <span className="text-[11px] font-bold text-slate-800">
+                          Akumulasikan {formatRupiah(overpaymentPlan.allocation.totalAllocated)} ke {overpaymentPlan.allocation.updatedInvoices.length} tagihan kurang bayar / sebagian:
+                        </span>
+                      </label>
+                      <div className="pl-5 space-y-0.5 text-[10px]">
+                        {overpaymentPlan.allocation.updatedInvoices.map(u => (
+                          <div key={u.invoice.id} className="flex justify-between text-indigo-800 font-semibold">
+                            <span>{u.invoice.nomorInvoice || u.invoice.id}</span>
+                            <span>+{formatRupiah(u.allocatedAmount)} (Sisa {formatRupiah(u.newRemaining)})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-indigo-800">
+                      Tidak ada tagihan kurang bayar lain. Status tersimpan sebagai <strong>Akumulasi</strong> (bukan Lunas biasa) agar dapat dipakai untuk tagihan berikutnya.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs">
+                  <span className="font-bold text-slate-600">Nominal Piutang (Tagihan Full − Pembayaran):</span>
+                  <span className={`font-mono font-black text-sm ${
+                    nominalTagihan - jumlah > 0 ? 'text-rose-600' : 'text-emerald-600'
+                  }`}>
+                    {formatRupiah(Math.max(0, nominalTagihan - jumlah))}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
